@@ -1,0 +1,6 @@
+{
+  "name": "local-test-env",
+  "variables": {
+    "ENV": "local"
+  }
+}

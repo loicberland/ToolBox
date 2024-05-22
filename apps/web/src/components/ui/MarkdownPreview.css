@@ -1,0 +1,176 @@
+.markdown-preview {
+  min-width: 0;
+  max-width: 100%;
+  color: inherit;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview table,
+.markdown-preview pre {
+  margin: 0.65rem 0;
+}
+
+.markdown-preview p {
+  white-space: pre-wrap;
+}
+
+.markdown-preview p,
+.markdown-preview li,
+.markdown-preview dd {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 1.35rem;
+}
+
+.markdown-preview li + li {
+  margin-top: 0.25rem;
+}
+
+.markdown-preview a {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.markdown-preview blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.85rem;
+  color: var(--muted);
+}
+
+.markdown-preview code {
+  border-radius: 4px;
+  padding: 0.12rem 0.32rem;
+  background: var(--gray-soft);
+  color: #1f2937;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.markdown-preview pre {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem;
+  background: var(--surface-soft);
+  white-space: pre-wrap;
+}
+
+.markdown-preview pre code {
+  display: block;
+  padding: 0;
+  background: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-preview table {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-preview th {
+  background: var(--surface-soft);
+  font-weight: 800;
+}
+
+.markdown-preview--compact {
+  max-height: 220px;
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+
+.markdown-preview--compact p,
+.markdown-preview--compact ul,
+.markdown-preview--compact ol,
+.markdown-preview--compact blockquote,
+.markdown-preview--compact table,
+.markdown-preview--compact pre {
+  margin: 0.25rem 0;
+}
+
+.markdown-preview--compact pre {
+  max-height: 160px;
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.markdown-preview--compact th,
+.markdown-preview--compact td {
+  padding: 0.35rem 0.45rem;
+}
+
+.copyable-code-block {
+  position: relative;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.copyable-code-block pre {
+  margin: 0;
+  padding-right: 2.2rem;
+}
+
+.copy-code-button {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.copy-code-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.copy-code-button:hover,
+.copy-code-button:focus {
+  color: var(--text);
+  opacity: 1;
+  outline: none;
+}
