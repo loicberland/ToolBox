@@ -4,13 +4,11 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 )
 
-var argNoWait bool
 var version = "0.0.1"
 
 var rootCmd = &cobra.Command{
@@ -18,9 +16,6 @@ var rootCmd = &cobra.Command{
 	Short:   "A toolbox for lmba that combines several useful everyday features.",
 	Long:    ``,
 	Version: version,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("This is the first cobra example")
-	},
 }
 
 func Execute() {
@@ -38,5 +33,4 @@ func init() {
 	})
 	//disable completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.PersistentFlags().BoolVar(&argNoWait, "t", false, "Help message for toggle")
 }
