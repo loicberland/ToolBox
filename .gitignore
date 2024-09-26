@@ -18,3 +18,7 @@ _build*
 *.gz
 *.log
 .vs
+
+
+node_modules/
+dist/

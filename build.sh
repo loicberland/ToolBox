@@ -7,6 +7,7 @@ function show_help() {
     echo "  all       Build all"
     echo "  lmba      Build only lmba"
     echo "  perso      Build only perso"
+    echo "  front      Build only front"
     echo "  help      Display this help message"
 }
 
@@ -27,6 +28,10 @@ case $1 in
         echo "Building perso-toolbox.exe..."
         go build -o ./_build/perso-toolbox.exe ./perso
         echo "perso-toolbox.exe built successfully."
+
+        echo "Building front-toolbox.exe..."
+        go build -o ./_build/front-toolbox.exe ./front
+        echo "front-toolbox.exe built successfully."
         ;;
     lmba)
         # Compiler uniquement lmba-toolbox
@@ -39,6 +44,12 @@ case $1 in
         echo "Building perso-toolbox.exe..."
         go build -o ./_build/perso-toolbox.exe ./perso
         echo "perso-toolbox.exe built successfully."
+        ;;
+    front)
+        # Compiler uniquement front
+        echo "Building front-toolbox.exe..."
+        go build -o ./_build/front-toolbox.exe ./front
+        echo "front-toolbox.exe built successfully."
         ;;
     help)
         # Afficher l'aide
