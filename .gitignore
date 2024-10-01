@@ -18,7 +18,7 @@ _build*
 *.gz
 *.log
 .vs
-
+.env
 
 node_modules/
 dist/

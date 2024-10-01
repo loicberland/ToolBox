@@ -4,9 +4,10 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"toolBox/api/internal/config"
+	"toolBox/api/internal/handlers"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -17,9 +18,9 @@ import (
 var rootServerCmd = &cobra.Command{
 	Use:   "server",
 	Short: "starting server",
-	Long:  ``,
+	Long:  "Starts the API server.",
 	Run: func(cmd *cobra.Command, args []string) {
-		server()
+		startServer()
 	},
 }
 
@@ -27,34 +28,26 @@ func init() {
 	rootCmd.AddCommand(rootServerCmd)
 }
 
-type HomeData struct {
-	Message string `json:"message"`
-}
-
-func homeAPIHandler(w http.ResponseWriter, r *http.Request) {
-	data := HomeData{
-		Message: "Welcome to the Home Page!",
+func startServer() {
+	conf, err := config.LoadServerConfig()
+	if err != nil {
+		fmt.Println("Erreur de chargement de la config:", err)
+		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
-}
 
-func server() {
-
-	port := 8080
-	fqdn := "PORTLB"
-	protocol := "http"
-	listenURL := fmt.Sprintf("%s://%s:%d", protocol, fqdn, port)
-	listenSocket := fmt.Sprintf(":%d", port)
+	listenURL := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.FQDN, conf.Port)
+	listenSocket := fmt.Sprintf(":%d", conf.Port)
 
 	r := mux.NewRouter()
-	r.HandleFunc("/", homeAPIHandler).Methods("GET")
+	handlers.SetupRoutes(r) // On va définir les routes dans un fichier séparé
 
 	// Configure CORS
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000"}, // Remplacez par l'URL de votre frontend React
 		AllowCredentials: true,
 	})
+
+	// Lancer le serveur
 	fmt.Printf("Starting server at %s \n", listenURL)
 	if err := http.ListenAndServe(listenSocket, c.Handler(r)); err != nil {
 		fmt.Println(err)

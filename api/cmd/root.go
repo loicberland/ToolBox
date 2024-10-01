@@ -12,8 +12,8 @@ import (
 var version = "0.0.1"
 
 var rootCmd = &cobra.Command{
-	Use:     "front",
-	Short:   "Front toolbox",
+	Use:     "api",
+	Short:   "api toolbox",
 	Long:    ``,
 	Version: version,
 }
