@@ -4,18 +4,21 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"toolBox/api/internal/config"
+	"toolBox/api/internal/db"
 	"toolBox/api/internal/handlers"
+	"toolBox/pkg/database"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/spf13/cobra"
 )
 
-// root.serverCmd represents the root.server command
-var rootServerCmd = &cobra.Command{
+var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "starting server",
 	Long:  "Starts the API server.",
@@ -25,7 +28,7 @@ var rootServerCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(rootServerCmd)
+	rootCmd.AddCommand(serverCmd)
 }
 
 func startServer() {
@@ -34,6 +37,21 @@ func startServer() {
 		fmt.Println("Erreur de chargement de la config:", err)
 		return
 	}
+	// Stocker les connexions à chaque base de données
+	dbConnections := make([]*sql.DB, 0)
+	for _, base := range db.DBConfig {
+		db, err := database.InitDB(base)
+		if err != nil {
+			log.Fatalf("Error initializing database: %v", err)
+		}
+		dbConnections = append(dbConnections, db) // Ajouter la connexion à la liste
+	}
+
+	defer func() {
+		for _, dbConn := range dbConnections {
+			dbConn.Close() // Fermer proprement chaque connexion
+		}
+	}()
 
 	listenURL := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.FQDN, conf.Port)
 	listenSocket := fmt.Sprintf(":%d", conf.Port)

@@ -19,6 +19,9 @@ module.exports = (env, argv) => {
           exclude: /node_modules/,
           use: {
             loader: 'ts-loader',
+            options: {
+              transpileOnly: false // Active uniquement la transpilation sans vérification des types
+            }
           },
         },
         {
