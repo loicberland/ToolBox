@@ -3,7 +3,9 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // Import nécessaire pour utiliser SQLite avec Go
@@ -17,6 +19,7 @@ func InitDB(base Base) (db *sql.DB, err error) {
 		return
 	}
 	if !exist {
+		log.Printf("[LOG] '%s' does not exist", dbPath)
 		for _, table := range base.Tables {
 			var errCreateDB error
 			db, errCreateDB = CreateDatabase(dbPath, table)
@@ -48,6 +51,19 @@ func CheckExistDataBase(dbFile string) (exist bool, err error) {
 }
 
 func OpenDataBase(dbFile string) (db *sql.DB, err error) {
+	parentDir := filepath.Dir(dbFile)
+	if _, errStat := os.Stat(parentDir); errStat != nil {
+		if !os.IsNotExist(errStat) {
+			err = fmt.Errorf("error while trying to check existance of '%s': %s", parentDir, errStat)
+			return
+		} else {
+			log.Printf("[LOG] '%s' does not exist", parentDir)
+			if errMkdir := os.Mkdir(parentDir, 0755); errMkdir != nil {
+				err = fmt.Errorf("error while trying to create dir '%s': %s", parentDir, errMkdir)
+				return
+			}
+		}
+	}
 	db, errOpenDb := sql.Open("sqlite3", dbFile)
 	if errOpenDb != nil {
 		err = fmt.Errorf("error while trying to open '%s' ", errOpenDb)
