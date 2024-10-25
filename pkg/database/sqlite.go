@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // Import nécessaire pour utiliser SQLite avec Go
 )
@@ -19,14 +18,12 @@ func InitDB(base Base) (db *sql.DB, err error) {
 		return
 	}
 	if !exist {
-		log.Printf("[LOG] '%s' does not exist", dbPath)
-		for _, table := range base.Tables {
-			var errCreateDB error
-			db, errCreateDB = CreateDatabase(dbPath, table)
-			if errCreateDB != nil {
-				err = fmt.Errorf("error while trying to create %s : %s", dbPath, errCreateDB)
-				return
-			}
+		log.Printf("[LOG] '%s' The database does not exist, we will create it.", dbPath)
+		var errCreateDB error
+		db, errCreateDB = CreateDatabase(dbPath, base)
+		if errCreateDB != nil {
+			err = fmt.Errorf("error while trying to create %s : %s", dbPath, errCreateDB)
+			return
 		}
 	} else {
 		db, err = OpenDataBase(dbPath)
@@ -51,19 +48,6 @@ func CheckExistDataBase(dbFile string) (exist bool, err error) {
 }
 
 func OpenDataBase(dbFile string) (db *sql.DB, err error) {
-	parentDir := filepath.Dir(dbFile)
-	if _, errStat := os.Stat(parentDir); errStat != nil {
-		if !os.IsNotExist(errStat) {
-			err = fmt.Errorf("error while trying to check existance of '%s': %s", parentDir, errStat)
-			return
-		} else {
-			log.Printf("[LOG] '%s' does not exist", parentDir)
-			if errMkdir := os.Mkdir(parentDir, 0755); errMkdir != nil {
-				err = fmt.Errorf("error while trying to create dir '%s': %s", parentDir, errMkdir)
-				return
-			}
-		}
-	}
 	db, errOpenDb := sql.Open("sqlite3", dbFile)
 	if errOpenDb != nil {
 		err = fmt.Errorf("error while trying to open '%s' ", errOpenDb)
@@ -71,110 +55,92 @@ func OpenDataBase(dbFile string) (db *sql.DB, err error) {
 	}
 	return
 }
-func CreateDatabase(dbFile string, table Table) (db *sql.DB, err error) {
+
+func CreateDatabase(dbFile string, base Base) (db *sql.DB, err error) {
+	parentDir := filepath.Dir(dbFile)
+	if _, errStat := os.Stat(parentDir); errStat != nil {
+		if !os.IsNotExist(errStat) {
+			err = fmt.Errorf("error while trying to check existance of '%s': %s", parentDir, errStat)
+			return
+		} else {
+			if errMkdir := os.Mkdir(parentDir, 0755); errMkdir != nil {
+				err = fmt.Errorf("error while trying to create dir '%s': %s", parentDir, errMkdir)
+				return
+			}
+		}
+	}
 	db, err = OpenDataBase(dbFile)
 	if err != nil {
 		return
 	}
-	errCreateTable := CreateTable(db, table)
-	if errCreateTable != nil {
-		err = fmt.Errorf("error while trying to create table %s: %s", table.TableName, errCreateTable)
-		return
+	for versionIndex := range base.Versions {
+		file := base.Deploy + "/" + base.Versions[versionIndex]
+		query, errGetQuery := GetSQLQueryFromFile(db, file)
+		if errGetQuery != nil {
+			err = fmt.Errorf("error when trying to get query from file %s : %s", file, errGetQuery)
+			return
+		}
+		errCreateTable := SendQuery(db, query)
+		if errCreateTable != nil {
+			err = fmt.Errorf("error while trying to create table in version %d: %s", versionIndex, errCreateTable)
+			return
+		}
+
 	}
 	return
 }
 
-func CreateTable(db *sql.DB, table Table) (err error) {
-	var columnList []string
-	for _, col := range table.Columns {
-		column, errConcat := ConcatColumnsToString(col)
-		if errConcat != nil {
-			err = fmt.Errorf("error while trying to concat columns: %s", errConcat)
+func UpdateDatabase(dbFile string, base Base, actualVersion int) (db *sql.DB, err error) {
+	db, err = OpenDataBase(dbFile)
+	if err != nil {
+		return
+	}
+	for i := actualVersion + 1; i < len(base.Versions)-1; i++ {
+		file := base.Deploy + "/" + base.Versions[i]
+		query, errGetQuery := GetSQLQueryFromFile(db, file)
+		if errGetQuery != nil {
+			err = fmt.Errorf("error when trying to get query from file %s : %s", file, errGetQuery)
 			return
 		}
-		columnList = append(columnList, column)
-	}
-	columns := strings.Join(columnList, ", ")
-	createTableSQL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (%s);`, table.TableName, columns)
+		errCreateTable := SendQuery(db, query)
+		if errCreateTable != nil {
+			err = fmt.Errorf("error while trying to create table in version %d: %s", i, errCreateTable)
+			return
+		}
 
-	_, errCreateDB := db.Exec(createTableSQL)
+	}
+	return
+}
+
+func GetActualVersion(db *sql.DB) (version int, err error) {
+	// query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (%s);`, table.TableName, columns)
+	// errCreateTable := SendQuery(db, query)
+	// 	if errCreateTable != nil {
+	// 		err = fmt.Errorf("error while trying to create table in version %d: %s", i, errCreateTable)
+	// 		return
+	// 	}
+	return
+}
+
+func GetSQLQueryFromFile(db *sql.DB, file string) (query string, err error) {
+	queryRead, errRead := os.ReadFile(file)
+	if errRead != nil {
+		err = fmt.Errorf("error when trying to read %s : %s", file, errRead)
+		return
+	}
+	query = string(queryRead)
+	return
+}
+
+func SendQuery(db *sql.DB, query string) (err error) {
+	_, errCreateDB := db.Exec(query)
 	if errCreateDB != nil {
-		err = fmt.Errorf("error while trying to create table '%s' with command '%s' : %s", table.TableName, createTableSQL, errCreateDB)
+		err = fmt.Errorf("error while trying to create table with command '%s' : %s", string(query), errCreateDB)
 		return
 	}
 	return
 }
 
-func ConcatColumnsToString(col Column) (stringCol string, err error) {
-	if col.Identifier == "" || col.Type == "" {
-		err = fmt.Errorf("error identifier (%s) or Type %s is empty", col.Identifier, col.Type)
-		return
-	}
-	//LBE : Ajouter fonction pour vérifier le type
-	stringCol = fmt.Sprintf("%s %s", col.Identifier, col.Type)
-	if col.Primary {
-		stringCol = fmt.Sprintf("%s PRIMARY KEY", stringCol)
-	}
-	if col.Autoinc {
-		stringCol = fmt.Sprintf("%s AUTOINCREMENT", stringCol)
-	}
-	if col.Unique {
-		stringCol = fmt.Sprintf("%s UNIQUE", stringCol)
-	}
-	if col.NotNull {
-		stringCol = fmt.Sprintf("%s NOT NULL", stringCol)
-	}
-	if col.Check != "" {
-		stringCol = fmt.Sprintf("%s CHECK(%s)", stringCol, col.Check)
-	}
-	if col.Default.Active {
-		defaulCol, errGetDefaul := GetDefaultValueColumn(col)
-		if errGetDefaul != nil {
-			err = fmt.Errorf("error while trying to : %s", errGetDefaul)
-			return
-		}
-		stringCol = fmt.Sprintf("%s %s", stringCol, defaulCol)
-	}
-	if col.ForeignKey.Active {
-		foreignCol, errGetForeign := GetForeignValueColumn(col)
-		if errGetForeign != nil {
-			err = fmt.Errorf("error while trying to : %s", errGetForeign)
-			return
-		}
-		stringCol = fmt.Sprintf("%s %s", stringCol, foreignCol)
-	}
-	return
-}
+func UpdateVersion() {
 
-func GetDefaultValueColumn(col Column) (stringCol string, err error) {
-	switch col.Type {
-	case "TEXT":
-		if col.Default.DefaultStr == "" {
-			err = fmt.Errorf("error the default string value is empty")
-			return
-		}
-		stringCol = fmt.Sprintf("DEFAULT('%s')", col.Default.DefaultStr)
-	case "INTEGER":
-		if col.Default.DefaultNumber != 0 {
-			err = fmt.Errorf("error the default number value is 0")
-			return
-		}
-		stringCol = fmt.Sprintf("DEFAULT(%f)", col.Default.DefaultNumber)
-	default:
-		err = fmt.Errorf("error this type (%s) does not exist", col.Type)
-	}
-	return
-}
-
-func GetForeignValueColumn(col Column) (stringCol string, err error) {
-	if col.ForeignKey.table == "" {
-		err = fmt.Errorf("error the foreignKey table is empty")
-		return
-	}
-	if col.ForeignKey.Column == "" {
-		err = fmt.Errorf("error the foreignKey column is empty")
-		return
-	}
-	stringCol = fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s(%s)", col.Identifier, col.ForeignKey.table, col.ForeignKey.Column)
-	return
 }
