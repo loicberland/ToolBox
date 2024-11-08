@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"toolBox/api/internal/config"
 	"toolBox/api/internal/db"
+	"toolBox/api/internal/db/migration"
 	"toolBox/api/internal/handlers"
 	"toolBox/pkg/database"
 
@@ -39,10 +40,11 @@ func startServer() {
 	}
 	// Stocker les connexions à chaque base de données
 	dbConnections := make([]*sql.DB, 0)
+	sqlFiles := migration.Deploy
 	for _, base := range db.DBConfig {
-		db, err := database.InitDB(base)
+		db, err := database.InitDB(base, sqlFiles)
 		if err != nil {
-			log.Fatalf("Error initializing database: %v", err)
+			log.Fatalf("Error initializing database whyle trying to start serveur: %v", err)
 		}
 		dbConnections = append(dbConnections, db) // Ajouter la connexion à la liste
 	}

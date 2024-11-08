@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"toolBox/api/internal/db"
+	"toolBox/api/internal/db/migration"
 	"toolBox/pkg/database"
 
 	"github.com/spf13/cobra"
@@ -27,8 +28,9 @@ var initBddCmd = &cobra.Command{
 	Long:  "",
 	Run: func(cmd *cobra.Command, args []string) {
 		dbConnections := make([]*sql.DB, 0)
+		sqlFiles := migration.Deploy
 		for _, base := range db.DBConfig {
-			db, err := database.InitDB(base)
+			db, err := database.InitDB(base, sqlFiles)
 			if err != nil {
 				log.Fatalf("Error initializing database: %v", err)
 			}
