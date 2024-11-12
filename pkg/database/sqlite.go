@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"toolBox/pkg/database/queries"
 	"toolBox/pkg/utils"
 
 	_ "github.com/mattn/go-sqlite3" // Import nécessaire pour utiliser SQLite avec Go
@@ -40,6 +41,21 @@ func InitDB(base Base, sqlFiles embed.FS) (db *sql.DB, err error) {
 			return
 		}
 	} else {
+		versions, errGetAllVersion := queries.GetAllVersionOrderByValue(db)
+		if errGetAllVersion != nil {
+			err = fmt.Errorf("error while trying to get all version : %s", errGetAllVersion)
+			return
+		}
+		//Cherche si la dernière version est dans la base
+		//Sinon faire une recherche de la dernière version en base et update à partir d'elle
+		if len(base.Versions)-1 != versions[0].Value {
+			var errUpdateDB error
+			db, errUpdateDB = UpdateDatabase(dbPath, base, versions[0].Value, sqlFiles)
+			if errUpdateDB != nil {
+				err = fmt.Errorf("error while trying to update %s : %s", dbPath, errUpdateDB)
+				return //Tester
+			}
+		}
 		db, err = OpenDataBase(dbPath)
 		if err != nil {
 			return
@@ -58,7 +74,6 @@ func CheckExistDataBase(dbFile string) (exist bool, err error) {
 		err = fmt.Errorf("error while trying to check existance of '%s': %s", dbFile, errStat)
 		return
 	}
-	log.Printf("| [DEBUG] example ")
 	return
 }
 
@@ -75,6 +90,7 @@ func CreateDatabase(dbFile string, base Base, sqlFiles embed.FS) (db *sql.DB, er
 	parentDir := filepath.Dir(dbFile)
 	if errCheckExistDir := utils.CheckOrCreateDir(parentDir); errCheckExistDir != nil {
 		err = fmt.Errorf("error while trying to check the existence of %s : %s", parentDir, errCheckExistDir)
+		return
 	}
 	db, err = OpenDataBase(dbFile)
 	if err != nil {
@@ -96,10 +112,43 @@ func CreateDatabase(dbFile string, base Base, sqlFiles embed.FS) (db *sql.DB, er
 			err = fmt.Errorf("error while trying to create table in version %d: %s", versionIndex, errCreateTable)
 			return
 		}
-
+		if errAddVersion := queries.AddVersion(db, versionIndex, base.Versions[versionIndex]); errAddVersion != nil {
+			err = fmt.Errorf("error while trying to add version %d name %s : %s", versionIndex, base.Versions[versionIndex], errAddVersion)
+			return
+		}
 	}
 	return
 }
+
+func UpdateDatabase(dbFile string, base Base, actualVersion int, sqlFiles embed.FS) (db *sql.DB, err error) {
+	db, err = OpenDataBase(dbFile)
+	if err != nil {
+		return
+	}
+	for i := actualVersion + 1; i < len(base.Versions)-1; i++ {
+		sqlFilesDatas, errGetSQlFile := GetSqlRequestFromDeployEmbedFiles(sqlFiles)
+		if errGetSQlFile != nil {
+			err = fmt.Errorf("error while trying to get sql deploy files : %s", errGetSQlFile)
+			return
+		}
+		sqlFileData, errFindRequestFile := findRequestFile(base.Versions[i], sqlFilesDatas)
+		if errFindRequestFile != nil {
+			err = fmt.Errorf("error while trying to find file data for version %d named %s : %s", i, base.Versions[i], errFindRequestFile)
+			return
+		}
+		errCreateTable := SendQueryWithoutResult(db, sqlFileData.query)
+		if errCreateTable != nil {
+			err = fmt.Errorf("error while trying to create table in version %d: %s", i, errCreateTable)
+			return
+		}
+		if errAddVersion := queries.AddVersion(db, i, base.Versions[i]); errAddVersion != nil {
+			err = fmt.Errorf("error while trying to add version %d name %s : %s", i, base.Versions[i], errAddVersion)
+			return
+		}
+	}
+	return
+}
+
 func GetSqlRequestFromDeployEmbedFiles(sqlFiles embed.FS) (datas []sqlEmbed, err error) {
 	dir := "deploy"
 	files, errReadSqlFiles := sqlFiles.ReadDir(dir)
@@ -155,37 +204,6 @@ func findRequestFile(fileName string, datas []sqlEmbed) (file sqlEmbed, err erro
 	err = fmt.Errorf("error file %s doesn't exist", fileName)
 	return
 }
-func UpdateDatabase(dbFile string, base Base, actualVersion int) (db *sql.DB, err error) {
-	db, err = OpenDataBase(dbFile)
-	if err != nil {
-		return
-	}
-	for i := actualVersion + 1; i < len(base.Versions)-1; i++ {
-		file := base.Deploy + "/" + base.Versions[i]
-		query, errGetQuery := GetSQLQueryFromFile(db, file)
-		if errGetQuery != nil {
-			err = fmt.Errorf("error when trying to get query from file %s : %s", file, errGetQuery)
-			return
-		}
-		errCreateTable := SendQueryWithoutResult(db, query)
-		if errCreateTable != nil {
-			err = fmt.Errorf("error while trying to create table in version %d: %s", i, errCreateTable)
-			return
-		}
-
-	}
-	return
-}
-
-func GetActualVersion(db *sql.DB) (version int, err error) {
-	// query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (%s);`, table.TableName, columns)
-	// errCreateTable := SendQueryWithoutResult(db, query)
-	// 	if errCreateTable != nil {
-	// 		err = fmt.Errorf("error while trying to create table in version %d: %s", i, errCreateTable)
-	// 		return
-	// 	}
-	return
-}
 
 func GetSQLQueryFromFile(db *sql.DB, file string) (query string, err error) {
 	queryRead, errRead := os.ReadFile(file)
@@ -196,16 +214,6 @@ func GetSQLQueryFromFile(db *sql.DB, file string) (query string, err error) {
 	query = string(queryRead)
 	return
 }
-
-// func SendQueryWhitResult(db *sql.DB, query string) (rows *sql.Rows, err error) {
-// 	rs, errQuery := db.Query(query)
-// 	if errQuery != nil {
-// 		err = fmt.Errorf("error when trying to send query %s : %s", query, errQuery)
-// 		return
-// 	}
-// 	rows.Columns(rs)
-// 	return
-// }
 
 func SendQueryWithoutResult(db *sql.DB, query string) (err error) {
 	_, errCreateDB := db.Exec(query)
