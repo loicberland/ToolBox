@@ -26,7 +26,7 @@ func GetVersionByID(db *sql.DB, ID int) (*Version, error) {
 
 func GetAllVersionOrderByValue(db *sql.DB) ([]Version, error) {
 	versions := []Version{}
-	query := "SELECT * FROM VERSION ORDER BY VALUE"
+	query := "SELECT ID, VALUE, FILE FROM VERSION ORDER BY VALUE DESC"
 	rows, errQuery := db.Query(query)
 	if errQuery != nil {
 		return nil, fmt.Errorf("error while trying to exec query '%s' : %s", query, errQuery)

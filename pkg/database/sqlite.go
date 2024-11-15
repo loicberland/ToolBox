@@ -41,24 +41,22 @@ func InitDB(base Base, sqlFiles embed.FS) (db *sql.DB, err error) {
 			return
 		}
 	} else {
+		db, err = OpenDataBase(dbPath)
+		if err != nil {
+			return
+		}
 		versions, errGetAllVersion := queries.GetAllVersionOrderByValue(db)
 		if errGetAllVersion != nil {
 			err = fmt.Errorf("error while trying to get all version : %s", errGetAllVersion)
 			return
 		}
-		//Cherche si la dernière version est dans la base
-		//Sinon faire une recherche de la dernière version en base et update à partir d'elle
 		if len(base.Versions)-1 != versions[0].Value {
 			var errUpdateDB error
-			db, errUpdateDB = UpdateDatabase(dbPath, base, versions[0].Value, sqlFiles)
+			errUpdateDB = UpdateDatabase(db, base, versions[0].Value, sqlFiles)
 			if errUpdateDB != nil {
 				err = fmt.Errorf("error while trying to update %s : %s", dbPath, errUpdateDB)
-				return //Tester
+				return
 			}
-		}
-		db, err = OpenDataBase(dbPath)
-		if err != nil {
-			return
 		}
 	}
 	return
@@ -97,54 +95,47 @@ func CreateDatabase(dbFile string, base Base, sqlFiles embed.FS) (db *sql.DB, er
 		return
 	}
 	for versionIndex := range base.Versions {
-		sqlFilesDatas, errGetSQlFile := GetSqlRequestFromDeployEmbedFiles(sqlFiles)
-		if errGetSQlFile != nil {
-			err = fmt.Errorf("error while trying to get sql deploy files : %s", errGetSQlFile)
-			return
-		}
-		sqlFileData, errFindRequestFile := findRequestFile(base.Versions[versionIndex], sqlFilesDatas)
-		if errFindRequestFile != nil {
-			err = fmt.Errorf("error while trying to find file data for version %d named %s : %s", versionIndex, base.Versions[versionIndex], errFindRequestFile)
-			return
-		}
-		errCreateTable := SendQueryWithoutResult(db, sqlFileData.query)
-		if errCreateTable != nil {
-			err = fmt.Errorf("error while trying to create table in version %d: %s", versionIndex, errCreateTable)
-			return
-		}
-		if errAddVersion := queries.AddVersion(db, versionIndex, base.Versions[versionIndex]); errAddVersion != nil {
-			err = fmt.Errorf("error while trying to add version %d name %s : %s", versionIndex, base.Versions[versionIndex], errAddVersion)
+		if errDeploy := GetDeploy(db, base, versionIndex, sqlFiles); errDeploy != nil {
+			if errRemove := os.Remove(dbFile); errRemove != nil {
+				log.Printf("[LOG] error during database creation (%s) we delete it.", dbFile)
+				err = fmt.Errorf("error while trying to delete database file: %s", errRemove)
+				return
+			}
+			err = fmt.Errorf("error while trying to deploy version %d : %s", versionIndex, errDeploy)
 			return
 		}
 	}
 	return
 }
 
-func UpdateDatabase(dbFile string, base Base, actualVersion int, sqlFiles embed.FS) (db *sql.DB, err error) {
-	db, err = OpenDataBase(dbFile)
-	if err != nil {
+func UpdateDatabase(db *sql.DB, base Base, actualVersion int, sqlFiles embed.FS) (err error) {
+	for i := actualVersion + 1; i < len(base.Versions); i++ {
+		if errDeploy := GetDeploy(db, base, i, sqlFiles); errDeploy != nil {
+			err = fmt.Errorf("error while trying to deploy version %d : %s", i, errDeploy)
+			return
+		}
+	}
+	return
+}
+func GetDeploy(db *sql.DB, base Base, version int, sqlFiles embed.FS) (err error) {
+	sqlFilesDatas, errGetSQlFile := GetSqlRequestFromDeployEmbedFiles(sqlFiles)
+	if errGetSQlFile != nil {
+		err = fmt.Errorf("error while trying to get sql deploy files : %s", errGetSQlFile)
 		return
 	}
-	for i := actualVersion + 1; i < len(base.Versions)-1; i++ {
-		sqlFilesDatas, errGetSQlFile := GetSqlRequestFromDeployEmbedFiles(sqlFiles)
-		if errGetSQlFile != nil {
-			err = fmt.Errorf("error while trying to get sql deploy files : %s", errGetSQlFile)
-			return
-		}
-		sqlFileData, errFindRequestFile := findRequestFile(base.Versions[i], sqlFilesDatas)
-		if errFindRequestFile != nil {
-			err = fmt.Errorf("error while trying to find file data for version %d named %s : %s", i, base.Versions[i], errFindRequestFile)
-			return
-		}
-		errCreateTable := SendQueryWithoutResult(db, sqlFileData.query)
-		if errCreateTable != nil {
-			err = fmt.Errorf("error while trying to create table in version %d: %s", i, errCreateTable)
-			return
-		}
-		if errAddVersion := queries.AddVersion(db, i, base.Versions[i]); errAddVersion != nil {
-			err = fmt.Errorf("error while trying to add version %d name %s : %s", i, base.Versions[i], errAddVersion)
-			return
-		}
+	sqlFileData, errFindRequestFile := findRequestFile(base.Versions[version], sqlFilesDatas)
+	if errFindRequestFile != nil {
+		err = fmt.Errorf("error while trying to find file data for version %d named %s : %s", version, base.Versions[version], errFindRequestFile)
+		return
+	}
+	errCreateTable := SendQueryWithoutResult(db, sqlFileData.query)
+	if errCreateTable != nil {
+		err = fmt.Errorf("error while trying to create table in version %d: %s", version, errCreateTable)
+		return
+	}
+	if errAddVersion := queries.AddVersion(db, version, base.Versions[version]); errAddVersion != nil {
+		err = fmt.Errorf("error while trying to add version %d name %s : %s", version, base.Versions[version], errAddVersion)
+		return
 	}
 	return
 }

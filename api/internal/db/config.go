@@ -9,6 +9,8 @@ var DBConfig = []database.Base{
 		Versions: database.Version{
 			0: "init.sql",
 			1: "v1.sql",
+			2: "v2.sql",
+			3: "v3.sql",
 		},
 	},
 }
