@@ -62,6 +62,37 @@ func InitDB(base Base, sqlFiles embed.FS) (db *sql.DB, err error) {
 	return
 }
 
+func RevertDataBase(base Base, sqlFiles embed.FS, versionToRevert int) (db *sql.DB, err error) {
+	//Vérifier si base exist
+	pathDirectory := filepath.Join(utils.GetCurrentDirectory(), base.Path)
+	exist, errCheck := utils.CheckDir(pathDirectory)
+	if errCheck != nil {
+		err = fmt.Errorf("error while trying to check existance of '%s': %s", pathDirectory, errCheck)
+		return
+	}
+	//Sinon on quitte
+	if !exist {
+		log.Printf("[LOG] directory %s does not exist", pathDirectory)
+		return
+	}
+	//Récupère version actuel
+	versions, errGetAllVersion := queries.GetAllVersionOrderByValue(db)
+	if errGetAllVersion != nil {
+		err = fmt.Errorf("error while trying to get all version : %s", errGetAllVersion)
+		return
+	}
+	//Boucle de la version actuel à la versionToRevert
+	for indexVersion := versions[0].Value; indexVersion >= versionToRevert; indexVersion-- {
+		//executer la query de la version à delete
+		if errRevert := GetRevert(db, base, versions[indexVersion].Value, versions[indexVersion].ID, sqlFiles); errRevert != nil {
+			err = fmt.Errorf("error while trying to revert version %d : %s", versions[indexVersion].Value, errRevert)
+			return
+		}
+	}
+
+	return
+}
+
 func CheckExistDataBase(dbFile string) (exist bool, err error) {
 	exist = true
 	if _, errStat := os.Stat(dbFile); errStat != nil {
@@ -94,10 +125,11 @@ func CreateDatabase(dbFile string, base Base, sqlFiles embed.FS) (db *sql.DB, er
 	if err != nil {
 		return
 	}
-	for versionIndex := range base.Versions {
+	for versionIndex := 0; versionIndex < len(base.Versions); versionIndex++ {
 		if errDeploy := GetDeploy(db, base, versionIndex, sqlFiles); errDeploy != nil {
+			log.Printf("[LOG] error during database creation (%s) we delete it.", dbFile)
+			db.Close()
 			if errRemove := os.Remove(dbFile); errRemove != nil {
-				log.Printf("[LOG] error during database creation (%s) we delete it.", dbFile)
 				err = fmt.Errorf("error while trying to delete database file: %s", errRemove)
 				return
 			}
@@ -118,22 +150,53 @@ func UpdateDatabase(db *sql.DB, base Base, actualVersion int, sqlFiles embed.FS)
 	return
 }
 func GetDeploy(db *sql.DB, base Base, version int, sqlFiles embed.FS) (err error) {
+	//On récupère les fichier sql de deploy
 	sqlFilesDatas, errGetSQlFile := GetSqlRequestFromDeployEmbedFiles(sqlFiles)
 	if errGetSQlFile != nil {
 		err = fmt.Errorf("error while trying to get sql deploy files : %s", errGetSQlFile)
 		return
 	}
+	//On cherche le fichier de la version que l'on souhaite exécuter
 	sqlFileData, errFindRequestFile := findRequestFile(base.Versions[version], sqlFilesDatas)
 	if errFindRequestFile != nil {
 		err = fmt.Errorf("error while trying to find file data for version %d named %s : %s", version, base.Versions[version], errFindRequestFile)
 		return
 	}
+	//On l'exécute
 	errCreateTable := SendQueryWithoutResult(db, sqlFileData.query)
 	if errCreateTable != nil {
 		err = fmt.Errorf("error while trying to create table in version %d: %s", version, errCreateTable)
 		return
 	}
+	//On ajoute la version dans la base
 	if errAddVersion := queries.AddVersion(db, version, base.Versions[version]); errAddVersion != nil {
+		err = fmt.Errorf("error while trying to add version %d name %s : %s", version, base.Versions[version], errAddVersion)
+		return
+	}
+	return
+}
+
+func GetRevert(db *sql.DB, base Base, version, id int, sqlFiles embed.FS) (err error) {
+	//On récupère les fichier sql de revert
+	sqlFilesDatas, errGetSQlFile := GetSqlRequestFromRevertEmbedFiles(sqlFiles)
+	if errGetSQlFile != nil {
+		err = fmt.Errorf("error while trying to get sql revert files : %s", errGetSQlFile)
+		return
+	}
+	//On cherche le fichier de la version que l'on souhaite exécuter
+	sqlFileData, errFindRequestFile := findRequestFile(base.Versions[version], sqlFilesDatas)
+	if errFindRequestFile != nil {
+		err = fmt.Errorf("error while trying to find file data for version %d named %s : %s", version, base.Versions[version], errFindRequestFile)
+		return
+	}
+	//On l'exécute
+	errCreateTable := SendQueryWithoutResult(db, sqlFileData.query)
+	if errCreateTable != nil {
+		err = fmt.Errorf("error while trying to create table in version %d: %s", version, errCreateTable)
+		return
+	}
+	//On delete la version
+	if errAddVersion := queries.DeletedVersion(db, id); errAddVersion != nil {
 		err = fmt.Errorf("error while trying to add version %d name %s : %s", version, base.Versions[version], errAddVersion)
 		return
 	}

@@ -11,6 +11,7 @@ var DBConfig = []database.Base{
 			1: "v1.sql",
 			2: "v2.sql",
 			3: "v3.sql",
+			4: "v4.sql",
 		},
 	},
 }
