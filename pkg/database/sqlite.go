@@ -90,6 +90,8 @@ func RevertDataBase(base Base, sqlFiles embed.FS, versionToRevert int) (db *sql.
 		}
 	}
 
+	log.Printf("[LOG] base %s was revert to verion %d", base.DBFile, versionToRevert)
+
 	return
 }
 

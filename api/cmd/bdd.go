@@ -10,6 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var reversVersion int
+var dbName string
+
 // root.serverCmd represents the root.server command
 var bddCmd = &cobra.Command{
 	Use:   "bdd",
@@ -45,7 +48,32 @@ var initBddCmd = &cobra.Command{
 	},
 }
 
+var revertCmd = &cobra.Command{
+	Use:   "revert",
+	Short: "Revert database to old version",
+	Long:  "",
+	Run: func(cmd *cobra.Command, args []string) {
+		sqlFiles := migration.Revert
+		for _, base := range db.DBConfig {
+			if base.DBFile == dbName {
+				db, err := database.RevertDataBase(base, sqlFiles, reversVersion)
+				if err != nil {
+					log.Fatalf("Error revert database: %v", err)
+				}
+				defer func() {
+					db.Close() // Fermer proprement chaque connexion
+				}()
+			}
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(bddCmd)
 	bddCmd.AddCommand(initBddCmd)
+	bddCmd.AddCommand(revertCmd)
+	revertCmd.Flags().IntVarP(&reversVersion, "revert-version", "v", 0, "Version to which we want to revert")
+	revertCmd.MarkFlagRequired("revert-version")
+	revertCmd.Flags().StringVarP(&dbName, "db-name", "", "", "Name of database")
+	revertCmd.MarkFlagRequired("db-name")
 }

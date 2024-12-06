@@ -68,7 +68,7 @@ func AddVersion(db *sql.DB, version int, fileName string) error {
 
 func DeletedVersion(db *sql.DB, id int) error {
 	// Préparation de la requête SQL
-	query := "UPDATE VERSION SET DELETED = 1 WHERE ID = ?"
+	query := "UPDATE VERSION SET DELETED = 1, DELETED_AT = CURRENT_TIMESTAMP WHERE ID = ?"
 
 	// Exécution de la requête avec `Exec`
 	result, err := db.Exec(query, id)
