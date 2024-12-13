@@ -65,6 +65,7 @@ func InitDB(base Base, sqlFiles embed.FS) (db *sql.DB, err error) {
 func RevertDataBase(base Base, sqlFiles embed.FS, versionToRevert int) (db *sql.DB, err error) {
 	//Vérifier si base exist
 	pathDirectory := filepath.Join(utils.GetCurrentDirectory(), base.Path)
+	dbPath := filepath.Join(pathDirectory, base.DBFile)
 	exist, errCheck := utils.CheckDir(pathDirectory)
 	if errCheck != nil {
 		err = fmt.Errorf("error while trying to check existance of '%s': %s", pathDirectory, errCheck)
@@ -75,6 +76,10 @@ func RevertDataBase(base Base, sqlFiles embed.FS, versionToRevert int) (db *sql.
 		log.Printf("[LOG] directory %s does not exist", pathDirectory)
 		return
 	}
+	db, err = OpenDataBase(dbPath)
+	if err != nil {
+		return
+	}
 	//Récupère version actuel
 	versions, errGetAllVersion := queries.GetAllVersionOrderByValue(db)
 	if errGetAllVersion != nil {
@@ -82,13 +87,22 @@ func RevertDataBase(base Base, sqlFiles embed.FS, versionToRevert int) (db *sql.
 		return
 	}
 	//Boucle de la version actuel à la versionToRevert
-	for indexVersion := versions[0].Value; indexVersion >= versionToRevert; indexVersion-- {
-		//executer la query de la version à delete
-		if errRevert := GetRevert(db, base, versions[indexVersion].Value, versions[indexVersion].ID, sqlFiles); errRevert != nil {
-			err = fmt.Errorf("error while trying to revert version %d : %s", versions[indexVersion].Value, errRevert)
+	for _, version := range versions {
+		if version.Value <= versionToRevert {
+			return
+		}
+		if errRevert := GetRevert(db, base, version.Value, version.ID, sqlFiles); errRevert != nil {
+			err = fmt.Errorf("error while trying to revert version %d : %s", version.Value, errRevert)
 			return
 		}
 	}
+	// for indexVersion := versions[0].Value; indexVersion > versionToRevert; indexVersion-- {
+	// 	//executer la query de la version à delete
+	// 	if errRevert := GetRevert(db, base, indexVersion, versions[indexVersion].ID, sqlFiles); errRevert != nil {
+	// 		err = fmt.Errorf("error while trying to revert version %d : %s", versions[indexVersion].Value, errRevert)
+	// 		return
+	// 	}
+	// }
 
 	log.Printf("[LOG] base %s was revert to verion %d", base.DBFile, versionToRevert)
 
