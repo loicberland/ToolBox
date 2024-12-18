@@ -88,7 +88,7 @@ func RevertDataBase(base Base, sqlFiles embed.FS, versionToRevert int) (db *sql.
 	}
 	//Boucle de la version actuel à la versionToRevert
 	for _, version := range versions {
-		if version.Value <= versionToRevert {
+		if version.Value < versionToRevert {
 			return
 		}
 		if errRevert := GetRevert(db, base, version.Value, version.ID, sqlFiles); errRevert != nil {
