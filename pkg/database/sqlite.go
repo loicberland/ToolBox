@@ -50,13 +50,19 @@ func InitDB(base Base, sqlFiles embed.FS) (db *sql.DB, err error) {
 			err = fmt.Errorf("error while trying to get all version : %s", errGetAllVersion)
 			return
 		}
-		if len(base.Versions)-1 != versions[0].Value {
-			var errUpdateDB error
-			errUpdateDB = UpdateDatabase(db, base, versions[0].Value, sqlFiles)
-			if errUpdateDB != nil {
-				err = fmt.Errorf("error while trying to update %s : %s", dbPath, errUpdateDB)
+		versionToUpdate := -1
+		if len(versions) > 0 {
+			if len(base.Versions)-1 == versions[0].Value {
+				log.Printf("[LOG] '%s' The database is already up to date", dbPath)
 				return
 			}
+			versionToUpdate = versions[0].Value
+		}
+		var errUpdateDB error
+		errUpdateDB = UpdateDatabase(db, base, versionToUpdate, sqlFiles)
+		if errUpdateDB != nil {
+			err = fmt.Errorf("error while trying to update %s : %s", dbPath, errUpdateDB)
+			return
 		}
 	}
 	return
@@ -96,13 +102,6 @@ func RevertDataBase(base Base, sqlFiles embed.FS, versionToRevert int) (db *sql.
 			return
 		}
 	}
-	// for indexVersion := versions[0].Value; indexVersion > versionToRevert; indexVersion-- {
-	// 	//executer la query de la version à delete
-	// 	if errRevert := GetRevert(db, base, indexVersion, versions[indexVersion].ID, sqlFiles); errRevert != nil {
-	// 		err = fmt.Errorf("error while trying to revert version %d : %s", versions[indexVersion].Value, errRevert)
-	// 		return
-	// 	}
-	// }
 
 	log.Printf("[LOG] base %s was revert to verion %d", base.DBFile, versionToRevert)
 

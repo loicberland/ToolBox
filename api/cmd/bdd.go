@@ -55,7 +55,7 @@ var revertCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		sqlFiles := migration.Revert
 		for _, base := range db.DBConfig {
-			if base.DBFile == dbName {
+			if base.DBFile == dbName+".db" {
 				db, err := database.RevertDataBase(base, sqlFiles, reversVersion)
 				if err != nil {
 					log.Fatalf("Error revert database: %v", err)
