@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"toolBox/api/internal/config"
 	"toolBox/api/internal/db"
 	"toolBox/api/internal/db/migration"
 	"toolBox/api/internal/handlers"
 	"toolBox/pkg/database"
+	"toolBox/pkg/server"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -33,9 +33,14 @@ func init() {
 }
 
 func startServer() {
-	conf, err := config.LoadServerConfig()
-	if err != nil {
-		fmt.Println("Erreur de chargement de la config:", err)
+	confAPI, errConfApi := server.LoadServerConfig("API")
+	if errConfApi != nil {
+		fmt.Println("Erreur de chargement de la config:", errConfApi)
+		return
+	}
+	confFront, errConfFront := server.LoadServerConfig("FRONT")
+	if errConfFront != nil {
+		fmt.Println("Erreur de chargement de la config:", errConfFront)
 		return
 	}
 	// Stocker les connexions à chaque base de données
@@ -55,15 +60,16 @@ func startServer() {
 		}
 	}()
 
-	listenURL := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.FQDN, conf.Port)
-	listenSocket := fmt.Sprintf(":%d", conf.Port)
+	listenURL := fmt.Sprintf("%s://%s:%d", confAPI.Protocol, confAPI.FQDN, confAPI.Port)
+	listenSocket := fmt.Sprintf(":%d", confAPI.Port)
 
 	r := mux.NewRouter()
 	handlers.SetupRoutes(r) // On va définir les routes dans un fichier séparé
 
 	// Configure CORS
+	frontURL := fmt.Sprintf("%s://%s:%d", confFront.Protocol, confFront.FQDN, confFront.Port)
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"}, // Remplacez par l'URL de votre frontend React
+		AllowedOrigins:   []string{frontURL}, // Remplacez par l'URL de votre frontend React
 		AllowCredentials: true,
 	})
 

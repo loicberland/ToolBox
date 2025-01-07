@@ -6,8 +6,9 @@ function show_help() {
     echo "Options:"
     echo "  all       Build all"
     echo "  lmba      Build only lmba"
-    echo "  perso      Build only perso"
-    echo "  api      Build only api"
+    echo "  perso     Build only perso"
+    echo "  api       Build only api"
+    echo "  front     Build only front"
     echo "  help      Display this help message"
 }
 
@@ -32,9 +33,17 @@ case $1 in
         echo "Building api-toolbox.exe..."
         CGO_ENABLED=1 go build -o ./_build/api-toolbox.exe ./api
         echo "api-toolbox.exe built successfully."
+        
+        echo "Building front-toolbox.exe..."
+        go build -o ./_build/front-toolbox.exe ./front
+        echo "front-toolbox.exe built successfully."
+        
+        echo "Building client front..."
+        go run front/main.go build
+        echo "client front built successfully."
         ;;
     lmba)
-        # Compiler uniquement lmba-toolbox
+        # Compiler uniquement lmba
         echo "Building lmba-toolbox.exe..."
         go build -o ./_build/lmba-toolbox.exe ./lmba
         echo "lmba-toolbox built successfully."
@@ -46,10 +55,22 @@ case $1 in
         echo "perso-toolbox.exe built successfully."
         ;;
     api)
-        # Compiler uniquement api
+        # Compiler uniquement l'api
         echo "Building api-toolbox.exe..."
         CGO_ENABLED=1 go build -o ./_build/api-toolbox.exe ./api
         echo "api-toolbox.exe built successfully."
+        ;;
+    front)
+        # Compiler uniquement le front
+        echo "Building front-toolbox.exe..."
+        go build -o ./_build/front-toolbox.exe ./front
+        echo "front-toolbox.exe built successfully."
+        ;;
+    client)
+        # Compiler uniquement le client front
+        echo "Building client dist..."
+        go run front/main.go build
+        echo "client dist built successfully."
         ;;
     help)
         # Afficher l'aide

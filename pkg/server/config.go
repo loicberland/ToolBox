@@ -1,4 +1,4 @@
-package config
+package server
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ type ConfigServer struct {
 	Protocol string
 }
 
-func LoadServerConfig() (c *ConfigServer, err error) {
+func LoadServerConfig(who string) (c *ConfigServer, err error) {
 	// Charger le fichier .env
 	errGetEnv := godotenv.Load()
 	if errGetEnv != nil {
@@ -23,7 +23,7 @@ func LoadServerConfig() (c *ConfigServer, err error) {
 	}
 
 	// Convertir le port de string à int
-	portStr := os.Getenv("PORT")
+	portStr := os.Getenv("PORT_" + who)
 	port, errConvert := strconv.Atoi(portStr)
 	if errConvert != nil {
 		err = fmt.Errorf("erreur de conversion du port : %s", errConvert)
@@ -33,8 +33,8 @@ func LoadServerConfig() (c *ConfigServer, err error) {
 	// Créer la config
 	config := &ConfigServer{
 		Port:     port,
-		FQDN:     os.Getenv("FQDN"),
-		Protocol: os.Getenv("PROTOCOL"),
+		FQDN:     os.Getenv("FQDN_" + who),
+		Protocol: os.Getenv("PROTOCOL_" + who),
 	}
 
 	return config, nil

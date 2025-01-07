@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const Dotenv = require('dotenv-webpack');
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production'; // Vérifie si le mode est "production"
@@ -40,6 +41,9 @@ module.exports = (env, argv) => {
       new HtmlWebpackPlugin({
         template: './src/index.html', // Modèle HTML pour générer votre page
       }),
+      new Dotenv({
+        path: '../.env'
+      })
     ],
     devtool: isProduction ? 'cheap-source-map' : 'eval-source-map', // Utilise cheap-source-map en prod
     mode: isProduction ? 'production' : 'development', // Définit le mode de compilation
