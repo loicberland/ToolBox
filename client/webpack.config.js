@@ -9,7 +9,7 @@ module.exports = (env, argv) => {
     entry: './src/index.tsx', // Changez l'entrée en .tsx
     // entry: './src/index.js', // Point d'entrée de l'application
     output: {
-      path: path.resolve(__dirname, 'dist'), // Dossier de sortie
+      path: path.resolve(__dirname, '../front/cmd/dist'), // Dossier de sortie
       filename: 'bundle.js', // Nom du fichier bundle
       clean: true, // Nettoie le dossier de sortie avant chaque build
     },
@@ -41,9 +41,9 @@ module.exports = (env, argv) => {
       new HtmlWebpackPlugin({
         template: './src/index.html', // Modèle HTML pour générer votre page
       }),
-      new Dotenv({
-        path: '../.env'
-      })
+      // new Dotenv({
+      //   path: '../.env'
+      // })
     ],
     devtool: isProduction ? 'cheap-source-map' : 'eval-source-map', // Utilise cheap-source-map en prod
     mode: isProduction ? 'production' : 'development', // Définit le mode de compilation

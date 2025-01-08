@@ -13,7 +13,6 @@ import (
 var reversVersion int
 var dbName string
 
-// root.serverCmd represents the root.server command
 var bddCmd = &cobra.Command{
 	Use:   "bdd",
 	Short: "Database",
@@ -37,12 +36,12 @@ var initBddCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Error initializing database: %v", err)
 			}
-			dbConnections = append(dbConnections, db) // Ajouter la connexion à la liste
+			dbConnections = append(dbConnections, db)
 		}
 
 		defer func() {
 			for _, dbConn := range dbConnections {
-				dbConn.Close() // Fermer proprement chaque connexion
+				dbConn.Close()
 			}
 		}()
 	},
@@ -61,7 +60,7 @@ var revertCmd = &cobra.Command{
 					log.Fatalf("Error revert database: %v", err)
 				}
 				defer func() {
-					db.Close() // Fermer proprement chaque connexion
+					db.Close()
 				}()
 			}
 		}

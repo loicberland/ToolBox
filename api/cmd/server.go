@@ -1,6 +1,3 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
@@ -12,7 +9,6 @@ import (
 	"toolBox/api/internal/db/migration"
 	"toolBox/api/internal/handlers"
 	"toolBox/pkg/database"
-	"toolBox/pkg/server"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -33,17 +29,6 @@ func init() {
 }
 
 func startServer() {
-	confAPI, errConfApi := server.LoadServerConfig("API")
-	if errConfApi != nil {
-		fmt.Println("Erreur de chargement de la config:", errConfApi)
-		return
-	}
-	confFront, errConfFront := server.LoadServerConfig("FRONT")
-	if errConfFront != nil {
-		fmt.Println("Erreur de chargement de la config:", errConfFront)
-		return
-	}
-	// Stocker les connexions à chaque base de données
 	dbConnections := make([]*sql.DB, 0)
 	sqlFiles := migration.Deploy
 	for _, base := range db.DBConfig {
@@ -51,29 +36,29 @@ func startServer() {
 		if err != nil {
 			log.Fatalf("Error initializing database whyle trying to start serveur: %v", err)
 		}
-		dbConnections = append(dbConnections, db) // Ajouter la connexion à la liste
+		dbConnections = append(dbConnections, db)
 	}
 
 	defer func() {
 		for _, dbConn := range dbConnections {
-			dbConn.Close() // Fermer proprement chaque connexion
+			dbConn.Close()
 		}
 	}()
 
-	listenURL := fmt.Sprintf("%s://%s:%d", confAPI.Protocol, confAPI.FQDN, confAPI.Port)
-	listenSocket := fmt.Sprintf(":%d", confAPI.Port)
+	listenURL := fmt.Sprintf("http://localhost:20250")
+	listenSocket := fmt.Sprintf(":20250")
 
 	r := mux.NewRouter()
-	handlers.SetupRoutes(r) // On va définir les routes dans un fichier séparé
+	handlers.SetupRoutes(r)
 
-	// Configure CORS
-	frontURL := fmt.Sprintf("%s://%s:%d", confFront.Protocol, confFront.FQDN, confFront.Port)
+	// CORS
+	frontURL := fmt.Sprintf("http://localhost:20251")
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{frontURL}, // Remplacez par l'URL de votre frontend React
+		AllowedOrigins:   []string{frontURL},
 		AllowCredentials: true,
 	})
 
-	// Lancer le serveur
+	// Get server
 	fmt.Printf("Starting server at %s \n", listenURL)
 	if err := http.ListenAndServe(listenSocket, c.Handler(r)); err != nil {
 		fmt.Println(err)

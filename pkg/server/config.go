@@ -15,14 +15,13 @@ type ConfigServer struct {
 }
 
 func LoadServerConfig(who string) (c *ConfigServer, err error) {
-	// Charger le fichier .env
+	// get .env file datas
 	errGetEnv := godotenv.Load()
 	if errGetEnv != nil {
 		err = fmt.Errorf("erreur de chargement du fichier .env: %s", errGetEnv)
 		return
 	}
 
-	// Convertir le port de string à int
 	portStr := os.Getenv("PORT_" + who)
 	port, errConvert := strconv.Atoi(portStr)
 	if errConvert != nil {
@@ -30,7 +29,6 @@ func LoadServerConfig(who string) (c *ConfigServer, err error) {
 		return
 	}
 
-	// Créer la config
 	config := &ConfigServer{
 		Port:     port,
 		FQDN:     os.Getenv("FQDN_" + who),

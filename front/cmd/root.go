@@ -1,21 +1,22 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"toolBox/pkg/server"
 
 	"github.com/spf13/cobra"
 )
 
-var version = "0.0.1"
+//go:embed dist/*
+var embeddedFiles embed.FS
+
+var version = "1.0.0"
 
 var rootCmd = &cobra.Command{
 	Use:     "front",
@@ -29,26 +30,12 @@ var serverCmd = &cobra.Command{
 	Short: "starting server",
 	Long:  "Starts the Front server.",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Chemin du projet React
-		workingDir, err := os.Getwd()
-		if err != nil {
-			log.Fatalf("Failed to get working directory: %s", err)
-		}
-
-		// Construire le chemin vers le dossier React
-		reactDir := filepath.Join(workingDir, "client")
-		conf, err := server.LoadServerConfig("FRONT")
-		if err != nil {
-			fmt.Println("Erreur de chargement de la config:", err)
-			return
-		}
-		listenURL := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.FQDN, conf.Port)
-		listenSocket := fmt.Sprintf(":%d", conf.Port)
-		// Servir les fichiers statiques
-		buildDir := reactDir + "/dist"
-		log.Printf("Serving React build from: %s", buildDir)
-		http.Handle("/", http.FileServer(http.Dir(buildDir)))
-		// Lancer le serveur
+		listenURL := fmt.Sprintf("http://localhost:20251")
+		listenSocket := fmt.Sprintf(":20251")
+		// Serve static files
+		distFS, _ := fs.Sub(embeddedFiles, "dist")
+		http.Handle("/", http.FileServer(http.FS(distFS)))
+		// Start server
 		fmt.Printf("Starting server at %s\n", listenURL)
 		if err := http.ListenAndServe(listenSocket, nil); err != nil {
 			log.Fatalf("Failed to start server: %s", err)
@@ -61,16 +48,14 @@ var buildCmd = &cobra.Command{
 	Short: "build server",
 	Long:  "Build the Front server.",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Chemin du projet React
+		// React projet path
 		workingDir, err := os.Getwd()
 		if err != nil {
 			log.Fatalf("Failed to get working directory: %s", err)
 		}
-
-		// Construire le chemin vers le dossier React
 		reactDir := filepath.Join(workingDir, "client")
 
-		// Exécuter la commande `npm run build`
+		// Get npm build command `npm run build`
 		buildCmd := exec.Command("npm", "run", "build")
 		buildCmd.Dir = reactDir
 		buildCmd.Stdout = os.Stdout

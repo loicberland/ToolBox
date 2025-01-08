@@ -34,13 +34,11 @@ case $1 in
         CGO_ENABLED=1 go build -o ./_build/api-toolbox.exe ./api
         echo "api-toolbox.exe built successfully."
         
+        echo "Building web client..."
+        go run front/main.go build
         echo "Building front-toolbox.exe..."
         go build -o ./_build/front-toolbox.exe ./front
         echo "front-toolbox.exe built successfully."
-        
-        echo "Building client front..."
-        go run front/main.go build
-        echo "client front built successfully."
         ;;
     lmba)
         # Compiler uniquement lmba
@@ -62,15 +60,11 @@ case $1 in
         ;;
     front)
         # Compiler uniquement le front
+        echo "Building web client..."
+        go run front/main.go build
         echo "Building front-toolbox.exe..."
         go build -o ./_build/front-toolbox.exe ./front
         echo "front-toolbox.exe built successfully."
-        ;;
-    client)
-        # Compiler uniquement le client front
-        echo "Building client dist..."
-        go run front/main.go build
-        echo "client dist built successfully."
         ;;
     help)
         # Afficher l'aide

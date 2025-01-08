@@ -1,4 +1,3 @@
-
-const port = process.env.REACT_APP_PORT_API;
+const port = 20250;
 
 export const API_BASE_URL = `http://localhost:${port}/api`;
