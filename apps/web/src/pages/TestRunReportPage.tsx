@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { testSheetApi } from '../api/testSheet';
 import { ReportPreview } from '../components/test-sheet/ReportPreview';
+import { PageHeader } from '../components/ui/PageHeader';
 
 type Props = {
   runId: number;
@@ -17,12 +18,12 @@ export function TestRunReportPage({ runId, onBack }: Props) {
 
   return (
     <section className="workspace">
-      <header className="page-header">
-        <div>
-          <button className="link-button" type="button" onClick={onBack}>Retour</button>
-          <h2>Rapport Markdown</h2>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Rapport"
+        title="Rapport Markdown"
+        description="Version lisible et copiable de l'execution."
+        onBack={onBack}
+      />
       {error && <p className="error">{error}</p>}
       <ReportPreview markdown={markdown} />
     </section>

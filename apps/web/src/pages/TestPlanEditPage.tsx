@@ -3,6 +3,10 @@ import { testSheetApi, TestPlan, TestSheet } from '../api/testSheet';
 import { TestPlanForm } from '../components/test-sheet/TestPlanForm';
 import { TestSheetForm } from '../components/test-sheet/TestSheetForm';
 import { TestSheetList } from '../components/test-sheet/TestSheetList';
+import { Button } from '../components/ui/Button';
+import { Card, CardHeader } from '../components/ui/Card';
+import { EmptyState } from '../components/ui/EmptyState';
+import { PageHeader } from '../components/ui/PageHeader';
 
 type Props = {
   planId: number;
@@ -41,33 +45,45 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
 
   return (
     <section className="workspace">
-      <header className="page-header">
-        <div>
-          <button className="link-button" type="button" onClick={onBack}>Retour</button>
-          <h2>{isNew ? 'Nouveau plan' : plan?.name ?? 'Plan de test'}</h2>
-        </div>
-        {!isNew && (
-          <button
+      <PageHeader
+        eyebrow="Edition"
+        title={isNew ? 'Nouveau plan' : plan?.name ?? 'Plan de test'}
+        description={isNew ? 'Structurez le plan avant de creer les fiches.' : `${sheets.length} fiche${sheets.length > 1 ? 's' : ''} dans ce plan.`}
+        onBack={onBack}
+        actions={!isNew && (
+          <Button
             type="button"
             disabled={sheets.length === 0}
             onClick={async () => {
-              const run = await testSheetApi.createRun(planId);
+              const run = await testSheetApi.createRun(effectivePlanId);
               onRun(run.id);
             }}
           >
             Lancer une execution
-          </button>
+          </Button>
         )}
-      </header>
+      />
       {error && <p className="error">{error}</p>}
       <div className="edit-layout">
-        <section>
-          <h3>Plan</h3>
+        <div className="edit-main-column">
+          <Card>
+            <CardHeader>
+              <div>
+                <span className="section-kicker">Informations generales</span>
+                <h3>Plan</h3>
+              </div>
+            </CardHeader>
           <TestPlanForm plan={plan} onSubmit={savePlan} />
-        </section>
-        <section>
-          <h3>Fiches</h3>
-          {!plan && <p className="muted">Enregistrez le plan avant d'ajouter des fiches.</p>}
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <span className="section-kicker">Fiches de test</span>
+                <h3>{editingSheet ? 'Modifier une fiche' : 'Ajouter une fiche'}</h3>
+              </div>
+            </CardHeader>
+            {!plan && <EmptyState title="Plan non enregistre" description="Enregistrez le plan avant d'ajouter des fiches." />}
           {plan && (
             <>
               <TestSheetForm
@@ -84,30 +100,69 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                   setSheets(await testSheetApi.listSheets(effectivePlanId));
                 }}
               />
-              <TestSheetList
-                sheets={sheets}
-                onEdit={setEditingSheet}
-                onDelete={async (sheet) => {
-                  await testSheetApi.deleteSheet(sheet.id);
-                  setSheets(await testSheetApi.listSheets(effectivePlanId));
-                }}
-                onDuplicate={async (sheet) => {
-                  await testSheetApi.duplicateSheet(sheet.id);
-                  setSheets(await testSheetApi.listSheets(effectivePlanId));
-                }}
-                onMove={async (sheet, direction) => {
-                  const currentIndex = sheets.findIndex((item) => item.id === sheet.id);
-                  const next = [...sheets];
-                  const targetIndex = currentIndex + direction;
-                  [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
-                  await testSheetApi.reorderSheets(effectivePlanId, next.map((item) => item.id));
-                  setSheets(await testSheetApi.listSheets(effectivePlanId));
-                }}
-              />
             </>
           )}
-        </section>
+          </Card>
+        </div>
+
+        <aside className="edit-side-column">
+          <Card>
+            <CardHeader>
+              <div>
+                <span className="section-kicker">Prerequis</span>
+                <h3>Couverture</h3>
+              </div>
+            </CardHeader>
+            <div className="metric-list">
+              <div><span>Fiches avec prerequis</span><strong>{sheets.filter((sheet) => sheet.prerequisites).length}</strong></div>
+              <div><span>Fiches avec attendu</span><strong>{sheets.filter((sheet) => sheet.expectedResult).length}</strong></div>
+              <div><span>Total fiches</span><strong>{sheets.length}</strong></div>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <span className="section-kicker">Documents</span>
+                <h3>Pieces jointes</h3>
+              </div>
+            </CardHeader>
+            <div className="document-dropzone">
+              <strong>Upload a venir</strong>
+              <span>Stockage prepare cote base</span>
+            </div>
+          </Card>
+        </aside>
       </div>
+
+      <section className="sheet-list-section">
+        <div className="section-header">
+          <div>
+            <span className="section-kicker">Ordre d'execution</span>
+            <h3>Fiches de test</h3>
+          </div>
+        </div>
+        <TestSheetList
+          sheets={sheets}
+          onEdit={setEditingSheet}
+          onDelete={async (sheet) => {
+            await testSheetApi.deleteSheet(sheet.id);
+            setSheets(await testSheetApi.listSheets(effectivePlanId));
+          }}
+          onDuplicate={async (sheet) => {
+            await testSheetApi.duplicateSheet(sheet.id);
+            setSheets(await testSheetApi.listSheets(effectivePlanId));
+          }}
+          onMove={async (sheet, direction) => {
+            const currentIndex = sheets.findIndex((item) => item.id === sheet.id);
+            const next = [...sheets];
+            const targetIndex = currentIndex + direction;
+            [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
+            await testSheetApi.reorderSheets(effectivePlanId, next.map((item) => item.id));
+            setSheets(await testSheetApi.listSheets(effectivePlanId));
+          }}
+        />
+      </section>
     </section>
   );
 }

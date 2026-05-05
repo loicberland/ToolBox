@@ -7,12 +7,12 @@ ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go,
 - `apps/api` : back HTTP/API Go. Les routes modulaires sont exposees dans `apps/api/internal/http`.
 - `apps/web` : front React/TypeScript.
 - `apps/web-server` : serveur Go statique pour servir le build du front.
-- `modules/test-sheet` : module Cobra pour les fiches de test, avec SQLite dans `data/test-sheet/test-sheet.db`.
-- `modules/test-env` : module Cobra pour les maquettes de test, avec configuration dans `data/test-env/config.json`.
+- `modules/test-sheet` : module Cobra pour les fiches de test, avec SQLite dans `BDD/test-sheet.db` a cote de l'executable lance.
+- `modules/test-env` : module Cobra pour les maquettes de test, avec configuration dans `config/test-env.json` a cote de l'executable lance.
 - `modules/legacy-lmba` et `modules/legacy-perso` : anciens modules conserves temporairement.
 - `pkg/modulecontract` : contrat JSON partage entre API, front et modules.
 - `pkg/logger`, `pkg/paths` : utilitaires partages simples.
-- `data` : donnees runtime locales.
+- `BDD` : bases SQLite runtime creees a cote des executables lances.
 - `_build` : binaires generes.
 
 ## API

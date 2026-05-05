@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"toolBox/apps/api/internal/config"
@@ -17,20 +18,30 @@ import (
 )
 
 type Server struct {
-	registry *modules.Registry
-	jobs     *jobs.Store
+	registry      *modules.Registry
+	jobs          *jobs.Store
+	testSheetRepo *repository.SQLiteRepository
 }
 
-func NewServer() *Server {
-	return &Server{
-		registry: modules.NewRegistry(),
-		jobs:     jobs.NewStore(),
+func NewServer() (*Server, error) {
+	testSheetRepo, err := repository.Open("")
+	if err != nil {
+		return nil, fmt.Errorf("init test-sheet database: %w", err)
 	}
+	return &Server{
+		registry:      modules.NewRegistry(),
+		jobs:          jobs.NewStore(),
+		testSheetRepo: testSheetRepo,
+	}, nil
 }
 
 func ListenAndServe() error {
 	cfg := config.Load()
-	handler := NewServer().Routes()
+	server, err := NewServer()
+	if err != nil {
+		return err
+	}
+	handler := server.Routes()
 	c := cors.New(cors.Options{
 		AllowedOrigins:   cfg.WebOrigins,
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
@@ -42,9 +53,7 @@ func ListenAndServe() error {
 
 func (s *Server) Routes() http.Handler {
 	r := mux.NewRouter()
-	if repo, err := repository.Open(""); err == nil {
-		testsheetapi.NewHandler(service.New(repo)).Register(r)
-	}
+	testsheetapi.NewHandler(service.New(s.testSheetRepo)).Register(r)
 	r.HandleFunc("/api/health", s.health).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules", s.listModules).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules/{moduleId}", s.getModule).Methods(http.MethodGet)

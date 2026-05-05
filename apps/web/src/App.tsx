@@ -56,7 +56,12 @@ const App = () => {
         {error && <p className="error">{error}</p>}
         {selectedModuleId === 'test-sheet' ? (
           <>
-            {view.name === 'test-plans' && <TestPlanListPage onEdit={(planId) => setView({ name: 'test-plan-edit', planId })} />}
+            {view.name === 'test-plans' && (
+              <TestPlanListPage
+                onEdit={(planId) => setView({ name: 'test-plan-edit', planId })}
+                onRun={(runId) => setView({ name: 'test-run', runId })}
+              />
+            )}
             {view.name === 'test-plan-edit' && (
               <TestPlanEditPage
                 planId={view.planId}

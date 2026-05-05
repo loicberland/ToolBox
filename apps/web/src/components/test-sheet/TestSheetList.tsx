@@ -1,5 +1,7 @@
 import React from 'react';
 import { TestSheet } from '../../api/testSheet';
+import { EmptyState } from '../ui/EmptyState';
+import { TestSheetCard } from './TestSheetCard';
 
 type Props = {
   sheets: TestSheet[];
@@ -11,25 +13,21 @@ type Props = {
 
 export function TestSheetList({ sheets, onEdit, onDelete, onDuplicate, onMove }: Props) {
   if (sheets.length === 0) {
-    return <p className="muted">Aucune fiche pour ce plan.</p>;
+    return <EmptyState title="Aucune fiche" description="Ajoutez une premiere fiche pour pouvoir lancer une execution." />;
   }
   return (
     <div className="sheet-list">
       {sheets.map((sheet, index) => (
-        <article className="sheet-card" key={sheet.id}>
-          <div>
-            <span className="order-badge">{sheet.executionOrder}</span>
-            <h3>{sheet.name}</h3>
-            <p>{sheet.description || 'Sans description'}</p>
-          </div>
-          <div className="button-row">
-            <button className="secondary" type="button" onClick={() => onMove(sheet, -1)} disabled={index === 0}>Monter</button>
-            <button className="secondary" type="button" onClick={() => onMove(sheet, 1)} disabled={index === sheets.length - 1}>Descendre</button>
-            <button className="secondary" type="button" onClick={() => onEdit(sheet)}>Modifier</button>
-            <button className="secondary" type="button" onClick={() => onDuplicate(sheet)}>Dupliquer</button>
-            <button className="danger" type="button" onClick={() => onDelete(sheet)}>Supprimer</button>
-          </div>
-        </article>
+        <TestSheetCard
+          key={sheet.id}
+          sheet={sheet}
+          index={index}
+          total={sheets.length}
+          onEdit={() => onEdit(sheet)}
+          onDelete={() => onDelete(sheet)}
+          onDuplicate={() => onDuplicate(sheet)}
+          onMove={(direction) => onMove(sheet, direction)}
+        />
       ))}
     </div>
   );

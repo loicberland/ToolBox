@@ -14,7 +14,12 @@ func Root() string {
 }
 
 func Data(parts ...string) string {
-	all := append([]string{Root(), "data"}, parts...)
+	all := append([]string{Root(), "BDD"}, parts...)
+	return filepath.Join(all...)
+}
+
+func BDD(parts ...string) string {
+	all := append([]string{Root(), "BDD"}, parts...)
 	return filepath.Join(all...)
 }
 

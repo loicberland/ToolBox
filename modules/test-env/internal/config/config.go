@@ -6,7 +6,10 @@ import (
 	"path/filepath"
 )
 
-const DefaultPath = "data/test-env/config.json"
+const (
+	defaultConfigDirectory = "config"
+	defaultConfigFile      = "test-env.json"
+)
 
 type Config struct {
 	Name      string            `json:"name"`
@@ -22,7 +25,7 @@ func Default() Config {
 
 func Ensure(path string) error {
 	if path == "" {
-		path = DefaultPath
+		path = DefaultPath()
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -37,4 +40,12 @@ func Ensure(path string) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+func DefaultPath() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return filepath.Join(defaultConfigDirectory, defaultConfigFile)
+	}
+	return filepath.Join(filepath.Dir(executable), defaultConfigDirectory, defaultConfigFile)
 }

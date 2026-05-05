@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PlanInput, TestPlan } from '../../api/testSheet';
+import { Button } from '../ui/Button';
 
 type Props = {
   plan?: TestPlan;
@@ -38,7 +39,9 @@ export function TestPlanForm({ plan, onSubmit }: Props) {
         Parametres de maquette
         <textarea value={value.mockupSettings} onChange={(event) => setValue({ ...value, mockupSettings: event.target.value })} placeholder='{"environment":"demo"}' />
       </label>
-      <button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+      <div className="form-actions">
+        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</Button>
+      </div>
     </form>
   );
 }

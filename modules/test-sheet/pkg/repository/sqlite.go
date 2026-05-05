@@ -13,7 +13,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const DefaultPath = "data/test-sheet/test-sheet.db"
+const (
+	defaultDatabaseDirectory = "BDD"
+	defaultDatabaseFile      = "test-sheet.db"
+)
 
 type SQLiteRepository struct {
 	db *sql.DB
@@ -21,21 +24,58 @@ type SQLiteRepository struct {
 
 func Open(path string) (*SQLiteRepository, error) {
 	if path == "" {
-		path = DefaultPath
+		path = DefaultPath()
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	directory := filepath.Dir(path)
+	if err := os.MkdirAll(directory, 0755); err != nil {
+		return nil, fmt.Errorf("create database directory %s: %w", directory, err)
+	}
+	exists, err := databaseFileExists(path)
+	if err != nil {
 		return nil, err
 	}
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open database %s: %w", path, err)
+	}
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create or open database %s: %w", path, err)
+	}
+	if !exists {
+		if _, err := os.Stat(path); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("database file was not created %s: %w", path, err)
+		}
 	}
 	repo := &SQLiteRepository{db: db}
 	if err := repo.Migrate(); err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, fmt.Errorf("migrate database %s: %w", path, err)
 	}
 	return repo, nil
+}
+
+func DefaultPath() string {
+	return filepath.Join(executableDirectory(), defaultDatabaseDirectory, defaultDatabaseFile)
+}
+
+func executableDirectory() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	return filepath.Dir(executable)
+}
+
+func databaseFileExists(path string) (bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check database file %s: %w", path, err)
+	}
+	return true, nil
 }
 
 func (r *SQLiteRepository) Close() error {

@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production'; // Vérifie si le mode est "production"
@@ -32,6 +33,10 @@ module.exports = (env, argv) => {
             loader: 'babel-loader', // Utiliser babel-loader
           },
         },
+        {
+          test: /\.css$/,
+          use: [MiniCssExtractPlugin.loader, 'css-loader'],
+        },
       ],
     },
     resolve: {
@@ -40,6 +45,9 @@ module.exports = (env, argv) => {
     plugins: [
       new HtmlWebpackPlugin({
         template: './src/index.html', // Modèle HTML pour générer votre page
+      }),
+      new MiniCssExtractPlugin({
+        filename: 'styles.css',
       }),
       // new Dotenv({
       //   path: '../.env'

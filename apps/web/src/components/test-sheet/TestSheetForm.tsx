@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { SheetInput, TestSheet } from '../../api/testSheet';
+import { Button } from '../ui/Button';
 
 type Props = {
   sheet?: TestSheet;
@@ -66,8 +67,8 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
         <textarea value={value.mockupSettings} onChange={(event) => setValue({ ...value, mockupSettings: event.target.value })} />
       </label>
       <div className="button-row">
-        <button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : sheet ? 'Modifier la fiche' : 'Ajouter la fiche'}</button>
-        {onCancel && <button className="secondary" type="button" onClick={onCancel}>Annuler</button>}
+        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : sheet ? 'Modifier la fiche' : 'Ajouter la fiche'}</Button>
+        {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>Annuler</Button>}
       </div>
     </form>
   );

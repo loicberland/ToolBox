@@ -8,7 +8,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const DefaultPath = repository.DefaultPath
+func DefaultPath() string {
+	return repository.DefaultPath()
+}
 
 func Open(path string) (*sql.DB, error) {
 	repo, err := repository.Open(path)
