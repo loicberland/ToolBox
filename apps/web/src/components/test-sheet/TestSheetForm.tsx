@@ -7,9 +7,11 @@ type Props = {
   nextOrder: number;
   onSubmit: (input: SheetInput) => Promise<void>;
   onCancel?: () => void;
+  formId?: string;
+  hideActions?: boolean;
 };
 
-export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
+export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hideActions = false }: Props) {
   const [value, setValue] = useState<SheetInput>(newSheet(nextOrder));
   const [saving, setSaving] = useState(false);
   const isEditing = Boolean(sheet?.id);
@@ -31,6 +33,7 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
 
   return (
     <form
+      id={formId}
       className="form-grid sheet-form"
       onSubmit={async (event) => {
         event.preventDefault();
@@ -47,16 +50,16 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
         <input value={value.name} onChange={(event) => setValue({ ...value, name: event.target.value })} required />
       </label>
       <label>
-        Ordre
-        <input type="number" min="1" value={value.executionOrder} onChange={(event) => setValue({ ...value, executionOrder: Number(event.target.value) })} />
-      </label>
-      <label>
         Description
         <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
       </label>
       <label>
         Prerequis
-        <textarea value={value.prerequisites} onChange={(event) => setValue({ ...value, prerequisites: event.target.value })} />
+        <textarea
+          value={value.prerequisites}
+          onChange={(event) => setValue({ ...value, prerequisites: event.target.value })}
+          placeholder={'Markdown accepte.\n\nFichier a charger :\n\n```txt\nTEST\n```\n\nConfigurer RealTerm sur le Digi en .51.'}
+        />
       </label>
       <label>
         Configuration
@@ -70,10 +73,12 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
         Notes
         <textarea value={value.notes} onChange={(event) => setValue({ ...value, notes: event.target.value })} placeholder="Markdown accepte" />
       </label>
-      <div className="button-row">
-        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : isEditing ? 'Sauvegarder' : 'Ajouter'}</Button>
-        {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>Annuler</Button>}
-      </div>
+      {!hideActions && (
+        <div className="button-row">
+          <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : isEditing ? 'Sauvegarder' : 'Ajouter'}</Button>
+          {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>Annuler</Button>}
+        </div>
+      )}
     </form>
   );
 }

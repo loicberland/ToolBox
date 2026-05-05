@@ -36,10 +36,6 @@ export function TestStepForm({ step, nextOrder, onSubmit, onCancel }: Props) {
       }}
     >
       <label>
-        Ordre
-        <input type="number" min="1" value={value.executionOrder} onChange={(event) => setValue({ ...value, executionOrder: Number(event.target.value) })} />
-      </label>
-      <label>
         Champ specifique
         <input value={value.field} onChange={(event) => setValue({ ...value, field: event.target.value })} placeholder="Ex: bouton Valider, champ email..." />
       </label>

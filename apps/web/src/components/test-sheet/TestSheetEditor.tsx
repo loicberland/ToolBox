@@ -36,10 +36,11 @@ type Props = {
   nextOrder: number;
   onCancel: () => void;
   onSaved: () => Promise<void>;
+  onCreated: (sheet: TestSheet) => void;
   onRefresh: () => Promise<TestSheet[]>;
 };
 
-export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onRefresh }: Props) {
+export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh }: Props) {
   const [draftSteps, setDraftSteps] = useState<DraftStep[]>([]);
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
   const [stepEditorMode, setStepEditorMode] = useState<StepEditorMode>('closed');
@@ -47,6 +48,7 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
   const [draftID, setDraftID] = useState(1);
 
   const isCreate = mode === 'create';
+  const formId = `test-sheet-form-${sheet?.id ?? 'new'}`;
   const steps = isCreate ? draftSteps : (currentSheet?.steps ?? []);
   const nextStepOrder = useMemo(() => Math.max(0, ...steps.map((step) => step.executionOrder)) + 1, [steps]);
 
@@ -105,6 +107,12 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
           executionOrder: step.executionOrder,
         });
       }
+      const loadedSheets = await onRefresh();
+      const createdWithSteps = loadedSheets.find((item) => item.id === created.id) ?? created;
+      setDraftSteps([]);
+      closeStepEditor();
+      onCreated(createdWithSteps);
+      return;
     } else if (sheet) {
       await testSheetApi.updateSheet(sheet.id, normalizedInput);
     }
@@ -190,7 +198,13 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
           <h3>{isCreate ? 'Ajouter une fiche' : currentSheet?.name ?? 'Modifier la fiche'}</h3>
         </div>
       </CardHeader>
-      <TestSheetForm sheet={currentSheet ?? { ...emptySheet, executionOrder: nextOrder }} nextOrder={nextOrder} onSubmit={saveSheet} onCancel={onCancel} />
+      <TestSheetForm
+        sheet={currentSheet ?? { ...emptySheet, executionOrder: nextOrder }}
+        nextOrder={nextOrder}
+        onSubmit={saveSheet}
+        formId={formId}
+        hideActions
+      />
       <div className="sheet-steps-panel">
         <div className="section-header compact">
           <div>
@@ -218,6 +232,10 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
             onCancel={closeStepEditor}
           />
         )}
+      </div>
+      <div className="button-row end editor-footer">
+        <Button type="submit" form={formId}>{isCreate ? 'Creer la fiche' : 'Enregistrer'}</Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>Annuler</Button>
       </div>
     </Card>
   );

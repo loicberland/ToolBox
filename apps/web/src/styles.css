@@ -324,22 +324,15 @@ textarea {
 }
 
 .step-form {
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: 1fr;
 }
 
-.sheet-form label:nth-child(1),
-.sheet-form label:nth-child(3),
-.sheet-form label:nth-child(4),
-.sheet-form label:nth-child(5),
-.sheet-form label:nth-child(6),
-.sheet-form label:nth-child(7),
-.sheet-form label:nth-child(8),
+.sheet-form label,
 .sheet-form .button-row {
   grid-column: 1 / -1;
 }
 
-.step-form label:nth-child(3),
-.step-form label:nth-child(4),
+.step-form label,
 .step-form .button-row {
   grid-column: 1 / -1;
 }

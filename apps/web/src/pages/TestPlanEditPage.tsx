@@ -5,7 +5,6 @@ import { TestSheetEditor } from '../components/test-sheet/TestSheetEditor';
 import { TestSheetList } from '../components/test-sheet/TestSheetList';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader } from '../components/ui/Card';
-import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
 
 type Props = {
@@ -64,6 +63,11 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
     closeEditor();
   };
 
+  const afterSheetCreated = (sheet: TestSheet) => {
+    setEditingSheet(sheet);
+    setSheetEditorMode('edit');
+  };
+
   const openCreateSheet = () => {
     setEditingSheet(undefined);
     setSheetEditorMode('create');
@@ -115,9 +119,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
           </div>
         </div>
 
-        {!plan ? (
-          <EmptyState title="Plan non enregistre" description="Enregistrez le plan avant d ajouter des fiches." />
-        ) : (
+        {plan && (
           <>
             <TestSheetList
               sheets={sheets}
@@ -157,6 +159,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 nextOrder={nextOrder}
                 onCancel={closeEditor}
                 onSaved={afterSheetSaved}
+                onCreated={afterSheetCreated}
                 onRefresh={refreshSheets}
               />
             )}
