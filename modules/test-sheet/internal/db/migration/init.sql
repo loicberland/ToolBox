@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS test_sheets (
 	name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	prerequisites TEXT NOT NULL DEFAULT '',
+	config TEXT NOT NULL DEFAULT '',
+	command TEXT NOT NULL DEFAULT '',
+	notes TEXT NOT NULL DEFAULT '',
 	action TEXT NOT NULL DEFAULT '',
 	expected_result TEXT NOT NULL DEFAULT '',
 	execution_order INTEGER NOT NULL DEFAULT 0,
@@ -22,6 +25,18 @@ CREATE TABLE IF NOT EXISTS test_sheets (
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_sheet_steps (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	sheet_id INTEGER NOT NULL,
+	action TEXT NOT NULL DEFAULT '',
+	field TEXT NOT NULL DEFAULT '',
+	expected_result TEXT NOT NULL DEFAULT '',
+	execution_order INTEGER NOT NULL DEFAULT 0,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (sheet_id) REFERENCES test_sheets(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS test_attachments (
@@ -51,6 +66,9 @@ CREATE TABLE IF NOT EXISTS test_run_sheets (
 	name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	prerequisites TEXT NOT NULL DEFAULT '',
+	config TEXT NOT NULL DEFAULT '',
+	command TEXT NOT NULL DEFAULT '',
+	notes TEXT NOT NULL DEFAULT '',
 	action TEXT NOT NULL DEFAULT '',
 	expected_result TEXT NOT NULL DEFAULT '',
 	execution_order INTEGER NOT NULL DEFAULT 0,
@@ -61,6 +79,23 @@ CREATE TABLE IF NOT EXISTS test_run_sheets (
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (run_id) REFERENCES test_runs(id) ON DELETE CASCADE,
 	FOREIGN KEY (source_sheet_id) REFERENCES test_sheets(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS test_run_steps (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_sheet_id INTEGER NOT NULL,
+	source_step_id INTEGER,
+	action TEXT NOT NULL DEFAULT '',
+	field TEXT NOT NULL DEFAULT '',
+	expected_result TEXT NOT NULL DEFAULT '',
+	execution_order INTEGER NOT NULL DEFAULT 0,
+	status TEXT NOT NULL DEFAULT 'pending',
+	actual_result TEXT NOT NULL DEFAULT '',
+	comment TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (run_sheet_id) REFERENCES test_run_sheets(id) ON DELETE CASCADE,
+	FOREIGN KEY (source_step_id) REFERENCES test_sheet_steps(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS test_run_evidences (

@@ -90,7 +90,68 @@ func (r *SQLiteRepository) Migrate() error {
 	if err := r.renameLegacySheetsTable(); err != nil {
 		return err
 	}
-	_, err := r.db.Exec(migrationSQL)
+	if _, err := r.db.Exec(migrationSQL); err != nil {
+		return err
+	}
+	for _, column := range []string{"config", "command", "notes"} {
+		if err := r.ensureTextColumn("test_sheets", column); err != nil {
+			return err
+		}
+		if err := r.ensureTextColumn("test_run_sheets", column); err != nil {
+			return err
+		}
+	}
+	return r.migrateLegacySteps()
+}
+
+func (r *SQLiteRepository) ensureTextColumn(table, column string) error {
+	exists, err := r.columnExists(table, column)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = r.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT ''", table, column))
+	return err
+}
+
+func (r *SQLiteRepository) columnExists(table, column string) (bool, error) {
+	rows, err := r.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, dataType string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func (r *SQLiteRepository) migrateLegacySteps() error {
+	_, err := r.db.Exec(`
+INSERT INTO test_sheet_steps (sheet_id, action, field, expected_result, execution_order, created_at, updated_at)
+SELECT s.id, s.action, '', s.expected_result, 1, s.created_at, s.updated_at
+FROM test_sheets s
+WHERE (TRIM(s.action) <> '' OR TRIM(s.expected_result) <> '')
+	AND NOT EXISTS (SELECT 1 FROM test_sheet_steps step WHERE step.sheet_id = s.id);
+
+INSERT INTO test_run_steps (run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, actual_result, comment, created_at, updated_at)
+SELECT rs.id, NULL, rs.action, '', rs.expected_result, 1, rs.status, rs.actual_result, rs.comment, rs.created_at, rs.updated_at
+FROM test_run_sheets rs
+WHERE (TRIM(rs.action) <> '' OR TRIM(rs.expected_result) <> '')
+	AND NOT EXISTS (SELECT 1 FROM test_run_steps step WHERE step.run_sheet_id = rs.id);
+`)
 	return err
 }
 
@@ -195,9 +256,9 @@ func (r *SQLiteRepository) CreateSheet(planID int64, input model.SheetInput) (mo
 	}
 	now := time.Now().UTC()
 	res, err := r.db.Exec(`INSERT INTO test_sheets
-		(plan_id, name, description, prerequisites, action, expected_result, execution_order, mockup_settings, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		planID, input.Name, input.Description, input.Prerequisites, input.Action, input.ExpectedResult, input.ExecutionOrder, input.MockupSettings, now, now)
+		(plan_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		planID, input.Name, input.Description, input.Prerequisites, input.Config, input.Command, input.Notes, input.Action, input.ExpectedResult, input.ExecutionOrder, input.MockupSettings, now, now)
 	if err != nil {
 		return model.TestSheet{}, err
 	}
@@ -209,24 +270,40 @@ func (r *SQLiteRepository) CreateSheet(planID int64, input model.SheetInput) (mo
 }
 
 func (r *SQLiteRepository) ListSheets(planID int64) ([]model.TestSheet, error) {
-	rows, err := r.db.Query(`SELECT id, plan_id, name, description, prerequisites, action, expected_result, execution_order, mockup_settings, created_at, updated_at
+	rows, err := r.db.Query(`SELECT id, plan_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at
 		FROM test_sheets WHERE plan_id = ? ORDER BY execution_order ASC, id ASC`, planID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanSheets(rows)
+	sheets, err := scanSheets(rows)
+	if err != nil {
+		return nil, err
+	}
+	for index := range sheets {
+		steps, err := r.ListSteps(sheets[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		sheets[index].Steps = steps
+	}
+	return sheets, nil
 }
 
 func (r *SQLiteRepository) GetSheet(id int64) (model.TestSheet, error) {
-	row := r.db.QueryRow(`SELECT id, plan_id, name, description, prerequisites, action, expected_result, execution_order, mockup_settings, created_at, updated_at
+	row := r.db.QueryRow(`SELECT id, plan_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at
 		FROM test_sheets WHERE id = ?`, id)
-	return scanSheet(row)
+	sheet, err := scanSheet(row)
+	if err != nil {
+		return model.TestSheet{}, err
+	}
+	sheet.Steps, err = r.ListSteps(id)
+	return sheet, err
 }
 
 func (r *SQLiteRepository) UpdateSheet(id int64, input model.SheetInput) (model.TestSheet, error) {
-	res, err := r.db.Exec(`UPDATE test_sheets SET name = ?, description = ?, prerequisites = ?, action = ?, expected_result = ?, execution_order = ?, mockup_settings = ?, updated_at = ? WHERE id = ?`,
-		input.Name, input.Description, input.Prerequisites, input.Action, input.ExpectedResult, input.ExecutionOrder, input.MockupSettings, time.Now().UTC(), id)
+	res, err := r.db.Exec(`UPDATE test_sheets SET name = ?, description = ?, prerequisites = ?, config = ?, command = ?, notes = ?, action = ?, expected_result = ?, execution_order = ?, mockup_settings = ?, updated_at = ? WHERE id = ?`,
+		input.Name, input.Description, input.Prerequisites, input.Config, input.Command, input.Notes, input.Action, input.ExpectedResult, input.ExecutionOrder, input.MockupSettings, time.Now().UTC(), id)
 	if err != nil {
 		return model.TestSheet{}, err
 	}
@@ -245,6 +322,106 @@ func (r *SQLiteRepository) DeleteSheet(id int64) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (r *SQLiteRepository) CreateStep(sheetID int64, input model.StepInput) (model.TestSheetStep, error) {
+	if input.ExecutionOrder == 0 {
+		next, err := r.nextStepOrder(sheetID)
+		if err != nil {
+			return model.TestSheetStep{}, err
+		}
+		input.ExecutionOrder = next
+	}
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`INSERT INTO test_sheet_steps (sheet_id, action, field, expected_result, execution_order, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		sheetID, input.Action, input.Field, input.ExpectedResult, input.ExecutionOrder, now, now)
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	return r.GetStep(id)
+}
+
+func (r *SQLiteRepository) ListSteps(sheetID int64) ([]model.TestSheetStep, error) {
+	rows, err := r.db.Query(`SELECT id, sheet_id, action, field, expected_result, execution_order, created_at, updated_at
+		FROM test_sheet_steps WHERE sheet_id = ? ORDER BY execution_order ASC, id ASC`, sheetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	steps := []model.TestSheetStep{}
+	for rows.Next() {
+		step, err := scanStep(rows)
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, step)
+	}
+	return steps, rows.Err()
+}
+
+func (r *SQLiteRepository) GetStep(id int64) (model.TestSheetStep, error) {
+	row := r.db.QueryRow(`SELECT id, sheet_id, action, field, expected_result, execution_order, created_at, updated_at
+		FROM test_sheet_steps WHERE id = ?`, id)
+	return scanStep(row)
+}
+
+func (r *SQLiteRepository) UpdateStep(id int64, input model.StepInput) (model.TestSheetStep, error) {
+	res, err := r.db.Exec(`UPDATE test_sheet_steps SET action = ?, field = ?, expected_result = ?, execution_order = ?, updated_at = ? WHERE id = ?`,
+		input.Action, input.Field, input.ExpectedResult, input.ExecutionOrder, time.Now().UTC(), id)
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.TestSheetStep{}, sql.ErrNoRows
+	}
+	return r.GetStep(id)
+}
+
+func (r *SQLiteRepository) DeleteStep(id int64) error {
+	res, err := r.db.Exec(`DELETE FROM test_sheet_steps WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *SQLiteRepository) DuplicateStep(id int64) (model.TestSheetStep, error) {
+	step, err := r.GetStep(id)
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	return r.CreateStep(step.SheetID, model.StepInput{
+		Action:         step.Action,
+		Field:          step.Field,
+		ExpectedResult: step.ExpectedResult,
+	})
+}
+
+func (r *SQLiteRepository) ReorderSteps(sheetID int64, stepIDs []int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	for index, stepID := range stepIDs {
+		res, err := tx.Exec(`UPDATE test_sheet_steps SET execution_order = ?, updated_at = ? WHERE id = ? AND sheet_id = ?`,
+			index+1, time.Now().UTC(), stepID, sheetID)
+		if err != nil {
+			return err
+		}
+		if changed, _ := res.RowsAffected(); changed == 0 {
+			return sql.ErrNoRows
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *SQLiteRepository) ReorderSheets(planID int64, sheetIDs []int64) error {
@@ -286,27 +463,61 @@ func (r *SQLiteRepository) CreateRunWithSnapshot(planID int64) (model.TestRun, e
 	if err != nil {
 		return model.TestRun{}, err
 	}
-	rows, err := tx.Query(`SELECT id, name, description, prerequisites, action, expected_result, execution_order
+	rows, err := tx.Query(`SELECT id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order
 		FROM test_sheets WHERE plan_id = ? ORDER BY execution_order ASC, id ASC`, planID)
 	if err != nil {
 		return model.TestRun{}, err
 	}
-	defer rows.Close()
+	sheets := []model.TestSheet{}
 	for rows.Next() {
 		var sheet model.TestSheet
-		if err := rows.Scan(&sheet.ID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder); err != nil {
+		if err := rows.Scan(&sheet.ID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Config, &sheet.Command, &sheet.Notes, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder); err != nil {
+			_ = rows.Close()
 			return model.TestRun{}, err
 		}
-		_, err := tx.Exec(`INSERT INTO test_run_sheets
-			(run_id, source_sheet_id, name, description, prerequisites, action, expected_result, execution_order, status, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			runID, sheet.ID, sheet.Name, sheet.Description, sheet.Prerequisites, sheet.Action, sheet.ExpectedResult, sheet.ExecutionOrder, model.RunSheetStatusPending, now, now)
+		sheets = append(sheets, sheet)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return model.TestRun{}, err
+	}
+	_ = rows.Close()
+	for _, sheet := range sheets {
+		res, err := tx.Exec(`INSERT INTO test_run_sheets
+			(run_id, source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			runID, sheet.ID, sheet.Name, sheet.Description, sheet.Prerequisites, sheet.Config, sheet.Command, sheet.Notes, sheet.Action, sheet.ExpectedResult, sheet.ExecutionOrder, model.RunSheetStatusPending, now, now)
 		if err != nil {
 			return model.TestRun{}, err
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return model.TestRun{}, err
+		runSheetID, err := res.LastInsertId()
+		if err != nil {
+			return model.TestRun{}, err
+		}
+		stepRows, err := tx.Query(`SELECT id, action, field, expected_result, execution_order FROM test_sheet_steps WHERE sheet_id = ? ORDER BY execution_order ASC, id ASC`, sheet.ID)
+		if err != nil {
+			return model.TestRun{}, err
+		}
+		for stepRows.Next() {
+			var step model.TestSheetStep
+			if err := stepRows.Scan(&step.ID, &step.Action, &step.Field, &step.ExpectedResult, &step.ExecutionOrder); err != nil {
+				_ = stepRows.Close()
+				return model.TestRun{}, err
+			}
+			_, err := tx.Exec(`INSERT INTO test_run_steps
+				(run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				runSheetID, step.ID, step.Action, step.Field, step.ExpectedResult, step.ExecutionOrder, model.RunSheetStatusPending, now, now)
+			if err != nil {
+				_ = stepRows.Close()
+				return model.TestRun{}, err
+			}
+		}
+		if err := stepRows.Err(); err != nil {
+			_ = stepRows.Close()
+			return model.TestRun{}, err
+		}
+		_ = stepRows.Close()
 	}
 	if err := tx.Commit(); err != nil {
 		return model.TestRun{}, err
@@ -329,7 +540,7 @@ func (r *SQLiteRepository) GetRun(runID int64) (model.TestRun, error) {
 }
 
 func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) {
-	rows, err := r.db.Query(`SELECT id, run_id, source_sheet_id, name, description, prerequisites, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
+	rows, err := r.db.Query(`SELECT id, run_id, source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
 		FROM test_run_sheets WHERE run_id = ? ORDER BY execution_order ASC, id ASC`, runID)
 	if err != nil {
 		return nil, err
@@ -343,7 +554,17 @@ func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) 
 		}
 		sheets = append(sheets, sheet)
 	}
-	return sheets, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for index := range sheets {
+		steps, err := r.ListRunSteps(sheets[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		sheets[index].Steps = steps
+	}
+	return sheets, nil
 }
 
 func (r *SQLiteRepository) UpdateRunSheet(runID, runSheetID int64, input model.RunSheetResultInput) (model.RunSheet, error) {
@@ -355,9 +576,42 @@ func (r *SQLiteRepository) UpdateRunSheet(runID, runSheetID int64, input model.R
 	if changed, _ := res.RowsAffected(); changed == 0 {
 		return model.RunSheet{}, sql.ErrNoRows
 	}
-	row := r.db.QueryRow(`SELECT id, run_id, source_sheet_id, name, description, prerequisites, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
+	row := r.db.QueryRow(`SELECT id, run_id, source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
 		FROM test_run_sheets WHERE id = ? AND run_id = ?`, runSheetID, runID)
 	return scanRunSheet(row)
+}
+
+func (r *SQLiteRepository) ListRunSteps(runSheetID int64) ([]model.RunStep, error) {
+	rows, err := r.db.Query(`SELECT id, run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
+		FROM test_run_steps WHERE run_sheet_id = ? ORDER BY execution_order ASC, id ASC`, runSheetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	steps := []model.RunStep{}
+	for rows.Next() {
+		step, err := scanRunStep(rows)
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, step)
+	}
+	return steps, rows.Err()
+}
+
+func (r *SQLiteRepository) UpdateRunStep(runID, runStepID int64, input model.RunStepResultInput) (model.RunStep, error) {
+	res, err := r.db.Exec(`UPDATE test_run_steps SET status = ?, actual_result = ?, comment = ?, updated_at = ?
+		WHERE id = ? AND run_sheet_id IN (SELECT id FROM test_run_sheets WHERE run_id = ?)`,
+		input.Status, input.ActualResult, input.Comment, time.Now().UTC(), runStepID, runID)
+	if err != nil {
+		return model.RunStep{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.RunStep{}, sql.ErrNoRows
+	}
+	row := r.db.QueryRow(`SELECT id, run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
+		FROM test_run_steps WHERE id = ?`, runStepID)
+	return scanRunStep(row)
 }
 
 func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
@@ -375,6 +629,17 @@ func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
 func (r *SQLiteRepository) nextSheetOrder(planID int64) (int, error) {
 	var next sql.NullInt64
 	if err := r.db.QueryRow(`SELECT MAX(execution_order) + 1 FROM test_sheets WHERE plan_id = ?`, planID).Scan(&next); err != nil {
+		return 0, err
+	}
+	if !next.Valid {
+		return 1, nil
+	}
+	return int(next.Int64), nil
+}
+
+func (r *SQLiteRepository) nextStepOrder(sheetID int64) (int, error) {
+	var next sql.NullInt64
+	if err := r.db.QueryRow(`SELECT MAX(execution_order) + 1 FROM test_sheet_steps WHERE sheet_id = ?`, sheetID).Scan(&next); err != nil {
 		return 0, err
 	}
 	if !next.Valid {
@@ -403,8 +668,14 @@ func scanSheets(rows *sql.Rows) ([]model.TestSheet, error) {
 
 func scanSheet(scanner interface{ Scan(...any) error }) (model.TestSheet, error) {
 	var sheet model.TestSheet
-	err := scanner.Scan(&sheet.ID, &sheet.PlanID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder, &sheet.MockupSettings, &sheet.CreatedAt, &sheet.UpdatedAt)
+	err := scanner.Scan(&sheet.ID, &sheet.PlanID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Config, &sheet.Command, &sheet.Notes, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder, &sheet.MockupSettings, &sheet.CreatedAt, &sheet.UpdatedAt)
 	return sheet, err
+}
+
+func scanStep(scanner interface{ Scan(...any) error }) (model.TestSheetStep, error) {
+	var step model.TestSheetStep
+	err := scanner.Scan(&step.ID, &step.SheetID, &step.Action, &step.Field, &step.ExpectedResult, &step.ExecutionOrder, &step.CreatedAt, &step.UpdatedAt)
+	return step, err
 }
 
 func scanRun(scanner interface{ Scan(...any) error }) (model.TestRun, error) {
@@ -420,12 +691,23 @@ func scanRun(scanner interface{ Scan(...any) error }) (model.TestRun, error) {
 func scanRunSheet(scanner interface{ Scan(...any) error }) (model.RunSheet, error) {
 	var sheet model.RunSheet
 	var sourceSheetID sql.NullInt64
-	err := scanner.Scan(&sheet.ID, &sheet.RunID, &sourceSheetID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder, &sheet.Status, &sheet.ActualResult, &sheet.Comment, &sheet.CreatedAt, &sheet.UpdatedAt)
+	err := scanner.Scan(&sheet.ID, &sheet.RunID, &sourceSheetID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Config, &sheet.Command, &sheet.Notes, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder, &sheet.Status, &sheet.ActualResult, &sheet.Comment, &sheet.CreatedAt, &sheet.UpdatedAt)
 	if sourceSheetID.Valid {
 		value := sourceSheetID.Int64
 		sheet.SourceSheetID = &value
 	}
 	return sheet, err
+}
+
+func scanRunStep(scanner interface{ Scan(...any) error }) (model.RunStep, error) {
+	var step model.RunStep
+	var sourceStepID sql.NullInt64
+	err := scanner.Scan(&step.ID, &step.RunSheetID, &sourceStepID, &step.Action, &step.Field, &step.ExpectedResult, &step.ExecutionOrder, &step.Status, &step.ActualResult, &step.Comment, &step.CreatedAt, &step.UpdatedAt)
+	if sourceStepID.Valid {
+		value := sourceStepID.Int64
+		step.SourceStepID = &value
+	}
+	return step, err
 }
 
 func rollback(tx *sql.Tx) {
@@ -456,6 +738,9 @@ CREATE TABLE IF NOT EXISTS test_sheets (
 	name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	prerequisites TEXT NOT NULL DEFAULT '',
+	config TEXT NOT NULL DEFAULT '',
+	command TEXT NOT NULL DEFAULT '',
+	notes TEXT NOT NULL DEFAULT '',
 	action TEXT NOT NULL DEFAULT '',
 	expected_result TEXT NOT NULL DEFAULT '',
 	execution_order INTEGER NOT NULL DEFAULT 0,
@@ -463,6 +748,18 @@ CREATE TABLE IF NOT EXISTS test_sheets (
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_sheet_steps (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	sheet_id INTEGER NOT NULL,
+	action TEXT NOT NULL DEFAULT '',
+	field TEXT NOT NULL DEFAULT '',
+	expected_result TEXT NOT NULL DEFAULT '',
+	execution_order INTEGER NOT NULL DEFAULT 0,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (sheet_id) REFERENCES test_sheets(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS test_attachments (
@@ -492,6 +789,9 @@ CREATE TABLE IF NOT EXISTS test_run_sheets (
 	name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	prerequisites TEXT NOT NULL DEFAULT '',
+	config TEXT NOT NULL DEFAULT '',
+	command TEXT NOT NULL DEFAULT '',
+	notes TEXT NOT NULL DEFAULT '',
 	action TEXT NOT NULL DEFAULT '',
 	expected_result TEXT NOT NULL DEFAULT '',
 	execution_order INTEGER NOT NULL DEFAULT 0,
@@ -502,6 +802,23 @@ CREATE TABLE IF NOT EXISTS test_run_sheets (
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (run_id) REFERENCES test_runs(id) ON DELETE CASCADE,
 	FOREIGN KEY (source_sheet_id) REFERENCES test_sheets(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS test_run_steps (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_sheet_id INTEGER NOT NULL,
+	source_step_id INTEGER,
+	action TEXT NOT NULL DEFAULT '',
+	field TEXT NOT NULL DEFAULT '',
+	expected_result TEXT NOT NULL DEFAULT '',
+	execution_order INTEGER NOT NULL DEFAULT 0,
+	status TEXT NOT NULL DEFAULT 'pending',
+	actual_result TEXT NOT NULL DEFAULT '',
+	comment TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (run_sheet_id) REFERENCES test_run_sheets(id) ON DELETE CASCADE,
+	FOREIGN KEY (source_step_id) REFERENCES test_sheet_steps(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS test_run_evidences (

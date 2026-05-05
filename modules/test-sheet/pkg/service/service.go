@@ -19,10 +19,17 @@ type Repository interface {
 	GetSheet(int64) (model.TestSheet, error)
 	UpdateSheet(int64, model.SheetInput) (model.TestSheet, error)
 	DeleteSheet(int64) error
+	CreateStep(int64, model.StepInput) (model.TestSheetStep, error)
+	ListSteps(int64) ([]model.TestSheetStep, error)
+	UpdateStep(int64, model.StepInput) (model.TestSheetStep, error)
+	DeleteStep(int64) error
+	DuplicateStep(int64) (model.TestSheetStep, error)
+	ReorderSteps(int64, []int64) error
 	ReorderSheets(int64, []int64) error
 	CreateRunWithSnapshot(int64) (model.TestRun, error)
 	GetRun(int64) (model.TestRun, error)
 	UpdateRunSheet(int64, int64, model.RunSheetResultInput) (model.RunSheet, error)
+	UpdateRunStep(int64, int64, model.RunStepResultInput) (model.RunStep, error)
 	FinishRun(int64) (model.TestRun, error)
 }
 
@@ -80,10 +87,13 @@ func (s *Service) DuplicatePlan(id int64) (model.TestPlan, error) {
 		return model.TestPlan{}, err
 	}
 	for _, sheet := range sheets {
-		_, err := s.repo.CreateSheet(copyPlan.ID, model.SheetInput{
+		copySheet, err := s.repo.CreateSheet(copyPlan.ID, model.SheetInput{
 			Name:           sheet.Name,
 			Description:    sheet.Description,
 			Prerequisites:  sheet.Prerequisites,
+			Config:         sheet.Config,
+			Command:        sheet.Command,
+			Notes:          sheet.Notes,
 			Action:         sheet.Action,
 			ExpectedResult: sheet.ExpectedResult,
 			ExecutionOrder: sheet.ExecutionOrder,
@@ -91,6 +101,17 @@ func (s *Service) DuplicatePlan(id int64) (model.TestPlan, error) {
 		})
 		if err != nil {
 			return model.TestPlan{}, err
+		}
+		for _, step := range sheet.Steps {
+			_, err := s.repo.CreateStep(copySheet.ID, model.StepInput{
+				Action:         step.Action,
+				Field:          step.Field,
+				ExpectedResult: step.ExpectedResult,
+				ExecutionOrder: step.ExecutionOrder,
+			})
+			if err != nil {
+				return model.TestPlan{}, err
+			}
 		}
 	}
 	return copyPlan, nil
@@ -131,14 +152,71 @@ func (s *Service) DuplicateSheet(id int64) (model.TestSheet, error) {
 	if err != nil {
 		return model.TestSheet{}, err
 	}
-	return s.repo.CreateSheet(sheet.PlanID, model.SheetInput{
+	copySheet, err := s.repo.CreateSheet(sheet.PlanID, model.SheetInput{
 		Name:           sheet.Name + " (copie)",
 		Description:    sheet.Description,
 		Prerequisites:  sheet.Prerequisites,
+		Config:         sheet.Config,
+		Command:        sheet.Command,
+		Notes:          sheet.Notes,
 		Action:         sheet.Action,
 		ExpectedResult: sheet.ExpectedResult,
 		MockupSettings: sheet.MockupSettings,
 	})
+	if err != nil {
+		return model.TestSheet{}, err
+	}
+	for _, step := range sheet.Steps {
+		_, err := s.repo.CreateStep(copySheet.ID, model.StepInput{
+			Action:         step.Action,
+			Field:          step.Field,
+			ExpectedResult: step.ExpectedResult,
+			ExecutionOrder: step.ExecutionOrder,
+		})
+		if err != nil {
+			return model.TestSheet{}, err
+		}
+	}
+	return s.repo.GetSheet(copySheet.ID)
+}
+
+func (s *Service) CreateStep(sheetID int64, input model.StepInput) (model.TestSheetStep, error) {
+	if _, err := s.repo.GetSheet(sheetID); err != nil {
+		return model.TestSheetStep{}, err
+	}
+	if strings.TrimSpace(input.Action) == "" && strings.TrimSpace(input.ExpectedResult) == "" {
+		return model.TestSheetStep{}, fmt.Errorf("step action or expected result is required")
+	}
+	return s.repo.CreateStep(sheetID, input)
+}
+
+func (s *Service) ListSteps(sheetID int64) ([]model.TestSheetStep, error) {
+	if _, err := s.repo.GetSheet(sheetID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListSteps(sheetID)
+}
+
+func (s *Service) UpdateStep(id int64, input model.StepInput) (model.TestSheetStep, error) {
+	if strings.TrimSpace(input.Action) == "" && strings.TrimSpace(input.ExpectedResult) == "" {
+		return model.TestSheetStep{}, fmt.Errorf("step action or expected result is required")
+	}
+	return s.repo.UpdateStep(id, input)
+}
+
+func (s *Service) DeleteStep(id int64) error {
+	return s.repo.DeleteStep(id)
+}
+
+func (s *Service) DuplicateStep(id int64) (model.TestSheetStep, error) {
+	return s.repo.DuplicateStep(id)
+}
+
+func (s *Service) ReorderSteps(sheetID int64, stepIDs []int64) error {
+	if _, err := s.repo.GetSheet(sheetID); err != nil {
+		return err
+	}
+	return s.repo.ReorderSteps(sheetID, stepIDs)
 }
 
 func (s *Service) ReorderSheets(planID int64, sheetIDs []int64) error {
@@ -170,6 +248,13 @@ func (s *Service) UpdateRunSheet(runID, runSheetID int64, input model.RunSheetRe
 	return s.repo.UpdateRunSheet(runID, runSheetID, input)
 }
 
+func (s *Service) UpdateRunStep(runID, runStepID int64, input model.RunStepResultInput) (model.RunStep, error) {
+	if !isAllowedStatus(input.Status) {
+		return model.RunStep{}, fmt.Errorf("invalid run step status")
+	}
+	return s.repo.UpdateRunStep(runID, runStepID, input)
+}
+
 func (s *Service) FinishRun(runID int64) (model.TestRun, error) {
 	return s.repo.FinishRun(runID)
 }
@@ -190,7 +275,9 @@ func (s *Service) GenerateMarkdownReport(runID int64) (string, error) {
 	builder.WriteString("\n## Synthese\n\n")
 	counts := map[string]int{}
 	for _, sheet := range run.Sheets {
-		counts[sheet.Status]++
+		for _, step := range sheet.Steps {
+			counts[step.Status]++
+		}
 	}
 	for _, status := range []string{model.RunSheetStatusPending, model.RunSheetStatusPassed, model.RunSheetStatusFailed, model.RunSheetStatusBlocked, model.RunSheetStatusSkipped} {
 		fmt.Fprintf(&builder, "- %s: %d\n", status, counts[status])
@@ -201,10 +288,24 @@ func (s *Service) GenerateMarkdownReport(runID int64) (string, error) {
 		fmt.Fprintf(&builder, "- Statut: %s\n", sheet.Status)
 		writeReportLine(&builder, "Description", sheet.Description)
 		writeReportLine(&builder, "Prerequis", sheet.Prerequisites)
-		writeReportLine(&builder, "Action", sheet.Action)
-		writeReportLine(&builder, "Resultat attendu", sheet.ExpectedResult)
-		writeReportLine(&builder, "Resultat reel", sheet.ActualResult)
-		writeReportLine(&builder, "Commentaire", sheet.Comment)
+		writeReportLine(&builder, "Configuration", sheet.Config)
+		writeReportLine(&builder, "Commande", sheet.Command)
+		writeReportLine(&builder, "Notes", sheet.Notes)
+		if len(sheet.Steps) > 0 {
+			builder.WriteString("\n| # | Champ | Action | Resultat attendu | Statut | Resultat obtenu | Commentaire |\n")
+			builder.WriteString("|---|---|---|---|---|---|---|\n")
+			for _, step := range sheet.Steps {
+				fmt.Fprintf(&builder, "| %d | %s | %s | %s | %s | %s | %s |\n",
+					step.ExecutionOrder,
+					tableCell(step.Field),
+					tableCell(step.Action),
+					tableCell(step.ExpectedResult),
+					tableCell(step.Status),
+					tableCell(step.ActualResult),
+					tableCell(step.Comment),
+				)
+			}
+		}
 		builder.WriteString("\n")
 	}
 	return builder.String(), nil
@@ -214,7 +315,14 @@ func writeReportLine(builder *strings.Builder, label, value string) {
 	if strings.TrimSpace(value) == "" {
 		return
 	}
-	fmt.Fprintf(builder, "- %s: %s\n", label, strings.ReplaceAll(value, "\n", " "))
+	fmt.Fprintf(builder, "#### %s\n\n%s\n\n", label, value)
+}
+
+func tableCell(value string) string {
+	value = strings.ReplaceAll(value, "|", "\\|")
+	value = strings.ReplaceAll(value, "\r\n", "<br>")
+	value = strings.ReplaceAll(value, "\n", "<br>")
+	return value
 }
 
 func isAllowedStatus(status string) bool {

@@ -9,8 +9,9 @@ type Props = {
 };
 
 export function TestRunProgress({ status, sheets }: Props) {
-  const done = sheets.filter((sheet) => sheet.status !== 'pending').length;
-  const total = sheets.length;
+  const steps = sheets.flatMap((sheet) => sheet.steps ?? []);
+  const done = steps.filter((step) => step.status !== 'pending').length;
+  const total = steps.length;
   const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
   return (
@@ -18,7 +19,7 @@ export function TestRunProgress({ status, sheets }: Props) {
       <div className="run-progress-header">
         <div>
           <span className="section-kicker">Progression</span>
-          <strong>{done} / {total} tests traites</strong>
+          <strong>{done} / {total} etapes traitees</strong>
         </div>
         <StatusBadge status={status} />
       </div>
@@ -29,7 +30,7 @@ export function TestRunProgress({ status, sheets }: Props) {
         {(['pending', 'passed', 'failed', 'blocked', 'skipped'] as const).map((item) => (
           <div key={item}>
             <StatusBadge status={item} />
-            <strong>{sheets.filter((sheet) => sheet.status === item).length}</strong>
+            <strong>{steps.filter((step) => step.status === item).length}</strong>
           </div>
         ))}
       </div>

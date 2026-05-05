@@ -32,9 +32,16 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}", h.deleteSheet).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/duplicate", h.duplicateSheet).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets/reorder", h.reorderSheets).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps", h.listSteps).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps", h.createStep).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/steps/{stepId}", h.updateStep).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/steps/{stepId}", h.deleteStep).Methods(http.MethodDelete)
+	r.HandleFunc("/api/test-sheet/steps/{stepId}/duplicate", h.duplicateStep).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps/reorder", h.reorderSteps).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/runs", h.createRun).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/runs/{runId}", h.getRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/sheets/{runSheetId}", h.updateRunSheet).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/runs/{runId}/steps/{runStepId}", h.updateRunStep).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/finish", h.finishRun).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/report", h.report).Methods(http.MethodGet)
 }
@@ -156,6 +163,70 @@ func (h *Handler) reorderSheets(w http.ResponseWriter, r *http.Request) {
 	respondNoContent(w, h.service.ReorderSheets(planID, input.SheetIDs))
 }
 
+func (h *Handler) listSteps(w http.ResponseWriter, r *http.Request) {
+	sheetID, ok := pathID(w, r, "sheetId")
+	if !ok {
+		return
+	}
+	steps, err := h.service.ListSteps(sheetID)
+	respond(w, steps, err)
+}
+
+func (h *Handler) createStep(w http.ResponseWriter, r *http.Request) {
+	sheetID, ok := pathID(w, r, "sheetId")
+	if !ok {
+		return
+	}
+	var input model.StepInput
+	if !decode(w, r, &input) {
+		return
+	}
+	step, err := h.service.CreateStep(sheetID, input)
+	respondCreated(w, step, err)
+}
+
+func (h *Handler) updateStep(w http.ResponseWriter, r *http.Request) {
+	stepID, ok := pathID(w, r, "stepId")
+	if !ok {
+		return
+	}
+	var input model.StepInput
+	if !decode(w, r, &input) {
+		return
+	}
+	step, err := h.service.UpdateStep(stepID, input)
+	respond(w, step, err)
+}
+
+func (h *Handler) deleteStep(w http.ResponseWriter, r *http.Request) {
+	stepID, ok := pathID(w, r, "stepId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.DeleteStep(stepID))
+}
+
+func (h *Handler) duplicateStep(w http.ResponseWriter, r *http.Request) {
+	stepID, ok := pathID(w, r, "stepId")
+	if !ok {
+		return
+	}
+	step, err := h.service.DuplicateStep(stepID)
+	respondCreated(w, step, err)
+}
+
+func (h *Handler) reorderSteps(w http.ResponseWriter, r *http.Request) {
+	sheetID, ok := pathID(w, r, "sheetId")
+	if !ok {
+		return
+	}
+	var input model.ReorderInput
+	if !decode(w, r, &input) {
+		return
+	}
+	respondNoContent(w, h.service.ReorderSteps(sheetID, input.StepIDs))
+}
+
 func (h *Handler) createRun(w http.ResponseWriter, r *http.Request) {
 	planID, ok := pathID(w, r, "planId")
 	if !ok {
@@ -189,6 +260,23 @@ func (h *Handler) updateRunSheet(w http.ResponseWriter, r *http.Request) {
 	}
 	sheet, err := h.service.UpdateRunSheet(runID, runSheetID, input)
 	respond(w, sheet, err)
+}
+
+func (h *Handler) updateRunStep(w http.ResponseWriter, r *http.Request) {
+	runID, ok := pathID(w, r, "runId")
+	if !ok {
+		return
+	}
+	runStepID, ok := pathID(w, r, "runStepId")
+	if !ok {
+		return
+	}
+	var input model.RunStepResultInput
+	if !decode(w, r, &input) {
+		return
+	}
+	step, err := h.service.UpdateRunStep(runID, runStepID, input)
+	respond(w, step, err)
 }
 
 func (h *Handler) finishRun(w http.ResponseWriter, r *http.Request) {

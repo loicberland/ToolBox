@@ -18,6 +18,9 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
       name: sheet.name,
       description: sheet.description,
       prerequisites: sheet.prerequisites,
+      config: sheet.config,
+      command: sheet.command,
+      notes: sheet.notes,
       action: sheet.action,
       expectedResult: sheet.expectedResult,
       executionOrder: sheet.executionOrder,
@@ -55,12 +58,16 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
         <textarea value={value.prerequisites} onChange={(event) => setValue({ ...value, prerequisites: event.target.value })} />
       </label>
       <label>
-        Action a effectuer
-        <textarea value={value.action} onChange={(event) => setValue({ ...value, action: event.target.value })} />
+        Configuration
+        <textarea value={value.config} onChange={(event) => setValue({ ...value, config: event.target.value })} placeholder="Markdown accepte" />
       </label>
       <label>
-        Resultat attendu
-        <textarea value={value.expectedResult} onChange={(event) => setValue({ ...value, expectedResult: event.target.value })} />
+        Commande
+        <textarea value={value.command} onChange={(event) => setValue({ ...value, command: event.target.value })} placeholder="Markdown accepte" />
+      </label>
+      <label>
+        Notes
+        <textarea value={value.notes} onChange={(event) => setValue({ ...value, notes: event.target.value })} placeholder="Markdown accepte" />
       </label>
       <label>
         Parametres de maquette
@@ -79,6 +86,9 @@ function newSheet(order: number): SheetInput {
     name: '',
     description: '',
     prerequisites: '',
+    config: '',
+    command: '',
+    notes: '',
     action: '',
     expectedResult: '',
     executionOrder: order,

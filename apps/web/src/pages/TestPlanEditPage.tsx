@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { testSheetApi, TestPlan, TestSheet } from '../api/testSheet';
+import { testSheetApi, TestPlan, TestSheet, TestSheetStep } from '../api/testSheet';
 import { TestPlanForm } from '../components/test-sheet/TestPlanForm';
 import { TestSheetForm } from '../components/test-sheet/TestSheetForm';
 import { TestSheetList } from '../components/test-sheet/TestSheetList';
+import { TestStepForm } from '../components/test-sheet/TestStepForm';
+import { TestStepList } from '../components/test-sheet/TestStepList';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -18,6 +20,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [plan, setPlan] = useState<TestPlan | undefined>();
   const [sheets, setSheets] = useState<TestSheet[]>([]);
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
+  const [editingStep, setEditingStep] = useState<TestSheetStep | undefined>();
   const [error, setError] = useState('');
 
   const isNew = planId === 0 && !plan;
@@ -42,6 +45,18 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
     const saved = isNew ? await testSheetApi.createPlan(input) : await testSheetApi.updatePlan(effectivePlanId, input);
     setPlan(saved);
   };
+
+  const refreshSheets = async () => {
+    const loadedSheets = await testSheetApi.listSheets(effectivePlanId);
+    setSheets(loadedSheets);
+    if (editingSheet) {
+      setEditingSheet(loadedSheets.find((sheet) => sheet.id === editingSheet.id));
+    }
+    return loadedSheets;
+  };
+
+  const selectedSteps = editingSheet?.steps ?? [];
+  const nextStepOrder = Math.max(0, ...selectedSteps.map((step) => step.executionOrder)) + 1;
 
   return (
     <section className="workspace">
@@ -94,12 +109,56 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                   if (editingSheet) {
                     await testSheetApi.updateSheet(editingSheet.id, input);
                   } else {
-                    await testSheetApi.createSheet(effectivePlanId, input);
+                    const created = await testSheetApi.createSheet(effectivePlanId, input);
+                    setEditingSheet(created);
                   }
-                  setEditingSheet(undefined);
-                  setSheets(await testSheetApi.listSheets(effectivePlanId));
+                  await refreshSheets();
                 }}
               />
+              {editingSheet && (
+                <div className="sheet-steps-panel">
+                  <div className="section-header compact">
+                    <div>
+                      <span className="section-kicker">Etapes</span>
+                      <h3>{editingSheet.name}</h3>
+                    </div>
+                  </div>
+                  <TestStepForm
+                    step={editingStep}
+                    nextOrder={nextStepOrder}
+                    onCancel={() => setEditingStep(undefined)}
+                    onSubmit={async (input) => {
+                      if (editingStep) {
+                        await testSheetApi.updateStep(editingStep.id, input);
+                      } else {
+                        await testSheetApi.createStep(editingSheet.id, input);
+                      }
+                      setEditingStep(undefined);
+                      await refreshSheets();
+                    }}
+                  />
+                  <TestStepList
+                    steps={selectedSteps}
+                    onEdit={setEditingStep}
+                    onDelete={async (step) => {
+                      await testSheetApi.deleteStep(step.id);
+                      await refreshSheets();
+                    }}
+                    onDuplicate={async (step) => {
+                      await testSheetApi.duplicateStep(step.id);
+                      await refreshSheets();
+                    }}
+                    onMove={async (step, direction) => {
+                      const currentIndex = selectedSteps.findIndex((item) => item.id === step.id);
+                      const next = [...selectedSteps];
+                      const targetIndex = currentIndex + direction;
+                      [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
+                      await testSheetApi.reorderSteps(editingSheet.id, next.map((item) => item.id));
+                      await refreshSheets();
+                    }}
+                  />
+                </div>
+              )}
             </>
           )}
           </Card>
@@ -115,7 +174,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
             </CardHeader>
             <div className="metric-list">
               <div><span>Fiches avec prerequis</span><strong>{sheets.filter((sheet) => sheet.prerequisites).length}</strong></div>
-              <div><span>Fiches avec attendu</span><strong>{sheets.filter((sheet) => sheet.expectedResult).length}</strong></div>
+              <div><span>Etapes de test</span><strong>{sheets.reduce((total, sheet) => total + (sheet.steps?.length ?? 0), 0)}</strong></div>
               <div><span>Total fiches</span><strong>{sheets.length}</strong></div>
             </div>
           </Card>
@@ -144,7 +203,10 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
         </div>
         <TestSheetList
           sheets={sheets}
-          onEdit={setEditingSheet}
+          onEdit={(sheet) => {
+            setEditingSheet(sheet);
+            setEditingStep(undefined);
+          }}
           onDelete={async (sheet) => {
             await testSheetApi.deleteSheet(sheet.id);
             setSheets(await testSheetApi.listSheets(effectivePlanId));

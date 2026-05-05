@@ -23,7 +23,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
     load();
   }, [runId]);
 
-  const currentSheet = run?.sheets.find((sheet) => sheet.status === 'pending') ?? run?.sheets[0];
+  const currentSheet = run?.sheets.find((sheet) => (sheet.steps ?? []).some((step) => step.status === 'pending')) ?? run?.sheets.find((sheet) => sheet.status === 'pending') ?? run?.sheets[0];
 
   return (
     <section className="workspace">
@@ -52,6 +52,10 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
                   await testSheetApi.updateRunSheet(runId, sheetId, input);
                   load();
                 }}
+                onSaveStep={async (stepId, input) => {
+                  await testSheetApi.updateRunStep(runId, stepId, input);
+                  load();
+                }}
               />
             )}
           </div>
@@ -67,7 +71,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
                 {run.sheets.map((sheet) => (
                   <div className={`run-sheet-nav-item ${sheet.id === currentSheet?.id ? 'active' : ''}`} key={sheet.id}>
                     <span>{sheet.executionOrder}. {sheet.name}</span>
-                    <StatusBadge status={sheet.status} />
+                    <StatusBadge status={sheetStatus(sheet)} />
                   </div>
                 ))}
               </div>
@@ -85,6 +89,10 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
                     await testSheetApi.updateRunSheet(runId, sheetId, input);
                     load();
                   }}
+                  onSaveStep={async (stepId, input) => {
+                    await testSheetApi.updateRunStep(runId, stepId, input);
+                    load();
+                  }}
                 />
               ))}
             </div>
@@ -93,4 +101,24 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
       )}
     </section>
   );
+}
+
+function sheetStatus(sheet: TestRun['sheets'][number]) {
+  const steps = sheet.steps ?? [];
+  if (steps.length === 0) {
+    return sheet.status;
+  }
+  if (steps.some((step) => step.status === 'failed')) {
+    return 'failed';
+  }
+  if (steps.some((step) => step.status === 'blocked')) {
+    return 'blocked';
+  }
+  if (steps.some((step) => step.status === 'pending')) {
+    return 'pending';
+  }
+  if (steps.every((step) => step.status === 'skipped')) {
+    return 'skipped';
+  }
+  return 'passed';
 }

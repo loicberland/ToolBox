@@ -323,13 +323,24 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.step-form {
+  grid-template-columns: 110px 1fr;
+}
+
 .sheet-form label:nth-child(1),
 .sheet-form label:nth-child(3),
 .sheet-form label:nth-child(4),
 .sheet-form label:nth-child(5),
 .sheet-form label:nth-child(6),
 .sheet-form label:nth-child(7),
+.sheet-form label:nth-child(8),
 .sheet-form .button-row {
+  grid-column: 1 / -1;
+}
+
+.step-form label:nth-child(3),
+.step-form label:nth-child(4),
+.step-form .button-row {
   grid-column: 1 / -1;
 }
 
@@ -414,6 +425,38 @@ textarea {
 .sheet-list {
   display: grid;
   gap: 12px;
+}
+
+.sheet-steps-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.section-header.compact {
+  margin-bottom: 0;
+}
+
+.step-list {
+  display: grid;
+  gap: 10px;
+}
+
+.step-card {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 14px;
+}
+
+.step-card-content {
+  display: grid;
+  gap: 10px;
+}
+
+.step-card h4 {
+  margin: 0;
 }
 
 .test-sheet-card {
@@ -598,6 +641,30 @@ textarea {
 .run-card {
   display: grid;
   gap: 14px;
+}
+
+.run-step-list {
+  display: grid;
+  gap: 14px;
+}
+
+.run-step-editor {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.run-step-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-step-header h4 {
+  margin: 3px 0 0;
 }
 
 .run-card.current {
@@ -795,12 +862,14 @@ textarea {
   }
 
   .sheet-form,
+  .step-form,
   .status-summary,
   .status-action-grid {
     grid-template-columns: 1fr;
   }
 
-  .test-sheet-card {
+  .test-sheet-card,
+  .step-card {
     grid-template-columns: 1fr;
   }
 

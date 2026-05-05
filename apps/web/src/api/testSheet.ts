@@ -15,10 +15,23 @@ export type TestSheet = {
   name: string;
   description: string;
   prerequisites: string;
+  config: string;
+  command: string;
+  notes: string;
   action: string;
   expectedResult: string;
   executionOrder: number;
   mockupSettings: string;
+  steps?: TestSheetStep[];
+};
+
+export type TestSheetStep = {
+  id: number;
+  sheetId: number;
+  action: string;
+  field: string;
+  expectedResult: string;
+  executionOrder: number;
 };
 
 export type TestRun = {
@@ -38,7 +51,24 @@ export type TestRunSheet = {
   name: string;
   description: string;
   prerequisites: string;
+  config: string;
+  command: string;
+  notes: string;
   action: string;
+  expectedResult: string;
+  executionOrder: number;
+  status: 'pending' | 'passed' | 'failed' | 'blocked' | 'skipped';
+  actualResult: string;
+  comment: string;
+  steps?: TestRunStep[];
+};
+
+export type TestRunStep = {
+  id: number;
+  runSheetId: number;
+  sourceStepId?: number;
+  action: string;
+  field: string;
   expectedResult: string;
   executionOrder: number;
   status: 'pending' | 'passed' | 'failed' | 'blocked' | 'skipped';
@@ -49,6 +79,8 @@ export type TestRunSheet = {
 export type PlanInput = Pick<TestPlan, 'name' | 'description' | 'mockupSettings'>;
 export type SheetInput = Omit<TestSheet, 'id' | 'planId'>;
 export type RunSheetInput = Pick<TestRunSheet, 'status' | 'actualResult' | 'comment'>;
+export type StepInput = Omit<TestSheetStep, 'id' | 'sheetId'>;
+export type RunStepInput = Pick<TestRunStep, 'status' | 'actualResult' | 'comment'>;
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -87,10 +119,18 @@ export const testSheetApi = {
   deleteSheet: (sheetId: number) => request<void>(`/test-sheet/sheets/${sheetId}`, { method: 'DELETE' }),
   duplicateSheet: (sheetId: number) => request<TestSheet>(`/test-sheet/sheets/${sheetId}/duplicate`, { method: 'POST' }),
   reorderSheets: (planId: number, sheetIds: number[]) => request<void>(`/test-sheet/plans/${planId}/sheets/reorder`, jsonRequest('PUT', { sheetIds })),
+  listSteps: (sheetId: number) => request<TestSheetStep[]>(`/test-sheet/sheets/${sheetId}/steps`),
+  createStep: (sheetId: number, input: StepInput) => request<TestSheetStep>(`/test-sheet/sheets/${sheetId}/steps`, jsonRequest('POST', input)),
+  updateStep: (stepId: number, input: StepInput) => request<TestSheetStep>(`/test-sheet/steps/${stepId}`, jsonRequest('PUT', input)),
+  deleteStep: (stepId: number) => request<void>(`/test-sheet/steps/${stepId}`, { method: 'DELETE' }),
+  duplicateStep: (stepId: number) => request<TestSheetStep>(`/test-sheet/steps/${stepId}/duplicate`, { method: 'POST' }),
+  reorderSteps: (sheetId: number, stepIds: number[]) => request<void>(`/test-sheet/sheets/${sheetId}/steps/reorder`, jsonRequest('PUT', { stepIds })),
   createRun: (planId: number) => request<TestRun>(`/test-sheet/plans/${planId}/runs`, { method: 'POST' }),
   getRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}`),
   updateRunSheet: (runId: number, runSheetId: number, input: RunSheetInput) =>
     request<TestRunSheet>(`/test-sheet/runs/${runId}/sheets/${runSheetId}`, jsonRequest('PUT', input)),
+  updateRunStep: (runId: number, runStepId: number, input: RunStepInput) =>
+    request<TestRunStep>(`/test-sheet/runs/${runId}/steps/${runStepId}`, jsonRequest('PUT', input)),
   finishRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/finish`, { method: 'PUT' }),
   getReport: async (runId: number) => {
     const response = await fetch(`${API_BASE_URL}/test-sheet/runs/${runId}/report`);

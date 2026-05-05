@@ -22,14 +22,15 @@ export function TestSheetCard({ sheet, index, total, onEdit, onDelete, onDuplica
         <div className="card-topline">
           <Badge tone="blue">Fiche</Badge>
           {sheet.prerequisites && <Badge tone="neutral">Prerequis</Badge>}
+          <Badge tone="neutral">{sheet.steps?.length ?? 0} etape{(sheet.steps?.length ?? 0) > 1 ? 's' : ''}</Badge>
         </div>
         <h3>{sheet.name}</h3>
         <p>{sheet.description || 'Sans description'}</p>
         <dl className="compact-definition-list">
           <dt>Action</dt>
-          <dd>{sheet.action || '-'}</dd>
-          <dt>Attendu</dt>
-          <dd>{sheet.expectedResult || '-'}</dd>
+          <dd>{sheet.steps?.[0]?.action || sheet.action || '-'}</dd>
+          <dt>Configuration</dt>
+          <dd>{sheet.config || '-'}</dd>
         </dl>
         <div className="button-row">
           <Button type="button" variant="secondary" size="sm" onClick={() => onMove(-1)} disabled={index === 0}>Monter</Button>
