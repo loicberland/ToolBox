@@ -13,6 +13,23 @@ button {
   cursor: pointer;
 }
 
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #bcccdc;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font: inherit;
+  color: #1f2933;
+  background: #ffffff;
+}
+
+textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -36,7 +53,8 @@ button {
 }
 
 .module-menu button,
-.actions button {
+.actions button,
+.workspace button {
   min-height: 38px;
   border: 1px solid #bcccdc;
   border-radius: 6px;
@@ -51,7 +69,8 @@ button {
 }
 
 .module-menu button.active,
-.actions button {
+.actions button,
+.workspace button:not(.secondary):not(.danger):not(.link-button) {
   background: #0b7285;
   border-color: #0b7285;
   color: #ffffff;
@@ -99,6 +118,180 @@ button {
   color: #ba2525;
 }
 
+.workspace {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.page-header h2 {
+  margin: 0 0 6px;
+}
+
+.page-header p,
+.muted {
+  color: #52606d;
+}
+
+.plan-grid,
+.edit-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.plan-card,
+.sheet-card,
+.run-card {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.plan-card h3,
+.sheet-card h3,
+.run-card h3 {
+  margin: 0 0 8px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.form-grid label,
+.run-card label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.workspace button.secondary {
+  background: #ffffff;
+  color: #243b53;
+}
+
+.workspace button.danger {
+  background: #ffffff;
+  border-color: #f5c2c7;
+  color: #ba2525;
+}
+
+.workspace button.link-button {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0b7285;
+}
+
+.sheet-list,
+.run-list {
+  display: grid;
+  gap: 12px;
+}
+
+.sheet-card {
+  display: grid;
+  gap: 12px;
+}
+
+.order-badge {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e6f6f8;
+  color: #0b7285;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.run-card {
+  display: grid;
+  gap: 12px;
+}
+
+.run-card header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.run-card dl {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.run-card dt {
+  color: #52606d;
+  font-weight: 700;
+}
+
+.run-card dd {
+  margin: 0;
+}
+
+.status-pill {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #edf2f7;
+  color: #243b53;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill.passed {
+  background: #e3f9e5;
+  color: #2f8132;
+}
+
+.status-pill.failed {
+  background: #ffebe6;
+  color: #ba2525;
+}
+
+.status-pill.blocked {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-pill.skipped {
+  background: #e6e8ff;
+  color: #3f3cbb;
+}
+
+.report-preview {
+  overflow: auto;
+  min-height: 520px;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102a43;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -107,5 +300,14 @@ button {
   .module-menu {
     border-right: 0;
     border-bottom: 1px solid #d9e2ec;
+  }
+
+  .page-header,
+  .run-card header {
+    display: grid;
+  }
+
+  .run-card dl {
+    grid-template-columns: 1fr;
   }
 }

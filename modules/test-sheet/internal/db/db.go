@@ -2,39 +2,18 @@ package db
 
 import (
 	"database/sql"
-	"os"
-	"path/filepath"
+
+	"toolBox/modules/test-sheet/pkg/repository"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const DefaultPath = "data/test-sheet/test-sheet.db"
+const DefaultPath = repository.DefaultPath
 
 func Open(path string) (*sql.DB, error) {
-	if path == "" {
-		path = DefaultPath
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, err
-	}
-	conn, err := sql.Open("sqlite3", path)
+	repo, err := repository.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	if err := migrate(conn); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	return conn, nil
-}
-
-func migrate(conn *sql.DB) error {
-	_, err := conn.Exec(`
-CREATE TABLE IF NOT EXISTS test_sheets (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	title TEXT NOT NULL,
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-`)
-	return err
+	return repo.DB(), nil
 }

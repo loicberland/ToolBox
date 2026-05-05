@@ -7,6 +7,9 @@ import (
 	"toolBox/apps/api/internal/config"
 	"toolBox/apps/api/internal/jobs"
 	"toolBox/apps/api/internal/modules"
+	testsheetapi "toolBox/modules/test-sheet/pkg/httpapi"
+	"toolBox/modules/test-sheet/pkg/repository"
+	"toolBox/modules/test-sheet/pkg/service"
 	"toolBox/pkg/modulecontract"
 
 	"github.com/gorilla/mux"
@@ -30,7 +33,7 @@ func ListenAndServe() error {
 	handler := NewServer().Routes()
 	c := cors.New(cors.Options{
 		AllowedOrigins:   cfg.WebOrigins,
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodOptions},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
 	})
@@ -39,6 +42,9 @@ func ListenAndServe() error {
 
 func (s *Server) Routes() http.Handler {
 	r := mux.NewRouter()
+	if repo, err := repository.Open(""); err == nil {
+		testsheetapi.NewHandler(service.New(repo)).Register(r)
+	}
 	r.HandleFunc("/api/health", s.health).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules", s.listModules).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules/{moduleId}", s.getModule).Methods(http.MethodGet)
