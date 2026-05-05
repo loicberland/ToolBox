@@ -40,9 +40,6 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hi
         setSaving(true);
         await onSubmit(value);
         setSaving(false);
-        if (!isEditing) {
-          setValue(newSheet(nextOrder + 1));
-        }
       }}
     >
       <label>

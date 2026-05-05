@@ -9,10 +9,6 @@ import { TestStepList } from './TestStepList';
 type Mode = 'create' | 'edit';
 type StepEditorMode = 'closed' | 'create' | 'edit';
 
-type DraftStep = TestSheetStep & {
-  draftId?: number;
-};
-
 const emptySheet: TestSheet = {
   id: 0,
   planId: 0,
@@ -41,22 +37,20 @@ type Props = {
 };
 
 export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh }: Props) {
-  const [draftSteps, setDraftSteps] = useState<DraftStep[]>([]);
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
   const [stepEditorMode, setStepEditorMode] = useState<StepEditorMode>('closed');
-  const [editingStep, setEditingStep] = useState<DraftStep | undefined>();
-  const [draftID, setDraftID] = useState(1);
+  const [editingStep, setEditingStep] = useState<TestSheetStep | undefined>();
 
   const isCreate = mode === 'create';
   const formId = `test-sheet-form-${sheet?.id ?? 'new'}`;
-  const steps = isCreate ? draftSteps : (currentSheet?.steps ?? []);
+  const activeSheet = currentSheet ?? sheet;
+  const canEditSteps = !isCreate && Boolean(activeSheet?.id);
+  const steps = canEditSteps ? (activeSheet?.steps ?? []) : [];
   const nextStepOrder = useMemo(() => Math.max(0, ...steps.map((step) => step.executionOrder)) + 1, [steps]);
 
   useEffect(() => {
-    setDraftSteps([]);
     setCurrentSheet(sheet);
     closeStepEditor();
-    setDraftID(1);
   }, [mode, sheet?.id]);
 
   useEffect(() => {
@@ -68,7 +62,7 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
     setStepEditorMode('create');
   };
 
-  const openEditStep = (step: DraftStep) => {
+  const openEditStep = (step: TestSheetStep) => {
     setEditingStep(step);
     setStepEditorMode('edit');
   };
@@ -80,17 +74,10 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
 
   const refreshCurrentSheet = async () => {
     const loadedSheets = await onRefresh();
-    if (currentSheet) {
-      setCurrentSheet(loadedSheets.find((item) => item.id === currentSheet.id));
+    if (activeSheet) {
+      setCurrentSheet(loadedSheets.find((item) => item.id === activeSheet.id));
     }
   };
-
-  useEffect(() => {
-    if (isCreate) {
-      return;
-    }
-    setDraftID(1);
-  }, [isCreate]);
 
   const saveSheet = async (input: SheetInput) => {
     const normalizedInput = {
@@ -99,19 +86,10 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
     };
     if (isCreate) {
       const created = await testSheetApi.createSheet(planId, normalizedInput);
-      for (const step of draftSteps) {
-        await testSheetApi.createStep(created.id, {
-          action: step.action,
-          field: step.field,
-          expectedResult: step.expectedResult,
-          executionOrder: step.executionOrder,
-        });
-      }
       const loadedSheets = await onRefresh();
-      const createdWithSteps = loadedSheets.find((item) => item.id === created.id) ?? created;
-      setDraftSteps([]);
+      const createdSheet = loadedSheets.find((item) => item.id === created.id) ?? created;
       closeStepEditor();
-      onCreated(createdWithSteps);
+      onCreated(createdSheet);
       return;
     } else if (sheet) {
       await testSheetApi.updateSheet(sheet.id, normalizedInput);
@@ -120,40 +98,20 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
   };
 
   const saveStep = async (input: StepInput) => {
-    if (isCreate) {
-      if (editingStep) {
-        setDraftSteps((items) => items.map((item) => item.id === editingStep.id ? { ...item, ...input } : item));
-      } else {
-        const id = -draftID;
-        setDraftID((value) => value + 1);
-        setDraftSteps((items) => [...items, {
-          id,
-          draftId: id,
-          sheetId: 0,
-          action: input.action,
-          field: input.field,
-          expectedResult: input.expectedResult,
-          executionOrder: input.executionOrder,
-        }]);
-      }
-      closeStepEditor();
-      return;
-    }
-    if (!currentSheet) {
+    if (!canEditSteps || !activeSheet) {
       return;
     }
     if (editingStep) {
       await testSheetApi.updateStep(editingStep.id, input);
     } else {
-      await testSheetApi.createStep(currentSheet.id, input);
+      await testSheetApi.createStep(activeSheet.id, input);
     }
     await refreshCurrentSheet();
     closeStepEditor();
   };
 
-  const deleteStep = async (step: DraftStep) => {
-    if (isCreate) {
-      setDraftSteps((items) => items.filter((item) => item.id !== step.id));
+  const deleteStep = async (step: TestSheetStep) => {
+    if (!canEditSteps) {
       return;
     }
     await testSheetApi.deleteStep(step.id);
@@ -161,11 +119,8 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
     closeStepEditor();
   };
 
-  const duplicateStep = async (step: DraftStep) => {
-    if (isCreate) {
-      const id = -draftID;
-      setDraftID((value) => value + 1);
-      setDraftSteps((items) => [...items, { ...step, id, draftId: id, executionOrder: nextStepOrder }]);
+  const duplicateStep = async (step: TestSheetStep) => {
+    if (!canEditSteps) {
       return;
     }
     await testSheetApi.duplicateStep(step.id);
@@ -173,21 +128,21 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
     closeStepEditor();
   };
 
-  const moveStep = async (step: DraftStep, direction: -1 | 1) => {
+  const moveStep = async (step: TestSheetStep, direction: -1 | 1) => {
+    if (!canEditSteps || !activeSheet) {
+      return;
+    }
     const currentIndex = steps.findIndex((item) => item.id === step.id);
     const targetIndex = currentIndex + direction;
+    if (currentIndex === -1 || targetIndex < 0 || targetIndex >= steps.length) {
+      return;
+    }
     const next = [...steps];
     [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
 
-    if (isCreate) {
-      setDraftSteps(next.map((item, index) => ({ ...item, executionOrder: index + 1 })));
-      return;
-    }
-    if (currentSheet) {
-      await testSheetApi.reorderSteps(currentSheet.id, next.map((item) => item.id));
-      await refreshCurrentSheet();
-      closeStepEditor();
-    }
+    await testSheetApi.reorderSteps(activeSheet.id, next.map((item) => item.id));
+    await refreshCurrentSheet();
+    closeStepEditor();
   };
 
   return (
@@ -195,44 +150,46 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
       <CardHeader>
         <div>
           <span className="section-kicker">{isCreate ? 'Nouvelle fiche' : 'Modification'}</span>
-          <h3>{isCreate ? 'Ajouter une fiche' : currentSheet?.name ?? 'Modifier la fiche'}</h3>
+          <h3>{isCreate ? 'Ajouter une fiche' : activeSheet?.name ?? 'Modifier la fiche'}</h3>
         </div>
       </CardHeader>
       <TestSheetForm
-        sheet={currentSheet ?? { ...emptySheet, executionOrder: nextOrder }}
+        sheet={activeSheet ?? { ...emptySheet, executionOrder: nextOrder }}
         nextOrder={nextOrder}
         onSubmit={saveSheet}
         formId={formId}
         hideActions
       />
-      <div className="sheet-steps-panel">
-        <div className="section-header compact">
-          <div>
-            <span className="section-kicker">Etapes de test</span>
-            <h3>{steps.length} etape{steps.length > 1 ? 's' : ''}</h3>
+      {canEditSteps && (
+        <div className="sheet-steps-panel">
+          <div className="section-header compact">
+            <div>
+              <span className="section-kicker">Etapes de test</span>
+              <h3>{steps.length} etape{steps.length > 1 ? 's' : ''}</h3>
+            </div>
           </div>
-        </div>
-        <TestStepList
-          steps={steps}
-          onEdit={openEditStep}
-          onDelete={deleteStep}
-          onDuplicate={duplicateStep}
-          onMove={moveStep}
-        />
-        {stepEditorMode === 'closed' && (
-          <div className="add-sheet-row">
-            <Button type="button" onClick={openCreateStep}>+ Ajouter une etape</Button>
-          </div>
-        )}
-        {stepEditorMode !== 'closed' && (
-          <TestStepForm
-            step={stepEditorMode === 'edit' ? editingStep : undefined}
-            nextOrder={nextStepOrder}
-            onSubmit={saveStep}
-            onCancel={closeStepEditor}
+          <TestStepList
+            steps={steps}
+            onEdit={openEditStep}
+            onDelete={deleteStep}
+            onDuplicate={duplicateStep}
+            onMove={moveStep}
           />
-        )}
-      </div>
+          {stepEditorMode === 'closed' && (
+            <div className="add-sheet-row">
+              <Button type="button" onClick={openCreateStep}>+ Ajouter une etape</Button>
+            </div>
+          )}
+          {stepEditorMode !== 'closed' && (
+            <TestStepForm
+              step={stepEditorMode === 'edit' ? editingStep : undefined}
+              nextOrder={nextStepOrder}
+              onSubmit={saveStep}
+              onCancel={closeStepEditor}
+            />
+          )}
+        </div>
+      )}
       <div className="button-row end editor-footer">
         <Button type="submit" form={formId}>{isCreate ? 'Creer la fiche' : 'Enregistrer'}</Button>
         <Button type="button" variant="secondary" onClick={onCancel}>Annuler</Button>
