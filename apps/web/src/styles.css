@@ -1,0 +1,111 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #1f2933;
+  background: #f5f7fa;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+}
+
+.module-menu {
+  padding: 24px;
+  background: #ffffff;
+  border-right: 1px solid #d9e2ec;
+}
+
+.module-menu h1 {
+  margin: 0 0 24px;
+  font-size: 24px;
+}
+
+.module-menu nav {
+  display: grid;
+  gap: 8px;
+}
+
+.module-menu button,
+.actions button {
+  min-height: 38px;
+  border: 1px solid #bcccdc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #243b53;
+  font-weight: 600;
+}
+
+.module-menu button {
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.module-menu button.active,
+.actions button {
+  background: #0b7285;
+  border-color: #0b7285;
+  color: #ffffff;
+}
+
+.module-view {
+  padding: 32px;
+}
+
+.module-view h2 {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.module-view header p {
+  margin: 0 0 24px;
+  color: #52606d;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.actions article {
+  padding: 16px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.actions h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.actions p {
+  min-height: 44px;
+  margin: 0 0 16px;
+  color: #52606d;
+}
+
+.error {
+  color: #ba2525;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .module-menu {
+    border-right: 0;
+    border-bottom: 1px solid #d9e2ec;
+  }
+}
