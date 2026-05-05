@@ -32,8 +32,9 @@ func GetAllVersionOrderByValue(db *sql.DB) ([]Version, error) {
 	rows, errQuery := db.Query(query)
 	if errQuery != nil {
 		return nil, fmt.Errorf("error while trying to exec query '%s' : %s", query, errQuery)
-
 	}
+	defer rows.Close()
+
 	for rows.Next() {
 		version := Version{}
 		if err := rows.Scan(&version.ID, &version.Value, &version.File); err != nil {
@@ -41,6 +42,11 @@ func GetAllVersionOrderByValue(db *sql.DB) ([]Version, error) {
 		}
 		versions = append(versions, version)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error while iterating rows: %s", err)
+	}
+
 	return versions, nil
 }
 
