@@ -12,6 +12,7 @@ type Props = {
 export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
   const [value, setValue] = useState<SheetInput>(newSheet(nextOrder));
   const [saving, setSaving] = useState(false);
+  const isEditing = Boolean(sheet?.id);
 
   useEffect(() => {
     setValue(sheet ? {
@@ -36,7 +37,7 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
         setSaving(true);
         await onSubmit(value);
         setSaving(false);
-        if (!sheet) {
+        if (!isEditing) {
           setValue(newSheet(nextOrder + 1));
         }
       }}
@@ -69,12 +70,8 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel }: Props) {
         Notes
         <textarea value={value.notes} onChange={(event) => setValue({ ...value, notes: event.target.value })} placeholder="Markdown accepte" />
       </label>
-      <label>
-        Parametres de maquette
-        <textarea value={value.mockupSettings} onChange={(event) => setValue({ ...value, mockupSettings: event.target.value })} />
-      </label>
       <div className="button-row">
-        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : sheet ? 'Modifier la fiche' : 'Ajouter la fiche'}</Button>
+        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : isEditing ? 'Sauvegarder' : 'Ajouter'}</Button>
         {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>Annuler</Button>}
       </div>
     </form>

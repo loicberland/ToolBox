@@ -422,6 +422,22 @@ textarea {
   margin-top: 18px;
 }
 
+.add-sheet-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
+.sheet-editor-card {
+  margin-top: 16px;
+}
+
+.editor-footer {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 .sheet-list {
   display: grid;
   gap: 12px;

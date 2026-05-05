@@ -1,6 +1,5 @@
 import React from 'react';
 import { TestSheet } from '../../api/testSheet';
-import { EmptyState } from '../ui/EmptyState';
 import { TestSheetCard } from './TestSheetCard';
 
 type Props = {
@@ -13,7 +12,7 @@ type Props = {
 
 export function TestSheetList({ sheets, onEdit, onDelete, onDuplicate, onMove }: Props) {
   if (sheets.length === 0) {
-    return <EmptyState title="Aucune fiche" description="Ajoutez une premiere fiche pour pouvoir lancer une execution." />;
+    return null;
   }
   return (
     <div className="sheet-list">

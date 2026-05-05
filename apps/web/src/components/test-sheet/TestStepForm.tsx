@@ -52,7 +52,7 @@ export function TestStepForm({ step, nextOrder, onSubmit, onCancel }: Props) {
         <textarea value={value.expectedResult} onChange={(event) => setValue({ ...value, expectedResult: event.target.value })} />
       </label>
       <div className="button-row">
-        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : step ? 'Modifier l etape' : 'Ajouter l etape'}</Button>
+        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : step ? 'Sauvegarder' : 'Ajouter l etape'}</Button>
         {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>Annuler</Button>}
       </div>
     </form>

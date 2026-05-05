@@ -35,10 +35,6 @@ export function TestPlanForm({ plan, onSubmit }: Props) {
         Description
         <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
       </label>
-      <label>
-        Parametres de maquette
-        <textarea value={value.mockupSettings} onChange={(event) => setValue({ ...value, mockupSettings: event.target.value })} placeholder='{"environment":"demo"}' />
-      </label>
       <div className="form-actions">
         <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</Button>
       </div>

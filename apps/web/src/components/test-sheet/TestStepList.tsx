@@ -1,7 +1,6 @@
 import React from 'react';
 import { TestSheetStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
-import { EmptyState } from '../ui/EmptyState';
 import { Card } from '../ui/Card';
 
 type Props = {
@@ -14,7 +13,7 @@ type Props = {
 
 export function TestStepList({ steps, onEdit, onDelete, onDuplicate, onMove }: Props) {
   if (steps.length === 0) {
-    return <EmptyState title="Aucune etape" description="Ajoutez les actions ordonnees a executer pendant le test." />;
+    return null;
   }
 
   return (
