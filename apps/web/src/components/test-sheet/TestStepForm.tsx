@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { StepInput, TestSheetStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 
@@ -9,7 +9,11 @@ type Props = {
   onCancel?: () => void;
 };
 
-export function TestStepForm({ step, nextOrder, onSubmit, onCancel }: Props) {
+export type TestStepFormHandle = {
+  submit: () => Promise<void>;
+};
+
+export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestStepForm({ step, nextOrder, onSubmit, onCancel }, ref) {
   const [value, setValue] = useState<StepInput>(newStep(nextOrder));
   const [saving, setSaving] = useState(false);
 
@@ -22,17 +26,28 @@ export function TestStepForm({ step, nextOrder, onSubmit, onCancel }: Props) {
     } : newStep(nextOrder));
   }, [step, nextOrder]);
 
+  const submitCurrent = async () => {
+    setSaving(true);
+    try {
+      await onSubmit(value);
+      if (!step) {
+        setValue(newStep(nextOrder + 1));
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    submit: submitCurrent,
+  }));
+
   return (
     <form
       className="form-grid step-form"
       onSubmit={async (event) => {
         event.preventDefault();
-        setSaving(true);
-        await onSubmit(value);
-        setSaving(false);
-        if (!step) {
-          setValue(newStep(nextOrder + 1));
-        }
+        await submitCurrent();
       }}
     >
       <label>
@@ -53,7 +68,7 @@ export function TestStepForm({ step, nextOrder, onSubmit, onCancel }: Props) {
       </div>
     </form>
   );
-}
+});
 
 function newStep(order: number): StepInput {
   return {

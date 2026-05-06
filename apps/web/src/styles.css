@@ -458,6 +458,18 @@ textarea {
   gap: 14px;
 }
 
+.test-sheet-card[role="button"],
+.step-card[role="button"] {
+  cursor: pointer;
+}
+
+.test-sheet-card[role="button"]:focus,
+.step-card[role="button"]:focus {
+  border-color: rgba(37, 99, 235, 0.45);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
 .step-card-content {
   display: grid;
   gap: 10px;

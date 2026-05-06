@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { testSheetApi, TestPlan, TestSheet } from '../api/testSheet';
 import { TestPlanForm } from '../components/test-sheet/TestPlanForm';
-import { TestSheetEditor } from '../components/test-sheet/TestSheetEditor';
+import { TestSheetEditor, TestSheetEditorHandle } from '../components/test-sheet/TestSheetEditor';
 import { TestSheetList } from '../components/test-sheet/TestSheetList';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader } from '../components/ui/Card';
@@ -21,6 +21,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [sheetEditorMode, setSheetEditorMode] = useState<SheetEditorMode>('closed');
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
   const [error, setError] = useState('');
+  const sheetEditorRef = useRef<TestSheetEditorHandle>(null);
 
   const isNew = planId === 0 && !plan;
   const effectivePlanId = plan?.id ?? planId;
@@ -78,6 +79,17 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
     setSheetEditorMode('edit');
   };
 
+  const toggleEditSheet = async (sheet: TestSheet) => {
+    if (sheetEditorMode === 'edit' && editingSheet?.id === sheet.id) {
+      await sheetEditorRef.current?.submit();
+      return;
+    }
+    if (sheetEditorMode === 'edit') {
+      await sheetEditorRef.current?.submit();
+    }
+    openEditSheet(sheet);
+  };
+
   return (
     <section className="workspace">
       <PageHeader
@@ -123,7 +135,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
           <>
             <TestSheetList
               sheets={sheets}
-              onEdit={openEditSheet}
+              onEdit={toggleEditSheet}
               onDelete={async (sheet) => {
                 await testSheetApi.deleteSheet(sheet.id);
                 await refreshSheets();
@@ -146,6 +158,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               editingSheetId={sheetEditorMode === 'edit' ? editingSheet?.id : undefined}
               renderEditor={(sheet) => (
                 <TestSheetEditor
+                  ref={sheetEditorRef}
                   mode="edit"
                   planId={effectivePlanId}
                   sheet={sheet}
@@ -166,6 +179,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
 
             {sheetEditorMode === 'create' && (
               <TestSheetEditor
+                ref={sheetEditorRef}
                 mode="create"
                 planId={effectivePlanId}
                 sheet={editingSheet}

@@ -4,10 +4,10 @@ import { TestSheetCard } from './TestSheetCard';
 
 type Props = {
   sheets: TestSheet[];
-  onEdit: (sheet: TestSheet) => void;
-  onDelete: (sheet: TestSheet) => void;
-  onDuplicate: (sheet: TestSheet) => void;
-  onMove: (sheet: TestSheet, direction: -1 | 1) => void;
+  onEdit: (sheet: TestSheet) => void | Promise<void>;
+  onDelete: (sheet: TestSheet) => void | Promise<void>;
+  onDuplicate: (sheet: TestSheet) => void | Promise<void>;
+  onMove: (sheet: TestSheet, direction: -1 | 1) => void | Promise<void>;
   editingSheetId?: number;
   renderEditor?: (sheet: TestSheet) => React.ReactNode;
 };

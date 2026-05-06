@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { SheetInput, StepInput, testSheetApi, TestSheet, TestSheetStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
-import { TestSheetForm } from './TestSheetForm';
-import { TestStepForm } from './TestStepForm';
+import { TestSheetForm, TestSheetFormHandle } from './TestSheetForm';
+import { TestStepForm, TestStepFormHandle } from './TestStepForm';
 import { TestStepList } from './TestStepList';
 
 type Mode = 'create' | 'edit';
@@ -36,7 +36,13 @@ type Props = {
   onRefresh: () => Promise<TestSheet[]>;
 };
 
-export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh }: Props) {
+export type TestSheetEditorHandle = {
+  submit: () => Promise<void>;
+};
+
+export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh }, ref) {
+  const sheetFormRef = useRef<TestSheetFormHandle>(null);
+  const stepFormRef = useRef<TestStepFormHandle>(null);
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
   const [stepEditorMode, setStepEditorMode] = useState<StepEditorMode>('closed');
   const [editingStep, setEditingStep] = useState<TestSheetStep | undefined>();
@@ -57,12 +63,25 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
     setCurrentSheet(sheet);
   }, [sheet]);
 
+  useImperativeHandle(ref, () => ({
+    submit: async () => {
+      await sheetFormRef.current?.submit();
+    },
+  }));
+
   const openCreateStep = () => {
     setEditingStep(undefined);
     setStepEditorMode('create');
   };
 
-  const openEditStep = (step: TestSheetStep) => {
+  const openEditStep = async (step: TestSheetStep) => {
+    if (stepEditorMode === 'edit' && editingStep?.id === step.id) {
+      await stepFormRef.current?.submit();
+      return;
+    }
+    if (stepEditorMode === 'edit') {
+      await stepFormRef.current?.submit();
+    }
     setEditingStep(step);
     setStepEditorMode('edit');
   };
@@ -154,6 +173,7 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
         </div>
       </CardHeader>
       <TestSheetForm
+        ref={sheetFormRef}
         sheet={activeSheet ?? { ...emptySheet, executionOrder: nextOrder }}
         nextOrder={nextOrder}
         onSubmit={saveSheet}
@@ -177,6 +197,7 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
             editingStepId={stepEditorMode === 'edit' ? editingStep?.id : undefined}
             renderEditor={(step) => (
               <TestStepForm
+                ref={stepFormRef}
                 step={step}
                 nextOrder={nextStepOrder}
                 onSubmit={saveStep}
@@ -191,6 +212,7 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
           )}
           {stepEditorMode === 'create' && (
             <TestStepForm
+              ref={stepFormRef}
               nextOrder={nextStepOrder}
               onSubmit={saveStep}
               onCancel={closeStepEditor}
@@ -204,4 +226,4 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
       </div>
     </Card>
   );
-}
+});

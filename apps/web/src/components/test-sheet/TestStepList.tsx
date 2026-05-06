@@ -6,10 +6,10 @@ import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
 
 type Props = {
   steps: TestSheetStep[];
-  onEdit: (step: TestSheetStep) => void;
-  onDelete: (step: TestSheetStep) => void;
-  onDuplicate: (step: TestSheetStep) => void;
-  onMove: (step: TestSheetStep, direction: -1 | 1) => void;
+  onEdit: (step: TestSheetStep) => void | Promise<void>;
+  onDelete: (step: TestSheetStep) => void | Promise<void>;
+  onDuplicate: (step: TestSheetStep) => void | Promise<void>;
+  onMove: (step: TestSheetStep, direction: -1 | 1) => void | Promise<void>;
   editingStepId?: number;
   renderEditor?: (step: TestSheetStep) => React.ReactNode;
 };
@@ -23,16 +23,21 @@ export function TestStepList({ steps, onEdit, onDelete, onDuplicate, onMove, edi
     <div className="step-list">
       {steps.map((step, index) => (
         <React.Fragment key={step.id}>
-          <Card className="step-card">
+          <Card className="step-card" role="button" tabIndex={0} onClick={() => { void onEdit(step); }} onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              void onEdit(step);
+            }
+          }}>
             <div className="sheet-card-order">{step.executionOrder}</div>
             <div className="step-card-content">
               {hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} compact /> : <p className="muted">Etape sans action</p>}
               <div className="button-row">
-                <Button type="button" variant="secondary" size="sm" onClick={() => onMove(step, -1)} disabled={index === 0}>Monter</Button>
-                <Button type="button" variant="secondary" size="sm" onClick={() => onMove(step, 1)} disabled={index === steps.length - 1}>Descendre</Button>
-                <Button type="button" variant="secondary" size="sm" onClick={() => onEdit(step)}>Modifier</Button>
-                <Button type="button" variant="secondary" size="sm" onClick={() => onDuplicate(step)}>Dupliquer</Button>
-                <Button type="button" variant="danger" size="sm" onClick={() => onDelete(step)}>Supprimer</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onMove(step, -1); }} disabled={index === 0}>Monter</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onMove(step, 1); }} disabled={index === steps.length - 1}>Descendre</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onEdit(step); }}>Modifier</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onDuplicate(step); }}>Dupliquer</Button>
+                <Button type="button" variant="danger" size="sm" onClick={(event) => { event.stopPropagation(); void onDelete(step); }}>Supprimer</Button>
               </div>
             </div>
           </Card>

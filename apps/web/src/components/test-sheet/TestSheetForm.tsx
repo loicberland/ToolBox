@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { SheetInput, TestSheet } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 
@@ -11,7 +11,11 @@ type Props = {
   hideActions?: boolean;
 };
 
-export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hideActions = false }: Props) {
+export type TestSheetFormHandle = {
+  submit: () => Promise<void>;
+};
+
+export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hideActions = false }, ref) {
   const [value, setValue] = useState<SheetInput>(newSheet(nextOrder));
   const [saving, setSaving] = useState(false);
   const isEditing = Boolean(sheet?.id);
@@ -31,15 +35,26 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hi
     } : newSheet(nextOrder));
   }, [sheet, nextOrder]);
 
+  const submitCurrent = async () => {
+    setSaving(true);
+    try {
+      await onSubmit(value);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    submit: submitCurrent,
+  }));
+
   return (
     <form
       id={formId}
       className="form-grid sheet-form"
       onSubmit={async (event) => {
         event.preventDefault();
-        setSaving(true);
-        await onSubmit(value);
-        setSaving(false);
+        await submitCurrent();
       }}
     >
       <label>
@@ -78,7 +93,7 @@ export function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hi
       )}
     </form>
   );
-}
+});
 
 function newSheet(order: number): SheetInput {
   return {
