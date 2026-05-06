@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { RunSheetInput, RunStepInput, TestRunSheet, TestRunStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { MarkdownCollapsibleSection } from '../ui/MarkdownCollapsibleSection';
 import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
+import { SmartEllipsisText } from '../ui/SmartEllipsisText';
 import { StatusBadge } from './StatusBadge';
 import { getRunSheetProgress } from './runStatus';
 
@@ -57,7 +59,7 @@ export function TestRunSheetDetail({ sheet, onSaveSheet, onSaveStep }: Props) {
             >
               <span className="run-list-order">{step.executionOrder}</span>
               <div className="run-action-title">
-                {hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} compact /> : <span className="muted">Etape sans action</span>}
+                <SmartEllipsisText text={hasMarkdownContent(step.action) ? step.action : 'Action non renseignee'} />
               </div>
               <StatusBadge status={step.status} />
             </div>
@@ -90,10 +92,7 @@ function RunSheetReadDetails({ sheet }: { sheet: TestRunSheet }) {
   return (
     <div className="run-read-details">
       {details.filter(([, content]) => hasMarkdownContent(content)).map(([label, content]) => (
-        <details key={label}>
-          <summary>{label}</summary>
-          <MarkdownPreview content={content} compact />
-        </details>
+        <MarkdownCollapsibleSection key={label} title={label} content={content} defaultOpen />
       ))}
     </div>
   );
@@ -126,6 +125,7 @@ function TestRunStepDetail({ step, onSave, onSaved }: { step: TestRunStep; onSav
     setSaving(false);
     onSaved();
   };
+  const hasReadDetails = hasMarkdownContent(step.field) || hasMarkdownContent(step.expectedResult);
 
   return (
     <div className="run-step-detail">
@@ -136,16 +136,22 @@ function TestRunStepDetail({ step, onSave, onSaved }: { step: TestRunStep; onSav
         </div>
         <StatusBadge status={value.status} />
       </div>
-      <dl className="compact-definition-list">
-        {hasMarkdownContent(step.field) && (
-          <>
-            <dt>Specifique</dt>
-            <dd><MarkdownPreview content={step.field} compact /></dd>
-          </>
-        )}
-        <dt>Attendu</dt>
-        <dd>{hasMarkdownContent(step.expectedResult) ? <MarkdownPreview content={step.expectedResult} compact /> : '-'}</dd>
-      </dl>
+      {hasReadDetails && (
+        <dl className="compact-definition-list">
+          {hasMarkdownContent(step.field) && (
+            <>
+              <dt>Specifique</dt>
+              <dd><MarkdownPreview content={step.field} compact /></dd>
+            </>
+          )}
+          {hasMarkdownContent(step.expectedResult) && (
+            <>
+              <dt>Attendu</dt>
+              <dd><MarkdownPreview content={step.expectedResult} compact /></dd>
+            </>
+          )}
+        </dl>
+      )}
       <label>
         Resultat obtenu
         <textarea value={value.actualResult} onChange={(event) => setValue({ ...value, actualResult: event.target.value })} />

@@ -15,7 +15,14 @@ export function MarkdownPreview({ content, compact = false }: Props) {
 
   return (
     <div className={compact ? 'markdown-preview markdown-preview--compact' : 'markdown-preview'}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          pre({ children }) {
+            return <CopyableCodeBlock>{children}</CopyableCodeBlock>;
+          },
+        }}
+      >
         {content}
       </ReactMarkdown>
     </div>
@@ -24,4 +31,41 @@ export function MarkdownPreview({ content, compact = false }: Props) {
 
 export function hasMarkdownContent(content?: string) {
   return Boolean(content?.trim());
+}
+
+function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
+  const [copied, setCopied] = React.useState(false);
+  const text = getNodeText(children);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      console.error('Unable to copy code block', error);
+    }
+  };
+
+  return (
+    <div className="copyable-code-block">
+      <button className="copy-code-button" type="button" onClick={copy}>
+        {copied ? 'Copie' : 'Copier'}
+      </button>
+      <pre>{children}</pre>
+    </div>
+  );
+}
+
+function getNodeText(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(getNodeText).join('');
+  }
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return getNodeText(node.props.children);
+  }
+  return '';
 }

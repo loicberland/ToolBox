@@ -596,17 +596,33 @@ textarea {
   color: var(--muted);
 }
 
-.run-layout {
+.test-run-execution {
   display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.35fr);
   gap: 18px;
-  align-items: start;
+  min-width: 0;
 }
 
-.run-main,
-.run-side {
+.test-run-progress,
+.test-run-sidebar,
+.test-run-detail {
+  min-width: 0;
+}
+
+.test-run-layout {
   display: grid;
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
   gap: 18px;
+  align-items: start;
+  min-width: 0;
+}
+
+.test-run-detail {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.test-run-detail * {
+  min-width: 0;
 }
 
 .run-progress-card {
@@ -667,6 +683,7 @@ textarea {
 .run-sheet-list-item,
 .run-action-list-item {
   width: 100%;
+  min-width: 0;
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
   gap: 12px;
@@ -723,13 +740,25 @@ textarea {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-}
-
-.run-sheet-list-title strong {
   min-width: 0;
 }
 
+.run-sheet-name {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.run-sheet-description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .run-sheet-progress-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
@@ -741,6 +770,7 @@ textarea {
 }
 
 .run-read-details details {
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
@@ -767,11 +797,8 @@ textarea {
   min-width: 0;
 }
 
-.run-action-title .markdown-preview--compact {
-  max-height: 58px;
-}
-
 .run-step-detail {
+  min-width: 0;
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -784,6 +811,7 @@ textarea {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .run-step-header h4 {
@@ -915,11 +943,15 @@ textarea {
 }
 
 @media (max-width: 980px) {
-  .edit-layout,
-  .run-layout {
+  .edit-layout {
     grid-template-columns: 1fr;
   }
+}
 
+@media (max-width: 900px) {
+  .test-run-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {

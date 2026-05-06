@@ -60,26 +60,30 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
       />
       {error && <p className="error">{error}</p>}
       {run && (
-        <div className="run-layout">
-          <div className="run-main">
+        <div className="test-run-execution">
+          <div className="test-run-progress">
             <TestRunProgress status={run.status} sheets={run.sheets} />
-            <TestRunSheetList sheets={run.sheets} selectedSheetId={selectedSheetId} onSelect={setSelectedSheetId} />
           </div>
-          <aside className="run-side">
-            {selectedSheet && (
-              <TestRunSheetDetail
-                sheet={selectedSheet}
-                onSaveSheet={async (sheetId, input) => {
-                  await testSheetApi.updateRunSheet(runId, sheetId, input);
-                  await load();
-                }}
-                onSaveStep={async (stepId, input) => {
-                  await testSheetApi.updateRunStep(runId, stepId, input);
-                  await load();
-                }}
-              />
-            )}
-          </aside>
+          <div className="test-run-layout">
+            <div className="test-run-sidebar">
+              <TestRunSheetList sheets={run.sheets} selectedSheetId={selectedSheetId} onSelect={setSelectedSheetId} />
+            </div>
+            <aside className="test-run-detail">
+              {selectedSheet && (
+                <TestRunSheetDetail
+                  sheet={selectedSheet}
+                  onSaveSheet={async (sheetId, input) => {
+                    await testSheetApi.updateRunSheet(runId, sheetId, input);
+                    await load();
+                  }}
+                  onSaveStep={async (stepId, input) => {
+                    await testSheetApi.updateRunStep(runId, stepId, input);
+                    await load();
+                  }}
+                />
+              )}
+            </aside>
+          </div>
         </div>
       )}
     </section>

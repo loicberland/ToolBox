@@ -1,7 +1,8 @@
 import React from 'react';
 import { TestRunSheet } from '../../api/testSheet';
 import { Card, CardHeader } from '../ui/Card';
-import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
+import { hasMarkdownContent } from '../ui/MarkdownPreview';
+import { SmartEllipsisText } from '../ui/SmartEllipsisText';
 import { StatusBadge } from './StatusBadge';
 import { getRunSheetProgress, getRunSheetProgressSummary } from './runStatus';
 
@@ -43,10 +44,10 @@ export function TestRunSheetList({ sheets, selectedSheetId, onSelect }: Props) {
               <span className="run-list-order">{sheet.executionOrder}</span>
               <div className="run-sheet-list-main">
                 <div className="run-sheet-list-title">
-                  <strong>{sheet.name}</strong>
+                  <SmartEllipsisText text={sheet.name} className="run-sheet-name" />
                   <StatusBadge status={progress.status} />
                 </div>
-                {hasMarkdownContent(sheet.description) && <MarkdownPreview content={sheet.description} compact />}
+                {hasMarkdownContent(sheet.description) && <SmartEllipsisText text={sheet.description} className="run-sheet-description" />}
                 <div className="run-sheet-progress-summary">{getRunSheetProgressSummary(sheet)}</div>
               </div>
             </div>
