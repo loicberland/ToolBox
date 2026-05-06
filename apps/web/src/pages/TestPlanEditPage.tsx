@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { testSheetApi, TestPlan, TestSheet } from '../api/testSheet';
+import { testSheetApi, TestDocument, TestPlan, TestSheet } from '../api/testSheet';
+import { DocumentList } from '../components/test-sheet/DocumentList';
 import { TestPlanForm } from '../components/test-sheet/TestPlanForm';
 import { TestSheetEditor, TestSheetEditorHandle } from '../components/test-sheet/TestSheetEditor';
 import { TestSheetList } from '../components/test-sheet/TestSheetList';
@@ -20,6 +21,7 @@ const modelChangedRunCanceledMessage = "Le plan a ete modifie. L'execution en co
 export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [plan, setPlan] = useState<TestPlan | undefined>();
   const [sheets, setSheets] = useState<TestSheet[]>([]);
+  const [documents, setDocuments] = useState<TestDocument[]>([]);
   const [sheetEditorMode, setSheetEditorMode] = useState<SheetEditorMode>('closed');
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
   const [error, setError] = useState('');
@@ -34,9 +36,14 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
     if (isNew) {
       return;
     }
-    const [loadedPlan, loadedSheets] = await Promise.all([testSheetApi.getPlan(planId), testSheetApi.listSheets(planId)]);
+    const [loadedPlan, loadedSheets, loadedDocuments] = await Promise.all([
+      testSheetApi.getPlan(planId),
+      testSheetApi.listSheets(planId),
+      testSheetApi.listDocuments(planId),
+    ]);
     setPlan(loadedPlan);
     setSheets(loadedSheets);
+    setDocuments(loadedDocuments);
   };
 
   useEffect(() => {
@@ -50,6 +57,15 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       setEditingSheet(loadedSheets.find((item) => item.id === editingSheet.id));
     }
     return loadedSheets;
+  };
+
+  const refreshDocuments = async () => {
+    if (!effectivePlanId) {
+      return [];
+    }
+    const loadedDocuments = await testSheetApi.listDocuments(effectivePlanId);
+    setDocuments(loadedDocuments);
+    return loadedDocuments;
   };
 
   const closeEditor = () => {
@@ -139,6 +155,25 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
         <TestPlanForm plan={plan} onSubmit={savePlan} />
       </Card>
 
+      {plan && (
+        <Card>
+          <CardHeader>
+            <div>
+              <span className="section-kicker">Bibliotheque</span>
+              <h3>Documents du plan</h3>
+            </div>
+          </CardHeader>
+          <PlanDocumentsPanel
+            planId={effectivePlanId}
+            documents={documents}
+            onChanged={async () => {
+              await refreshDocuments();
+              await refreshSheets();
+            }}
+          />
+        </Card>
+      )}
+
       <section className="sheet-list-section">
         <div className="section-header">
           <div>
@@ -184,6 +219,11 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                   onCreated={afterSheetCreated}
                   onRefresh={refreshSheets}
                   onModelMutation={runModelMutation}
+                  planDocuments={documents}
+                  onDocumentsChanged={async () => {
+                    await refreshDocuments();
+                    await refreshSheets();
+                  }}
                 />
               )}
             />
@@ -206,6 +246,11 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 onCreated={afterSheetCreated}
                 onRefresh={refreshSheets}
                 onModelMutation={runModelMutation}
+                planDocuments={documents}
+                onDocumentsChanged={async () => {
+                  await refreshDocuments();
+                  await refreshSheets();
+                }}
               />
             )}
           </>
@@ -221,4 +266,53 @@ async function hasRunningRun(planId: number) {
   }
   const runs = await testSheetApi.listPlanRuns(planId);
   return runs.some((run) => run.status === 'running');
+}
+
+function PlanDocumentsPanel({
+  planId,
+  documents,
+  onChanged,
+}: {
+  planId: number;
+  documents: TestDocument[];
+  onChanged: () => Promise<void>;
+}) {
+  const [file, setFile] = useState<File | undefined>();
+  const [description, setDescription] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  const upload = async () => {
+    if (!file) {
+      return;
+    }
+    setUploading(true);
+    try {
+      await testSheetApi.uploadDocument(planId, file, description);
+      setFile(undefined);
+      setDescription('');
+      await onChanged();
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="document-panel">
+      <DocumentList
+        documents={documents}
+        onDelete={async (document) => {
+          if (!window.confirm('Ce document sera supprime du plan et ne sera plus disponible pour les fiches/actions associees.')) {
+            return;
+          }
+          await testSheetApi.deleteDocument(document.id);
+          await onChanged();
+        }}
+      />
+      <div className="document-upload-row">
+        <input type="file" onChange={(event) => setFile(event.target.files?.[0])} />
+        <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description optionnelle" />
+        <Button type="button" disabled={!file || uploading} onClick={upload}>{uploading ? 'Import...' : '+ Ajouter un document'}</Button>
+      </div>
+    </div>
+  );
 }

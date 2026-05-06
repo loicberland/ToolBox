@@ -104,6 +104,9 @@ func (r *SQLiteRepository) Migrate() error {
 	if err := r.ensureNullableDateTimeColumn("test_plans", "deleted_at"); err != nil {
 		return err
 	}
+	if _, err := r.db.Exec(documentMigrationSQL); err != nil {
+		return err
+	}
 	return r.migrateLegacySteps()
 }
 
@@ -336,6 +339,11 @@ func (r *SQLiteRepository) ListSheets(planID int64) ([]model.TestSheet, error) {
 			return nil, err
 		}
 		sheets[index].Steps = steps
+		documents, err := r.ListSheetDocuments(sheets[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		sheets[index].Documents = documents
 	}
 	return sheets, nil
 }
@@ -348,6 +356,10 @@ func (r *SQLiteRepository) GetSheet(id int64) (model.TestSheet, error) {
 		return model.TestSheet{}, err
 	}
 	sheet.Steps, err = r.ListSteps(id)
+	if err != nil {
+		return model.TestSheet{}, err
+	}
+	sheet.Documents, err = r.ListSheetDocuments(id)
 	return sheet, err
 }
 
@@ -409,6 +421,11 @@ func (r *SQLiteRepository) ListSteps(sheetID int64) ([]model.TestSheetStep, erro
 		if err != nil {
 			return nil, err
 		}
+		documents, err := r.ListStepDocuments(step.ID)
+		if err != nil {
+			return nil, err
+		}
+		step.Documents = documents
 		steps = append(steps, step)
 	}
 	return steps, rows.Err()
@@ -417,7 +434,12 @@ func (r *SQLiteRepository) ListSteps(sheetID int64) ([]model.TestSheetStep, erro
 func (r *SQLiteRepository) GetStep(id int64) (model.TestSheetStep, error) {
 	row := r.db.QueryRow(`SELECT id, sheet_id, action, field, expected_result, execution_order, created_at, updated_at
 		FROM test_sheet_steps WHERE id = ?`, id)
-	return scanStep(row)
+	step, err := scanStep(row)
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	step.Documents, err = r.ListStepDocuments(id)
+	return step, err
 }
 
 func (r *SQLiteRepository) UpdateStep(id int64, input model.StepInput) (model.TestSheetStep, error) {
@@ -491,6 +513,113 @@ func (r *SQLiteRepository) ReorderSheets(planID int64, sheetIDs []int64) error {
 		}
 	}
 	return tx.Commit()
+}
+
+func (r *SQLiteRepository) ListDocuments(planID int64) ([]model.TestDocument, error) {
+	rows, err := r.db.Query(`SELECT id, plan_id, original_name, stored_name, storage_path, mime_type, size_bytes, sha256, description, created_at
+		FROM test_documents WHERE plan_id = ? ORDER BY created_at DESC, id DESC`, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanDocuments(rows)
+}
+
+func (r *SQLiteRepository) GetDocument(id int64) (model.TestDocument, error) {
+	row := r.db.QueryRow(`SELECT id, plan_id, original_name, stored_name, storage_path, mime_type, size_bytes, sha256, description, created_at
+		FROM test_documents WHERE id = ?`, id)
+	return scanDocument(row)
+}
+
+func (r *SQLiteRepository) CreateDocument(input model.TestDocument) (model.TestDocument, error) {
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`INSERT INTO test_documents
+		(plan_id, original_name, stored_name, storage_path, mime_type, size_bytes, sha256, description, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.PlanID, input.OriginalName, input.StoredName, input.StoragePath, input.MimeType, input.SizeBytes, input.SHA256, input.Description, now)
+	if err != nil {
+		return model.TestDocument{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.TestDocument{}, err
+	}
+	return r.GetDocument(id)
+}
+
+func (r *SQLiteRepository) UpdateDocumentFile(id int64, storedName, storagePath, mimeType string, sizeBytes int64, sha256 string) (model.TestDocument, error) {
+	res, err := r.db.Exec(`UPDATE test_documents SET stored_name = ?, storage_path = ?, mime_type = ?, size_bytes = ?, sha256 = ? WHERE id = ?`,
+		storedName, storagePath, mimeType, sizeBytes, sha256, id)
+	if err != nil {
+		return model.TestDocument{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.TestDocument{}, sql.ErrNoRows
+	}
+	return r.GetDocument(id)
+}
+
+func (r *SQLiteRepository) DeleteDocument(id int64) (model.TestDocument, error) {
+	document, err := r.GetDocument(id)
+	if err != nil {
+		return model.TestDocument{}, err
+	}
+	res, err := r.db.Exec(`DELETE FROM test_documents WHERE id = ?`, id)
+	if err != nil {
+		return model.TestDocument{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.TestDocument{}, sql.ErrNoRows
+	}
+	return document, nil
+}
+
+func (r *SQLiteRepository) LinkSheetDocument(sheetID, documentID int64) error {
+	now := time.Now().UTC()
+	_, err := r.db.Exec(`INSERT OR IGNORE INTO test_sheet_documents (sheet_id, document_id, created_at) VALUES (?, ?, ?)`, sheetID, documentID, now)
+	return err
+}
+
+func (r *SQLiteRepository) UnlinkSheetDocument(sheetID, documentID int64) error {
+	_, err := r.db.Exec(`DELETE FROM test_sheet_documents WHERE sheet_id = ? AND document_id = ?`, sheetID, documentID)
+	return err
+}
+
+func (r *SQLiteRepository) ListSheetDocuments(sheetID int64) ([]model.TestDocument, error) {
+	rows, err := r.db.Query(`SELECT d.id, d.plan_id, d.original_name, d.stored_name, d.storage_path, d.mime_type, d.size_bytes, d.sha256, d.description, d.created_at
+		FROM test_documents d
+		INNER JOIN test_sheet_documents sd ON sd.document_id = d.id
+		WHERE sd.sheet_id = ?
+		ORDER BY d.original_name ASC, d.id ASC`, sheetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanDocuments(rows)
+}
+
+func (r *SQLiteRepository) LinkStepDocument(stepID, documentID int64) error {
+	now := time.Now().UTC()
+	_, err := r.db.Exec(`INSERT OR IGNORE INTO test_step_documents (step_id, document_id, created_at) VALUES (?, ?, ?)`, stepID, documentID, now)
+	return err
+}
+
+func (r *SQLiteRepository) UnlinkStepDocument(stepID, documentID int64) error {
+	_, err := r.db.Exec(`DELETE FROM test_step_documents WHERE step_id = ? AND document_id = ?`, stepID, documentID)
+	return err
+}
+
+func (r *SQLiteRepository) ListStepDocuments(stepID int64) ([]model.TestDocument, error) {
+	rows, err := r.db.Query(`SELECT d.id, d.plan_id, d.original_name, d.stored_name, d.storage_path, d.mime_type, d.size_bytes, d.sha256, d.description, d.created_at
+		FROM test_documents d
+		INNER JOIN test_step_documents sd ON sd.document_id = d.id
+		WHERE sd.step_id = ?
+		ORDER BY d.original_name ASC, d.id ASC`, stepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanDocuments(rows)
 }
 
 func (r *SQLiteRepository) CreateRunWithSnapshot(planID int64) (model.TestRun, error) {
@@ -787,6 +916,13 @@ func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) 
 			return nil, err
 		}
 		sheets[index].Steps = steps
+		if sheets[index].SourceSheetID != nil {
+			documents, err := r.ListSheetDocuments(*sheets[index].SourceSheetID)
+			if err != nil {
+				return nil, err
+			}
+			sheets[index].Documents = documents
+		}
 	}
 	return sheets, nil
 }
@@ -817,6 +953,13 @@ func (r *SQLiteRepository) ListRunSteps(runSheetID int64) ([]model.RunStep, erro
 		step, err := scanRunStep(rows)
 		if err != nil {
 			return nil, err
+		}
+		if step.SourceStepID != nil {
+			documents, err := r.ListStepDocuments(*step.SourceStepID)
+			if err != nil {
+				return nil, err
+			}
+			step.Documents = documents
 		}
 		steps = append(steps, step)
 	}
@@ -905,6 +1048,24 @@ func scanStep(scanner interface{ Scan(...any) error }) (model.TestSheetStep, err
 	var step model.TestSheetStep
 	err := scanner.Scan(&step.ID, &step.SheetID, &step.Action, &step.Field, &step.ExpectedResult, &step.ExecutionOrder, &step.CreatedAt, &step.UpdatedAt)
 	return step, err
+}
+
+func scanDocuments(rows *sql.Rows) ([]model.TestDocument, error) {
+	documents := []model.TestDocument{}
+	for rows.Next() {
+		document, err := scanDocument(rows)
+		if err != nil {
+			return nil, err
+		}
+		documents = append(documents, document)
+	}
+	return documents, rows.Err()
+}
+
+func scanDocument(scanner interface{ Scan(...any) error }) (model.TestDocument, error) {
+	var document model.TestDocument
+	err := scanner.Scan(&document.ID, &document.PlanID, &document.OriginalName, &document.StoredName, &document.StoragePath, &document.MimeType, &document.SizeBytes, &document.SHA256, &document.Description, &document.CreatedAt)
+	return document, err
 }
 
 func scanRun(scanner interface{ Scan(...any) error }) (model.TestRun, error) {
@@ -1093,5 +1254,41 @@ CREATE TABLE IF NOT EXISTS test_run_evidences (
 	comment TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL,
 	FOREIGN KEY (run_sheet_id) REFERENCES test_run_sheets(id) ON DELETE CASCADE
+);
+`
+
+const documentMigrationSQL = `
+CREATE TABLE IF NOT EXISTS test_documents (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	plan_id INTEGER NOT NULL,
+	original_name TEXT NOT NULL,
+	stored_name TEXT NOT NULL,
+	storage_path TEXT NOT NULL,
+	mime_type TEXT NOT NULL DEFAULT '',
+	size_bytes INTEGER NOT NULL DEFAULT 0,
+	sha256 TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_sheet_documents (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	sheet_id INTEGER NOT NULL,
+	document_id INTEGER NOT NULL,
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (sheet_id) REFERENCES test_sheets(id) ON DELETE CASCADE,
+	FOREIGN KEY (document_id) REFERENCES test_documents(id) ON DELETE CASCADE,
+	UNIQUE(sheet_id, document_id)
+);
+
+CREATE TABLE IF NOT EXISTS test_step_documents (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	step_id INTEGER NOT NULL,
+	document_id INTEGER NOT NULL,
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (step_id) REFERENCES test_sheet_steps(id) ON DELETE CASCADE,
+	FOREIGN KEY (document_id) REFERENCES test_documents(id) ON DELETE CASCADE,
+	UNIQUE(step_id, document_id)
 );
 `

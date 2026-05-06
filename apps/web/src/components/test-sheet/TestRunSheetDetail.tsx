@@ -5,6 +5,7 @@ import { Card } from '../ui/Card';
 import { MarkdownCollapsibleSection } from '../ui/MarkdownCollapsibleSection';
 import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
 import { SmartEllipsisText } from '../ui/SmartEllipsisText';
+import { DocumentList } from './DocumentList';
 import { StatusBadge } from './StatusBadge';
 import { TestRunStepProgress } from './TestRunStepProgress';
 import { getRunSheetProgress } from './runStatus';
@@ -100,6 +101,13 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
       <TestRunStepProgress steps={sheet.steps ?? []} />
 
       {readOnly && <p className="readonly-notice">Execution en lecture seule</p>}
+
+      {sheet.documents && sheet.documents.length > 0 && (
+        <section className="run-read-details">
+          <h4>Documents de la fiche</h4>
+          <DocumentList documents={sheet.documents} />
+        </section>
+      )}
 
       <RunSheetReadDetails sheet={sheet} />
 
@@ -217,6 +225,12 @@ function TestRunStepDetail({
             </>
           )}
         </dl>
+      )}
+      {step.documents && step.documents.length > 0 && (
+        <section className="run-read-details">
+          <h4>Documents de l action</h4>
+          <DocumentList documents={step.documents} />
+        </section>
       )}
       <label>
         Resultat obtenu

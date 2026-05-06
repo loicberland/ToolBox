@@ -408,6 +408,50 @@ textarea {
   font-weight: 800;
 }
 
+.document-panel,
+.document-association-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.document-association-panel {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.document-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.document-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface-soft);
+}
+
+.document-list-item strong {
+  overflow-wrap: anywhere;
+}
+
+.document-list-item p {
+  margin: 4px 0 0;
+}
+
+.document-upload-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .plan-summary-list {
   display: grid;
   gap: 14px;
@@ -1160,6 +1204,8 @@ textarea {
   .sheet-form,
   .step-form,
   .plan-toolbar,
+  .document-upload-row,
+  .document-list-item,
   .status-summary,
   .run-step-progress-summary,
   .status-action-grid {

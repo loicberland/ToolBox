@@ -24,6 +24,7 @@ export type TestSheet = {
   executionOrder: number;
   mockupSettings: string;
   steps?: TestSheetStep[];
+  documents?: TestDocument[];
 };
 
 export type TestSheetStep = {
@@ -33,6 +34,19 @@ export type TestSheetStep = {
   field: string;
   expectedResult: string;
   executionOrder: number;
+  documents?: TestDocument[];
+};
+
+export type TestDocument = {
+  id: number;
+  planId: number;
+  originalName: string;
+  storedName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  description: string;
+  createdAt: string;
 };
 
 export type TestRun = {
@@ -92,6 +106,7 @@ export type TestRunSheet = {
   actualResult: string;
   comment: string;
   steps?: TestRunStep[];
+  documents?: TestDocument[];
 };
 
 export type TestRunStep = {
@@ -105,6 +120,7 @@ export type TestRunStep = {
   status: 'pending' | 'passed' | 'failed' | 'blocked' | 'skipped';
   actualResult: string;
   comment: string;
+  documents?: TestDocument[];
 };
 
 export type PlanInput = Pick<TestPlan, 'name' | 'description' | 'mockupSettings'>;
@@ -153,6 +169,14 @@ export const testSheetApi = {
   deleteSheet: (sheetId: number) => request<void>(`/test-sheet/sheets/${sheetId}`, { method: 'DELETE' }),
   duplicateSheet: (sheetId: number) => request<TestSheet>(`/test-sheet/sheets/${sheetId}/duplicate`, { method: 'POST' }),
   reorderSheets: (planId: number, sheetIds: number[]) => request<void>(`/test-sheet/plans/${planId}/sheets/reorder`, jsonRequest('PUT', { sheetIds })),
+  listDocuments: (planId: number) => request<TestDocument[]>(`/test-sheet/plans/${planId}/documents`),
+  uploadDocument: (planId: number, file: File, description = '') => uploadDocument(planId, file, description),
+  deleteDocument: (documentId: number) => request<void>(`/test-sheet/documents/${documentId}`, { method: 'DELETE' }),
+  linkSheetDocument: (sheetId: number, documentId: number) => request<void>(`/test-sheet/sheets/${sheetId}/documents/${documentId}`, { method: 'POST' }),
+  unlinkSheetDocument: (sheetId: number, documentId: number) => request<void>(`/test-sheet/sheets/${sheetId}/documents/${documentId}`, { method: 'DELETE' }),
+  linkStepDocument: (stepId: number, documentId: number) => request<void>(`/test-sheet/steps/${stepId}/documents/${documentId}`, { method: 'POST' }),
+  unlinkStepDocument: (stepId: number, documentId: number) => request<void>(`/test-sheet/steps/${stepId}/documents/${documentId}`, { method: 'DELETE' }),
+  documentDownloadUrl: (documentId: number) => `${API_BASE_URL}/test-sheet/documents/${documentId}/download`,
   listSteps: (sheetId: number) => request<TestSheetStep[]>(`/test-sheet/sheets/${sheetId}/steps`),
   createStep: (sheetId: number, input: StepInput) => request<TestSheetStep>(`/test-sheet/sheets/${sheetId}/steps`, jsonRequest('POST', input)),
   updateStep: (stepId: number, input: StepInput) => request<TestSheetStep>(`/test-sheet/steps/${stepId}`, jsonRequest('PUT', input)),
@@ -178,6 +202,27 @@ export const testSheetApi = {
     return response.text();
   },
 };
+
+async function uploadDocument(planId: number, file: File, description: string): Promise<TestDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('description', description);
+  const response = await fetch(`${API_BASE_URL}/test-sheet/plans/${planId}/documents`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    let message = `Erreur HTTP: ${response.status}`;
+    try {
+      const payload = await response.json();
+      message = payload.error ?? message;
+    } catch {
+      // Keep generic message for non-JSON errors.
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
 
 function jsonRequest(method: string, body: unknown): RequestInit {
   return {

@@ -50,6 +50,40 @@ CREATE TABLE IF NOT EXISTS test_attachments (
 	FOREIGN KEY (sheet_id) REFERENCES test_sheets(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS test_documents (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	plan_id INTEGER NOT NULL,
+	original_name TEXT NOT NULL,
+	stored_name TEXT NOT NULL,
+	storage_path TEXT NOT NULL,
+	mime_type TEXT NOT NULL DEFAULT '',
+	size_bytes INTEGER NOT NULL DEFAULT 0,
+	sha256 TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_sheet_documents (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	sheet_id INTEGER NOT NULL,
+	document_id INTEGER NOT NULL,
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (sheet_id) REFERENCES test_sheets(id) ON DELETE CASCADE,
+	FOREIGN KEY (document_id) REFERENCES test_documents(id) ON DELETE CASCADE,
+	UNIQUE(sheet_id, document_id)
+);
+
+CREATE TABLE IF NOT EXISTS test_step_documents (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	step_id INTEGER NOT NULL,
+	document_id INTEGER NOT NULL,
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (step_id) REFERENCES test_sheet_steps(id) ON DELETE CASCADE,
+	FOREIGN KEY (document_id) REFERENCES test_documents(id) ON DELETE CASCADE,
+	UNIQUE(step_id, document_id)
+);
+
 CREATE TABLE IF NOT EXISTS test_runs (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	plan_id INTEGER NOT NULL,

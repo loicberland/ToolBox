@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"toolBox/modules/test-sheet/pkg/model"
@@ -29,18 +30,26 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/plans/{planId}/permanent", h.permanentDeletePlan).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/restore", h.restorePlan).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/duplicate", h.duplicatePlan).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/documents", h.listDocuments).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/documents", h.uploadDocument).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets", h.listSheets).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets", h.createSheet).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}", h.updateSheet).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}", h.deleteSheet).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/duplicate", h.duplicateSheet).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/documents/{documentId}", h.linkSheetDocument).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/documents/{documentId}", h.unlinkSheetDocument).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets/reorder", h.reorderSheets).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps", h.listSteps).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps", h.createStep).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/steps/{stepId}", h.updateStep).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/steps/{stepId}", h.deleteStep).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/steps/{stepId}/duplicate", h.duplicateStep).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/steps/{stepId}/documents/{documentId}", h.linkStepDocument).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/steps/{stepId}/documents/{documentId}", h.unlinkStepDocument).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps/reorder", h.reorderSteps).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/documents/{documentId}/download", h.downloadDocument).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/documents/{documentId}", h.deleteDocument).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/runs", h.createRun).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/runs", h.listPlanRuns).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/runs", h.listRunSummaries).Methods(http.MethodGet)
@@ -129,6 +138,34 @@ func (h *Handler) duplicatePlan(w http.ResponseWriter, r *http.Request) {
 	respondCreated(w, plan, err)
 }
 
+func (h *Handler) listDocuments(w http.ResponseWriter, r *http.Request) {
+	planID, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	documents, err := h.service.ListDocuments(planID)
+	respond(w, documents, err)
+}
+
+func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
+	planID, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart body"})
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "document file is required"})
+		return
+	}
+	_ = file.Close()
+	document, err := h.service.UploadDocument(planID, header, r.FormValue("description"))
+	respondCreated(w, document, err)
+}
+
 func (h *Handler) listSheets(w http.ResponseWriter, r *http.Request) {
 	planID, ok := pathID(w, r, "planId")
 	if !ok {
@@ -179,6 +216,30 @@ func (h *Handler) duplicateSheet(w http.ResponseWriter, r *http.Request) {
 	}
 	sheet, err := h.service.DuplicateSheet(id)
 	respondCreated(w, sheet, err)
+}
+
+func (h *Handler) linkSheetDocument(w http.ResponseWriter, r *http.Request) {
+	sheetID, ok := pathID(w, r, "sheetId")
+	if !ok {
+		return
+	}
+	documentID, ok := pathID(w, r, "documentId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.LinkSheetDocument(sheetID, documentID))
+}
+
+func (h *Handler) unlinkSheetDocument(w http.ResponseWriter, r *http.Request) {
+	sheetID, ok := pathID(w, r, "sheetId")
+	if !ok {
+		return
+	}
+	documentID, ok := pathID(w, r, "documentId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.UnlinkSheetDocument(sheetID, documentID))
 }
 
 func (h *Handler) reorderSheets(w http.ResponseWriter, r *http.Request) {
@@ -245,6 +306,30 @@ func (h *Handler) duplicateStep(w http.ResponseWriter, r *http.Request) {
 	respondCreated(w, step, err)
 }
 
+func (h *Handler) linkStepDocument(w http.ResponseWriter, r *http.Request) {
+	stepID, ok := pathID(w, r, "stepId")
+	if !ok {
+		return
+	}
+	documentID, ok := pathID(w, r, "documentId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.LinkStepDocument(stepID, documentID))
+}
+
+func (h *Handler) unlinkStepDocument(w http.ResponseWriter, r *http.Request) {
+	stepID, ok := pathID(w, r, "stepId")
+	if !ok {
+		return
+	}
+	documentID, ok := pathID(w, r, "documentId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.UnlinkStepDocument(stepID, documentID))
+}
+
 func (h *Handler) reorderSteps(w http.ResponseWriter, r *http.Request) {
 	sheetID, ok := pathID(w, r, "sheetId")
 	if !ok {
@@ -255,6 +340,31 @@ func (h *Handler) reorderSteps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondNoContent(w, h.service.ReorderSteps(sheetID, input.StepIDs))
+}
+
+func (h *Handler) downloadDocument(w http.ResponseWriter, r *http.Request) {
+	documentID, ok := pathID(w, r, "documentId")
+	if !ok {
+		return
+	}
+	document, err := h.service.GetDocument(documentID)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	if document.MimeType != "" {
+		w.Header().Set("Content-Type", document.MimeType)
+	}
+	w.Header().Set("Content-Disposition", `attachment; filename="`+url.QueryEscape(document.OriginalName)+`"`)
+	http.ServeFile(w, r, document.StoragePath)
+}
+
+func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
+	documentID, ok := pathID(w, r, "documentId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.DeleteDocument(documentID))
 }
 
 func (h *Handler) createRun(w http.ResponseWriter, r *http.Request) {

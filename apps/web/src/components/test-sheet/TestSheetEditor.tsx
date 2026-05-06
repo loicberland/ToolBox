@@ -1,7 +1,8 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { SheetInput, StepInput, testSheetApi, TestSheet, TestSheetStep } from '../../api/testSheet';
+import { SheetInput, StepInput, testSheetApi, TestDocument, TestSheet, TestSheetStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
+import { DocumentList } from './DocumentList';
 import { TestSheetForm, TestSheetFormHandle } from './TestSheetForm';
 import { TestStepForm, TestStepFormHandle } from './TestStepForm';
 import { TestStepList } from './TestStepList';
@@ -35,13 +36,15 @@ type Props = {
   onCreated: (sheet: TestSheet) => void;
   onRefresh: () => Promise<TestSheet[]>;
   onModelMutation: <T>(mutation: () => Promise<T>) => Promise<T>;
+  planDocuments: TestDocument[];
+  onDocumentsChanged: () => Promise<void>;
 };
 
 export type TestSheetEditorHandle = {
   submit: () => Promise<void>;
 };
 
-export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation }, ref) {
+export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation, planDocuments, onDocumentsChanged }, ref) {
   const sheetFormRef = useRef<TestSheetFormHandle>(null);
   const stepFormRef = useRef<TestStepFormHandle>(null);
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
@@ -181,6 +184,23 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
         formId={formId}
         hideActions
       />
+      {canEditSteps && activeSheet && (
+        <DocumentAssociationPanel
+          title="Documents de la fiche"
+          documents={activeSheet.documents ?? []}
+          planDocuments={planDocuments}
+          onLink={(documentId) => onModelMutation(() => testSheetApi.linkSheetDocument(activeSheet.id, documentId))}
+          onUnlink={(documentId) => onModelMutation(() => testSheetApi.unlinkSheetDocument(activeSheet.id, documentId))}
+          onUpload={async (file) => {
+            const document = await onModelMutation(() => testSheetApi.uploadDocument(planId, file));
+            await onModelMutation(() => testSheetApi.linkSheetDocument(activeSheet.id, document.id));
+          }}
+          onChanged={async () => {
+            await onDocumentsChanged();
+            await refreshCurrentSheet();
+          }}
+        />
+      )}
       {canEditSteps && (
         <div className="sheet-steps-panel">
           <div className="section-header compact">
@@ -197,13 +217,30 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
             onMove={moveStep}
             editingStepId={stepEditorMode === 'edit' ? editingStep?.id : undefined}
             renderEditor={(step) => (
-              <TestStepForm
-                ref={stepFormRef}
-                step={step}
-                nextOrder={nextStepOrder}
-                onSubmit={saveStep}
-                onCancel={closeStepEditor}
-              />
+              <>
+                <TestStepForm
+                  ref={stepFormRef}
+                  step={step}
+                  nextOrder={nextStepOrder}
+                  onSubmit={saveStep}
+                  onCancel={closeStepEditor}
+                />
+                <DocumentAssociationPanel
+                  title="Documents de l action"
+                  documents={step.documents ?? []}
+                  planDocuments={planDocuments}
+                  onLink={(documentId) => onModelMutation(() => testSheetApi.linkStepDocument(step.id, documentId))}
+                  onUnlink={(documentId) => onModelMutation(() => testSheetApi.unlinkStepDocument(step.id, documentId))}
+                  onUpload={async (file) => {
+                    const document = await onModelMutation(() => testSheetApi.uploadDocument(planId, file));
+                    await onModelMutation(() => testSheetApi.linkStepDocument(step.id, document.id));
+                  }}
+                  onChanged={async () => {
+                    await onDocumentsChanged();
+                    await refreshCurrentSheet();
+                  }}
+                />
+              </>
             )}
           />
           {stepEditorMode === 'closed' && (
@@ -228,3 +265,82 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     </Card>
   );
 });
+
+function DocumentAssociationPanel({
+  title,
+  documents,
+  planDocuments,
+  onLink,
+  onUnlink,
+  onUpload,
+  onChanged,
+}: {
+  title: string;
+  documents: TestDocument[];
+  planDocuments: TestDocument[];
+  onLink: (documentId: number) => Promise<void>;
+  onUnlink: (documentId: number) => Promise<void>;
+  onUpload: (file: File) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [selectedDocumentId, setSelectedDocumentId] = useState('');
+  const [file, setFile] = useState<File | undefined>();
+  const linkedIds = new Set(documents.map((document) => document.id));
+  const availableDocuments = planDocuments.filter((document) => !linkedIds.has(document.id));
+
+  return (
+    <section className="document-association-panel">
+      <div className="section-header compact">
+        <div>
+          <span className="section-kicker">Documents</span>
+          <h3>{title}</h3>
+        </div>
+      </div>
+      <DocumentList
+        documents={documents}
+        emptyText="Aucun document associe"
+        onRemove={async (document) => {
+          await onUnlink(document.id);
+          await onChanged();
+        }}
+      />
+      <div className="document-upload-row">
+        <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} disabled={availableDocuments.length === 0}>
+          <option value="">Associer un document existant</option>
+          {availableDocuments.map((document) => (
+            <option key={document.id} value={document.id}>{document.originalName}</option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={!selectedDocumentId}
+          onClick={async () => {
+            await onLink(Number(selectedDocumentId));
+            setSelectedDocumentId('');
+            await onChanged();
+          }}
+        >
+          Associer
+        </Button>
+      </div>
+      <div className="document-upload-row">
+        <input type="file" onChange={(event) => setFile(event.target.files?.[0])} />
+        <Button
+          type="button"
+          disabled={!file}
+          onClick={async () => {
+            if (!file) {
+              return;
+            }
+            await onUpload(file);
+            setFile(undefined);
+            await onChanged();
+          }}
+        >
+          Importer et associer
+        </Button>
+      </div>
+    </section>
+  );
+}

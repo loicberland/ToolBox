@@ -1,12 +1,24 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"toolBox/modules/test-sheet/pkg/model"
 	"toolBox/modules/test-sheet/pkg/repository"
 )
+
+const maxDocumentUploadBytes = 50 << 20
+
+var unsafeFilenameCharacters = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 type Repository interface {
 	CreatePlan(model.PlanInput) (model.TestPlan, error)
@@ -30,6 +42,15 @@ type Repository interface {
 	DuplicateStep(int64) (model.TestSheetStep, error)
 	ReorderSteps(int64, []int64) error
 	ReorderSheets(int64, []int64) error
+	ListDocuments(int64) ([]model.TestDocument, error)
+	GetDocument(int64) (model.TestDocument, error)
+	CreateDocument(model.TestDocument) (model.TestDocument, error)
+	UpdateDocumentFile(int64, string, string, string, int64, string) (model.TestDocument, error)
+	DeleteDocument(int64) (model.TestDocument, error)
+	LinkSheetDocument(int64, int64) error
+	UnlinkSheetDocument(int64, int64) error
+	LinkStepDocument(int64, int64) error
+	UnlinkStepDocument(int64, int64) error
 	CreateRunWithSnapshot(int64) (model.TestRun, error)
 	GetRun(int64) (model.TestRun, error)
 	ListPlanRuns(int64) ([]model.TestRunSummary, error)
@@ -90,7 +111,19 @@ func (s *Service) DeletePlan(id int64) error {
 }
 
 func (s *Service) PermanentDeletePlan(id int64) error {
-	return s.repo.PermanentDeletePlan(id)
+	documents, err := s.repo.ListDocuments(id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.PermanentDeletePlan(id); err != nil {
+		return err
+	}
+	for _, document := range documents {
+		if document.StoragePath != "" {
+			_ = os.Remove(document.StoragePath)
+		}
+	}
+	return nil
 }
 
 func (s *Service) RestorePlan(id int64) (model.TestPlan, error) {
@@ -338,6 +371,147 @@ func (s *Service) ReorderSheets(planID int64, sheetIDs []int64) error {
 	return s.markPlanChanged(planID)
 }
 
+func (s *Service) ListDocuments(planID int64) ([]model.TestDocument, error) {
+	if _, err := s.repo.GetPlan(planID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListDocuments(planID)
+}
+
+func (s *Service) GetDocument(documentID int64) (model.TestDocument, error) {
+	return s.repo.GetDocument(documentID)
+}
+
+func (s *Service) UploadDocument(planID int64, header *multipart.FileHeader, description string) (model.TestDocument, error) {
+	if _, err := s.repo.GetPlan(planID); err != nil {
+		return model.TestDocument{}, err
+	}
+	if header == nil {
+		return model.TestDocument{}, fmt.Errorf("document file is required")
+	}
+	if header.Size > maxDocumentUploadBytes {
+		return model.TestDocument{}, fmt.Errorf("document is too large")
+	}
+	source, err := header.Open()
+	if err != nil {
+		return model.TestDocument{}, err
+	}
+	defer source.Close()
+
+	originalName := filepath.Base(header.Filename)
+	safeName := safeFilename(originalName)
+	document, err := s.repo.CreateDocument(model.TestDocument{
+		PlanID:       planID,
+		OriginalName: originalName,
+		Description:  strings.TrimSpace(description),
+	})
+	if err != nil {
+		return model.TestDocument{}, err
+	}
+
+	planDirectory := filepath.Join("data", "test-sheet", "documents", fmt.Sprintf("plan-%d", planID))
+	if err := os.MkdirAll(planDirectory, 0755); err != nil {
+		_, _ = s.repo.DeleteDocument(document.ID)
+		return model.TestDocument{}, err
+	}
+	storedName := fmt.Sprintf("doc-%d-%s", document.ID, safeName)
+	storagePath := filepath.Join(planDirectory, storedName)
+	destination, err := os.OpenFile(storagePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		_, _ = s.repo.DeleteDocument(document.ID)
+		return model.TestDocument{}, err
+	}
+	defer destination.Close()
+
+	hash := sha256.New()
+	limited := io.LimitReader(source, maxDocumentUploadBytes+1)
+	written, err := io.Copy(io.MultiWriter(destination, hash), limited)
+	if err != nil {
+		_, _ = s.repo.DeleteDocument(document.ID)
+		return model.TestDocument{}, err
+	}
+	if written > maxDocumentUploadBytes {
+		_ = os.Remove(storagePath)
+		_, _ = s.repo.DeleteDocument(document.ID)
+		return model.TestDocument{}, fmt.Errorf("document is too large")
+	}
+
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = detectContentType(storagePath)
+	}
+	document, err = s.repo.UpdateDocumentFile(document.ID, storedName, storagePath, mimeType, written, hex.EncodeToString(hash.Sum(nil)))
+	if err != nil {
+		_ = os.Remove(storagePath)
+		return model.TestDocument{}, err
+	}
+	if err := s.markPlanChanged(planID); err != nil {
+		return model.TestDocument{}, err
+	}
+	return document, nil
+}
+
+func (s *Service) DeleteDocument(documentID int64) error {
+	document, err := s.repo.DeleteDocument(documentID)
+	if err != nil {
+		return err
+	}
+	if document.StoragePath != "" {
+		_ = os.Remove(document.StoragePath)
+	}
+	return s.markPlanChanged(document.PlanID)
+}
+
+func (s *Service) LinkSheetDocument(sheetID, documentID int64) error {
+	sheet, document, err := s.sheetAndDocument(sheetID, documentID)
+	if err != nil {
+		return err
+	}
+	if sheet.PlanID != document.PlanID {
+		return fmt.Errorf("document does not belong to this plan")
+	}
+	if err := s.repo.LinkSheetDocument(sheetID, documentID); err != nil {
+		return err
+	}
+	return s.markPlanChanged(sheet.PlanID)
+}
+
+func (s *Service) UnlinkSheetDocument(sheetID, documentID int64) error {
+	sheet, _, err := s.sheetAndDocument(sheetID, documentID)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UnlinkSheetDocument(sheetID, documentID); err != nil {
+		return err
+	}
+	return s.markPlanChanged(sheet.PlanID)
+}
+
+func (s *Service) LinkStepDocument(stepID, documentID int64) error {
+	step, sheet, document, err := s.stepSheetAndDocument(stepID, documentID)
+	if err != nil {
+		return err
+	}
+	if sheet.PlanID != document.PlanID {
+		return fmt.Errorf("document does not belong to this plan")
+	}
+	if err := s.repo.LinkStepDocument(step.ID, documentID); err != nil {
+		return err
+	}
+	return s.markPlanChanged(sheet.PlanID)
+}
+
+func (s *Service) UnlinkStepDocument(stepID, documentID int64) error {
+	step, sheet, _, err := s.stepSheetAndDocument(stepID, documentID)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UnlinkStepDocument(step.ID, documentID); err != nil {
+		return err
+	}
+	return s.markPlanChanged(sheet.PlanID)
+}
+
 func (s *Service) CreateRun(planID int64) (model.TestRun, error) {
 	sheets, err := s.repo.ListSheets(planID)
 	if err != nil {
@@ -520,6 +694,76 @@ func (s *Service) cancelRunningRunsForPlan(planID int64) error {
 		}
 	}
 	return nil
+}
+
+func (s *Service) sheetAndDocument(sheetID, documentID int64) (model.TestSheet, model.TestDocument, error) {
+	sheet, err := s.repo.GetSheet(sheetID)
+	if err != nil {
+		return model.TestSheet{}, model.TestDocument{}, err
+	}
+	document, err := s.repo.GetDocument(documentID)
+	if err != nil {
+		return model.TestSheet{}, model.TestDocument{}, err
+	}
+	return sheet, document, nil
+}
+
+func (s *Service) stepSheetAndDocument(stepID, documentID int64) (model.TestSheetStep, model.TestSheet, model.TestDocument, error) {
+	step, err := s.repo.GetStep(stepID)
+	if err != nil {
+		return model.TestSheetStep{}, model.TestSheet{}, model.TestDocument{}, err
+	}
+	sheet, err := s.repo.GetSheet(step.SheetID)
+	if err != nil {
+		return model.TestSheetStep{}, model.TestSheet{}, model.TestDocument{}, err
+	}
+	document, err := s.repo.GetDocument(documentID)
+	if err != nil {
+		return model.TestSheetStep{}, model.TestSheet{}, model.TestDocument{}, err
+	}
+	return step, sheet, document, nil
+}
+
+func safeFilename(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "." || name == "" {
+		return "document"
+	}
+	name = unsafeFilenameCharacters.ReplaceAllString(name, "_")
+	name = strings.Trim(name, "._-")
+	if name == "" {
+		return "document"
+	}
+	if len(name) > 120 {
+		extension := filepath.Ext(name)
+		base := strings.TrimSuffix(name, extension)
+		if len(extension) > 20 {
+			extension = ""
+		}
+		limit := 120 - len(extension)
+		if limit < 1 {
+			limit = 1
+		}
+		if len(base) > limit {
+			base = base[:limit]
+		}
+		name = base + extension
+	}
+	return name
+}
+
+func detectContentType(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	buffer := make([]byte, 512)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return ""
+	}
+	return http.DetectContentType(buffer[:n])
 }
 
 func IsNotFound(err error) bool {

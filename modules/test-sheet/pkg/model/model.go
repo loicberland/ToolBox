@@ -42,17 +42,32 @@ type TestSheet struct {
 	CreatedAt      time.Time       `json:"createdAt"`
 	UpdatedAt      time.Time       `json:"updatedAt"`
 	Steps          []TestSheetStep `json:"steps,omitempty"`
+	Documents      []TestDocument  `json:"documents,omitempty"`
 }
 
 type TestSheetStep struct {
-	ID             int64     `json:"id"`
-	SheetID        int64     `json:"sheetId"`
-	Action         string    `json:"action"`
-	Field          string    `json:"field"`
-	ExpectedResult string    `json:"expectedResult"`
-	ExecutionOrder int       `json:"executionOrder"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID             int64          `json:"id"`
+	SheetID        int64          `json:"sheetId"`
+	Action         string         `json:"action"`
+	Field          string         `json:"field"`
+	ExpectedResult string         `json:"expectedResult"`
+	ExecutionOrder int            `json:"executionOrder"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	Documents      []TestDocument `json:"documents,omitempty"`
+}
+
+type TestDocument struct {
+	ID           int64     `json:"id"`
+	PlanID       int64     `json:"planId"`
+	OriginalName string    `json:"originalName"`
+	StoredName   string    `json:"storedName"`
+	StoragePath  string    `json:"-"`
+	MimeType     string    `json:"mimeType"`
+	SizeBytes    int64     `json:"sizeBytes"`
+	SHA256       string    `json:"sha256"`
+	Description  string    `json:"description"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type TestAttachment struct {
@@ -103,40 +118,42 @@ type TestPlanSummary struct {
 }
 
 type RunSheet struct {
-	ID             int64      `json:"id"`
-	RunID          int64      `json:"runId"`
-	SourceSheetID  *int64     `json:"sourceSheetId,omitempty"`
-	Name           string     `json:"name"`
-	Description    string     `json:"description"`
-	Prerequisites  string     `json:"prerequisites"`
-	Config         string     `json:"config"`
-	Command        string     `json:"command"`
-	Notes          string     `json:"notes"`
-	Action         string     `json:"action"`
-	ExpectedResult string     `json:"expectedResult"`
-	ExecutionOrder int        `json:"executionOrder"`
-	Status         string     `json:"status"`
-	ActualResult   string     `json:"actualResult"`
-	Comment        string     `json:"comment"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
-	Steps          []RunStep  `json:"steps,omitempty"`
-	Evidences      []Evidence `json:"evidences,omitempty"`
+	ID             int64          `json:"id"`
+	RunID          int64          `json:"runId"`
+	SourceSheetID  *int64         `json:"sourceSheetId,omitempty"`
+	Name           string         `json:"name"`
+	Description    string         `json:"description"`
+	Prerequisites  string         `json:"prerequisites"`
+	Config         string         `json:"config"`
+	Command        string         `json:"command"`
+	Notes          string         `json:"notes"`
+	Action         string         `json:"action"`
+	ExpectedResult string         `json:"expectedResult"`
+	ExecutionOrder int            `json:"executionOrder"`
+	Status         string         `json:"status"`
+	ActualResult   string         `json:"actualResult"`
+	Comment        string         `json:"comment"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	Steps          []RunStep      `json:"steps,omitempty"`
+	Evidences      []Evidence     `json:"evidences,omitempty"`
+	Documents      []TestDocument `json:"documents,omitempty"`
 }
 
 type RunStep struct {
-	ID             int64     `json:"id"`
-	RunSheetID     int64     `json:"runSheetId"`
-	SourceStepID   *int64    `json:"sourceStepId,omitempty"`
-	Action         string    `json:"action"`
-	Field          string    `json:"field"`
-	ExpectedResult string    `json:"expectedResult"`
-	ExecutionOrder int       `json:"executionOrder"`
-	Status         string    `json:"status"`
-	ActualResult   string    `json:"actualResult"`
-	Comment        string    `json:"comment"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID             int64          `json:"id"`
+	RunSheetID     int64          `json:"runSheetId"`
+	SourceStepID   *int64         `json:"sourceStepId,omitempty"`
+	Action         string         `json:"action"`
+	Field          string         `json:"field"`
+	ExpectedResult string         `json:"expectedResult"`
+	ExecutionOrder int            `json:"executionOrder"`
+	Status         string         `json:"status"`
+	ActualResult   string         `json:"actualResult"`
+	Comment        string         `json:"comment"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	Documents      []TestDocument `json:"documents,omitempty"`
 }
 
 type Evidence struct {
