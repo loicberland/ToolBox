@@ -34,13 +34,14 @@ type Props = {
   onSaved: () => Promise<void>;
   onCreated: (sheet: TestSheet) => void;
   onRefresh: () => Promise<TestSheet[]>;
+  onModelMutation: <T>(mutation: () => Promise<T>) => Promise<T>;
 };
 
 export type TestSheetEditorHandle = {
   submit: () => Promise<void>;
 };
 
-export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh }, ref) {
+export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation }, ref) {
   const sheetFormRef = useRef<TestSheetFormHandle>(null);
   const stepFormRef = useRef<TestStepFormHandle>(null);
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
@@ -104,14 +105,14 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
       mockupSettings: sheet?.mockupSettings ?? input.mockupSettings ?? '',
     };
     if (isCreate) {
-      const created = await testSheetApi.createSheet(planId, normalizedInput);
+      const created = await onModelMutation(() => testSheetApi.createSheet(planId, normalizedInput));
       const loadedSheets = await onRefresh();
       const createdSheet = loadedSheets.find((item) => item.id === created.id) ?? created;
       closeStepEditor();
       onCreated(createdSheet);
       return;
     } else if (sheet) {
-      await testSheetApi.updateSheet(sheet.id, normalizedInput);
+      await onModelMutation(() => testSheetApi.updateSheet(sheet.id, normalizedInput));
     }
     await onSaved();
   };
@@ -121,9 +122,9 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
       return;
     }
     if (editingStep) {
-      await testSheetApi.updateStep(editingStep.id, input);
+      await onModelMutation(() => testSheetApi.updateStep(editingStep.id, input));
     } else {
-      await testSheetApi.createStep(activeSheet.id, input);
+      await onModelMutation(() => testSheetApi.createStep(activeSheet.id, input));
     }
     await refreshCurrentSheet();
     closeStepEditor();
@@ -133,7 +134,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     if (!canEditSteps) {
       return;
     }
-    await testSheetApi.deleteStep(step.id);
+    await onModelMutation(() => testSheetApi.deleteStep(step.id));
     await refreshCurrentSheet();
     closeStepEditor();
   };
@@ -142,7 +143,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     if (!canEditSteps) {
       return;
     }
-    await testSheetApi.duplicateStep(step.id);
+    await onModelMutation(() => testSheetApi.duplicateStep(step.id));
     await refreshCurrentSheet();
     closeStepEditor();
   };
@@ -159,7 +160,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     const next = [...steps];
     [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
 
-    await testSheetApi.reorderSteps(activeSheet.id, next.map((item) => item.id));
+    await onModelMutation(() => testSheetApi.reorderSteps(activeSheet.id, next.map((item) => item.id)));
     await refreshCurrentSheet();
     closeStepEditor();
   };

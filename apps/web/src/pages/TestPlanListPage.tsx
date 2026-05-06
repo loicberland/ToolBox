@@ -21,8 +21,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
   const [runsByPlan, setRunsByPlan] = useState<Record<number, TestRunSummary[]>>({});
   const [historyPlanId, setHistoryPlanId] = useState<number | undefined>();
   const [planToDelete, setPlanToDelete] = useState<TestPlanSummary | undefined>();
-  const [runToArchive, setRunToArchive] = useState<TestRunSummary | undefined>();
-  const [runConflict, setRunConflict] = useState<{ plan: TestPlanSummary; run: TestRunSummary; replaySourceRunId?: number } | undefined>();
+  const [runConflict, setRunConflict] = useState<{ plan: TestPlanSummary; run: TestRunSummary } | undefined>();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('latestRun');
@@ -76,26 +75,6 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
     onRun(run.id);
   };
 
-  const replayPlan = async (plan: TestPlanSummary) => {
-    const existingRun = findRunningRun(plan, runsByPlan[plan.id]);
-    if (existingRun) {
-      setRunConflict({ plan, run: existingRun });
-      return;
-    }
-    if (plan.latestRun) {
-      const run = await testSheetApi.replayRun(plan.latestRun.id);
-      onRun(run.id);
-      return;
-    }
-    await createRun(plan);
-  };
-
-  const refreshPlanRuns = async (planId: number) => {
-    const runs = await testSheetApi.listPlanRuns(planId);
-    setRunsByPlan((current) => ({ ...current, [planId]: runs }));
-    await load();
-  };
-
   return (
     <section className="workspace">
       <PageHeader
@@ -114,7 +93,6 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
           <option value="running">En cours</option>
           <option value="completed">Termines</option>
           <option value="canceled">Annules</option>
-          <option value="archived">Archives</option>
         </select>
         <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
           <option value="latestRun">Derniere execution</option>
@@ -139,9 +117,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
               <div className="button-row end">
                 {plan.latestRun?.status === 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>Continuer</Button>}
                 {plan.latestRun && plan.latestRun.status !== 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>Ouvrir</Button>}
-                <Button type="button" variant="secondary" disabled={plan.sheetCount === 0 && !plan.latestRun} onClick={() => replayPlan(plan)}>
-                  {plan.latestRun ? 'Rejouer' : 'Nouvelle execution'}
-                </Button>
+                <Button type="button" variant="secondary" disabled={plan.sheetCount === 0} onClick={() => createRun(plan)}>Nouvelle execution</Button>
                 <Button type="button" variant="secondary" onClick={() => openHistory(plan)}>Historique</Button>
                 <Button type="button" variant="secondary" onClick={() => onEdit(plan.id)}>Modifier le modele</Button>
                 <Button type="button" variant="secondary" onClick={async () => { await testSheetApi.duplicatePlan(plan.id); await load(); }}>Dupliquer</Button>
@@ -171,18 +147,8 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                       <PlanRunProgress run={run} compact />
                     </div>
                     <div className="button-row end">
-                      <Button type="button" variant="secondary" onClick={() => onRun(run.id)}>{run.status === 'running' ? 'Continuer' : 'Ouvrir'}</Button>
+                      <Button type="button" variant="secondary" onClick={() => onRun(run.id)}>{run.status === 'running' ? 'Continuer' : 'Consulter'}</Button>
                       <Button type="button" variant="secondary" onClick={() => onReport(run.id)}>Rapport</Button>
-                      <Button type="button" variant="secondary" onClick={async () => {
-                        const runningRun = findRunningRun(plan, runsByPlan[plan.id]);
-                        if (runningRun) {
-                          setRunConflict({ plan, run: runningRun, replaySourceRunId: run.id });
-                          return;
-                        }
-                        const replay = await testSheetApi.replayRun(run.id);
-                        onRun(replay.id);
-                      }}>Rejouer</Button>
-                      {run.status !== 'archived' && <Button type="button" variant="secondary" onClick={() => setRunToArchive(run)}>Archiver</Button>}
                     </div>
                   </div>
                 ))}
@@ -207,21 +173,6 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
         }}
       />
 
-      <ConfirmDialog
-        open={Boolean(runToArchive)}
-        title="Archiver l execution"
-        message={`Archiver l execution #${runToArchive?.id ?? ''} ? Elle restera consultable dans l historique.`}
-        confirmLabel="Archiver"
-        onCancel={() => setRunToArchive(undefined)}
-        onConfirm={async () => {
-          if (runToArchive) {
-            await testSheetApi.archiveRun(runToArchive.id);
-            await refreshPlanRuns(runToArchive.planId);
-            setRunToArchive(undefined);
-          }
-        }}
-      />
-
       {runConflict && (
         <div className="dialog-backdrop" role="presentation">
           <div className="confirm-dialog" role="dialog" aria-modal="true">
@@ -232,9 +183,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
               <Button type="button" variant="secondary" onClick={() => { onRun(runConflict.run.id); }}>Continuer</Button>
               <Button type="button" onClick={async () => {
                 await testSheetApi.cancelRun(runConflict.run.id);
-                const run = runConflict.replaySourceRunId
-                  ? await testSheetApi.replayRun(runConflict.replaySourceRunId)
-                  : await testSheetApi.createRun(runConflict.plan.id);
+                const run = await testSheetApi.createRun(runConflict.plan.id);
                 setRunConflict(undefined);
                 onRun(run.id);
               }}>Annuler et rejouer</Button>

@@ -44,7 +44,6 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/runs", h.listRunSummaries).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/runs/{runId}", h.getRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/replay", h.replayRun).Methods(http.MethodPost)
-	r.HandleFunc("/api/test-sheet/runs/{runId}/archive", h.archiveRun).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/cancel", h.cancelRun).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/sheets/{runSheetId}", h.updateRunSheet).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/steps/{runStepId}", h.updateRunStep).Methods(http.MethodPut)

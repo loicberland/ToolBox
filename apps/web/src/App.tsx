@@ -10,7 +10,7 @@ type View =
   | { name: 'test-plans' }
   | { name: 'test-plan-edit'; planId: number }
   | { name: 'test-run'; runId: number }
-  | { name: 'test-report'; runId: number };
+  | { name: 'test-report'; runId: number; returnTo: 'plans' | 'run' };
 
 const App = () => {
   const [modules, setModules] = useState<ModuleInfo[]>([]);
@@ -60,7 +60,7 @@ const App = () => {
               <TestPlanListPage
                 onEdit={(planId) => setView({ name: 'test-plan-edit', planId })}
                 onRun={(runId) => setView({ name: 'test-run', runId })}
-                onReport={(runId) => setView({ name: 'test-report', runId })}
+                onReport={(runId) => setView({ name: 'test-report', runId, returnTo: 'plans' })}
               />
             )}
             {view.name === 'test-plan-edit' && (
@@ -74,10 +74,15 @@ const App = () => {
               <TestRunPage
                 runId={view.runId}
                 onBack={() => setView({ name: 'test-plans' })}
-                onReport={(runId) => setView({ name: 'test-report', runId })}
+                onReport={(runId) => setView({ name: 'test-report', runId, returnTo: 'run' })}
               />
             )}
-            {view.name === 'test-report' && <TestRunReportPage runId={view.runId} onBack={() => setView({ name: 'test-run', runId: view.runId })} />}
+            {view.name === 'test-report' && (
+              <TestRunReportPage
+                runId={view.runId}
+                onBack={() => setView(view.returnTo === 'run' ? { name: 'test-run', runId: view.runId } : { name: 'test-plans' })}
+              />
+            )}
           </>
         ) : (
           selectedModule && (

@@ -15,12 +15,15 @@ type Props = {
 
 type SheetEditorMode = 'closed' | 'create' | 'edit';
 
+const modelChangedRunCanceledMessage = "Le plan a ete modifie. L'execution en cours a ete annulee car elle ne correspondait plus a la nouvelle version du plan.";
+
 export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [plan, setPlan] = useState<TestPlan | undefined>();
   const [sheets, setSheets] = useState<TestSheet[]>([]);
   const [sheetEditorMode, setSheetEditorMode] = useState<SheetEditorMode>('closed');
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const sheetEditorRef = useRef<TestSheetEditorHandle>(null);
 
   const isNew = planId === 0 && !plan;
@@ -55,8 +58,20 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   };
 
   const savePlan = async (input: { name: string; description: string; mockupSettings: string }) => {
-    const saved = isNew ? await testSheetApi.createPlan(input) : await testSheetApi.updatePlan(effectivePlanId, input);
+    const saved = isNew
+      ? await testSheetApi.createPlan(input)
+      : await runModelMutation(() => testSheetApi.updatePlan(effectivePlanId, input));
     setPlan(saved);
+  };
+
+  const runModelMutation = async <T,>(mutation: () => Promise<T>): Promise<T> => {
+    setInfo('');
+    const hadRunningRun = await hasRunningRun(effectivePlanId);
+    const result = await mutation();
+    if (hadRunningRun) {
+      setInfo(modelChangedRunCanceledMessage);
+    }
+    return result;
   };
 
   const afterSheetSaved = async () => {
@@ -112,6 +127,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       />
 
       {error && <p className="error">{error}</p>}
+      {info && <p className="info-message">{info}</p>}
 
       <Card>
         <CardHeader>
@@ -137,14 +153,14 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               sheets={sheets}
               onEdit={toggleEditSheet}
               onDelete={async (sheet) => {
-                await testSheetApi.deleteSheet(sheet.id);
+                await runModelMutation(() => testSheetApi.deleteSheet(sheet.id));
                 await refreshSheets();
                 if (editingSheet?.id === sheet.id) {
                   closeEditor();
                 }
               }}
               onDuplicate={async (sheet) => {
-                await testSheetApi.duplicateSheet(sheet.id);
+                await runModelMutation(() => testSheetApi.duplicateSheet(sheet.id));
                 await refreshSheets();
               }}
               onMove={async (sheet, direction) => {
@@ -152,7 +168,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 const next = [...sheets];
                 const targetIndex = currentIndex + direction;
                 [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
-                await testSheetApi.reorderSheets(effectivePlanId, next.map((item) => item.id));
+                await runModelMutation(() => testSheetApi.reorderSheets(effectivePlanId, next.map((item) => item.id)));
                 await refreshSheets();
               }}
               editingSheetId={sheetEditorMode === 'edit' ? editingSheet?.id : undefined}
@@ -167,6 +183,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                   onSaved={afterSheetSaved}
                   onCreated={afterSheetCreated}
                   onRefresh={refreshSheets}
+                  onModelMutation={runModelMutation}
                 />
               )}
             />
@@ -188,6 +205,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 onSaved={afterSheetSaved}
                 onCreated={afterSheetCreated}
                 onRefresh={refreshSheets}
+                onModelMutation={runModelMutation}
               />
             )}
           </>
@@ -195,4 +213,12 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       </section>
     </section>
   );
+}
+
+async function hasRunningRun(planId: number) {
+  if (!planId) {
+    return false;
+  }
+  const runs = await testSheetApi.listPlanRuns(planId);
+  return runs.some((run) => run.status === 'running');
 }

@@ -160,7 +160,6 @@ export const testSheetApi = {
   listRunSummaries: () => request<TestRunSummary[]>('/test-sheet/runs'),
   getRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}`),
   replayRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/replay`, { method: 'POST' }),
-  archiveRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/archive`, { method: 'PUT' }),
   cancelRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/cancel`, { method: 'PUT' }),
   updateRunSheet: (runId: number, runSheetId: number, input: RunSheetInput) =>
     request<TestRunSheet>(`/test-sheet/runs/${runId}/sheets/${runSheetId}`, jsonRequest('PUT', input)),
