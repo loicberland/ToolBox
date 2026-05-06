@@ -16,7 +16,7 @@ type Props = {
 };
 
 export function TestSheetCard({ sheet, index, total, onEdit, onDelete, onDuplicate, onMove }: Props) {
-  const action = sheet.steps?.[0]?.action || sheet.action;
+  const stepCount = sheet.steps?.length ?? 0;
 
   return (
     <Card className="test-sheet-card">
@@ -24,17 +24,10 @@ export function TestSheetCard({ sheet, index, total, onEdit, onDelete, onDuplica
       <div className="sheet-card-content">
         <div className="card-topline">
           <Badge tone="blue">Fiche</Badge>
-          {sheet.prerequisites && <Badge tone="neutral">Prerequis</Badge>}
-          <Badge tone="neutral">{sheet.steps?.length ?? 0} etape{(sheet.steps?.length ?? 0) > 1 ? 's' : ''}</Badge>
+          <Badge tone="neutral">{stepCount} etape{stepCount > 1 ? 's' : ''}</Badge>
         </div>
         <h3>{sheet.name}</h3>
-        {hasMarkdownContent(sheet.description) ? <MarkdownPreview content={sheet.description} compact /> : <p>Sans description</p>}
-        <dl className="compact-definition-list">
-          <dt>Action</dt>
-          <dd>{hasMarkdownContent(action) ? <MarkdownPreview content={action} compact /> : '-'}</dd>
-          <dt>Configuration</dt>
-          <dd>{hasMarkdownContent(sheet.config) ? <MarkdownPreview content={sheet.config} compact /> : '-'}</dd>
-        </dl>
+        {hasMarkdownContent(sheet.description) ? <MarkdownPreview content={sheet.description} compact /> : <p>Aucune description</p>}
         <div className="button-row">
           <Button type="button" variant="secondary" size="sm" onClick={() => onMove(-1)} disabled={index === 0}>Monter</Button>
           <Button type="button" variant="secondary" size="sm" onClick={() => onMove(1)} disabled={index === total - 1}>Descendre</Button>

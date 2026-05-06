@@ -498,6 +498,16 @@ textarea {
   gap: 10px;
 }
 
+.sheet-card-content > .markdown-preview--compact,
+.step-card-content > .markdown-preview--compact {
+  max-height: 84px;
+}
+
+.sheet-card-content > .markdown-preview--compact pre,
+.step-card-content > .markdown-preview--compact pre {
+  max-height: 64px;
+}
+
 .compact-definition-list,
 .run-card dl {
   display: grid;
