@@ -437,12 +437,38 @@ textarea {
   background: var(--surface-soft);
 }
 
-.document-list-item strong {
-  overflow-wrap: anywhere;
+.document-content {
+  min-width: 0;
 }
 
-.document-list-item p {
-  margin: 4px 0 0;
+.document-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.document-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.document-size {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.document-description {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .document-upload-row {
@@ -450,6 +476,36 @@ textarea {
   grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr) auto;
   gap: 10px;
   align-items: center;
+}
+
+.document-file-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.document-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.document-file-button {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.document-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
 }
 
 .plan-summary-list {

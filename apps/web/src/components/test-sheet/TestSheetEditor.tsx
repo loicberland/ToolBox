@@ -2,7 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, use
 import { SheetInput, StepInput, testSheetApi, TestDocument, TestSheet, TestSheetStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
-import { DocumentList } from './DocumentList';
+import { DocumentFilePicker, DocumentList } from './DocumentList';
 import { TestSheetForm, TestSheetFormHandle } from './TestSheetForm';
 import { TestStepForm, TestStepFormHandle } from './TestStepForm';
 import { TestStepList } from './TestStepList';
@@ -285,8 +285,17 @@ function DocumentAssociationPanel({
 }) {
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
   const [file, setFile] = useState<File | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputId = React.useId();
   const linkedIds = new Set(documents.map((document) => document.id));
   const availableDocuments = planDocuments.filter((document) => !linkedIds.has(document.id));
+
+  const resetFile = () => {
+    setFile(undefined);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <section className="document-association-panel">
@@ -325,7 +334,13 @@ function DocumentAssociationPanel({
         </Button>
       </div>
       <div className="document-upload-row">
-        <input type="file" onChange={(event) => setFile(event.target.files?.[0])} />
+        <DocumentFilePicker
+          id={fileInputId}
+          file={file}
+          inputRef={fileInputRef}
+          onFileChange={setFile}
+          label="+ Choisir un fichier"
+        />
         <Button
           type="button"
           disabled={!file}
@@ -334,7 +349,7 @@ function DocumentAssociationPanel({
               return;
             }
             await onUpload(file);
-            setFile(undefined);
+            resetFile();
             await onChanged();
           }}
         >

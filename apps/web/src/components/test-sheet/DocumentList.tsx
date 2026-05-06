@@ -18,9 +18,14 @@ export function DocumentList({ documents = [], emptyText = 'Aucun document', onR
     <div className="document-list">
       {documents.map((document) => (
         <div className="document-list-item" key={document.id}>
-          <div>
-            <strong>{document.originalName}</strong>
-            <p className="muted">{document.mimeType || 'Type inconnu'} - {formatBytes(document.sizeBytes)}</p>
+          <div className="document-content">
+            <div className="document-title-row">
+              <span className="document-name" title={document.originalName}>{document.originalName}</span>
+              <span className="document-size">{formatBytes(document.sizeBytes)}</span>
+            </div>
+            {document.description.trim() && (
+              <div className="document-description">{document.description}</div>
+            )}
           </div>
           <div className="button-row end">
             <a className="ui-button secondary sm" href={testSheetApi.documentDownloadUrl(document.id)}>Telecharger</a>
@@ -29,6 +34,34 @@ export function DocumentList({ documents = [], emptyText = 'Aucun document', onR
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+type DocumentFilePickerProps = {
+  id: string;
+  file?: File;
+  inputRef: React.RefObject<HTMLInputElement>;
+  onFileChange: (file?: File) => void;
+  label?: string;
+};
+
+export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = 'Choisir un fichier' }: DocumentFilePickerProps) {
+  return (
+    <div className="document-file-picker">
+      <input
+        ref={inputRef}
+        id={id}
+        className="document-file-input"
+        type="file"
+        onChange={(event) => onFileChange(event.target.files?.[0])}
+      />
+      <label className="ui-button secondary document-file-button" htmlFor={id}>
+        {label}
+      </label>
+      <span className={file ? 'document-file-name' : 'document-file-name muted'}>
+        {file?.name ?? 'aucun fichier selectionne'}
+      </span>
     </div>
   );
 }

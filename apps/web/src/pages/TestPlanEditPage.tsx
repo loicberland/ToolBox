@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { testSheetApi, TestDocument, TestPlan, TestSheet } from '../api/testSheet';
-import { DocumentList } from '../components/test-sheet/DocumentList';
+import { DocumentFilePicker, DocumentList } from '../components/test-sheet/DocumentList';
 import { TestPlanForm } from '../components/test-sheet/TestPlanForm';
 import { TestSheetEditor, TestSheetEditorHandle } from '../components/test-sheet/TestSheetEditor';
 import { TestSheetList } from '../components/test-sheet/TestSheetList';
@@ -280,6 +280,17 @@ function PlanDocumentsPanel({
   const [file, setFile] = useState<File | undefined>();
   const [description, setDescription] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<number | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputId = React.useId();
+
+  const resetUploadForm = () => {
+    setFile(undefined);
+    setDescription('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const upload = async () => {
     if (!file) {
@@ -288,8 +299,7 @@ function PlanDocumentsPanel({
     setUploading(true);
     try {
       await testSheetApi.uploadDocument(planId, file, description);
-      setFile(undefined);
-      setDescription('');
+      resetUploadForm();
       await onChanged();
     } finally {
       setUploading(false);
@@ -304,14 +314,26 @@ function PlanDocumentsPanel({
           if (!window.confirm('Ce document sera supprime du plan et ne sera plus disponible pour les fiches/actions associees.')) {
             return;
           }
-          await testSheetApi.deleteDocument(document.id);
-          await onChanged();
+          setDeletingDocumentId(document.id);
+          try {
+            await testSheetApi.deleteDocument(document.id);
+            await onChanged();
+          } finally {
+            setDeletingDocumentId(undefined);
+            resetUploadForm();
+          }
         }}
       />
       <div className="document-upload-row">
-        <input type="file" onChange={(event) => setFile(event.target.files?.[0])} />
+        <DocumentFilePicker
+          id={fileInputId}
+          file={file}
+          inputRef={fileInputRef}
+          onFileChange={setFile}
+          label="+ Choisir un fichier"
+        />
         <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description optionnelle" />
-        <Button type="button" disabled={!file || uploading} onClick={upload}>{uploading ? 'Import...' : '+ Ajouter un document'}</Button>
+        <Button type="button" disabled={!file || uploading || deletingDocumentId !== undefined} onClick={upload}>{uploading ? 'Import...' : '+ Ajouter un document'}</Button>
       </div>
     </div>
   );
