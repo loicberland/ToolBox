@@ -12,6 +12,7 @@ type Repository interface {
 	CreatePlan(model.PlanInput) (model.TestPlan, error)
 	ListPlans() ([]model.TestPlan, error)
 	GetPlan(int64) (model.TestPlan, error)
+	TouchPlan(int64) error
 	UpdatePlan(int64, model.PlanInput) (model.TestPlan, error)
 	DeletePlan(int64) error
 	CreateSheet(int64, model.SheetInput) (model.TestSheet, error)
@@ -69,10 +70,14 @@ func (s *Service) UpdatePlan(id int64, input model.PlanInput) (model.TestPlan, e
 	if input.Name == "" {
 		return model.TestPlan{}, fmt.Errorf("plan name is required")
 	}
-	if err := s.cancelRunningRunsForPlan(id); err != nil {
+	plan, err := s.repo.UpdatePlan(id, input)
+	if err != nil {
 		return model.TestPlan{}, err
 	}
-	return s.repo.UpdatePlan(id, input)
+	if err := s.markPlanChanged(id); err != nil {
+		return model.TestPlan{}, err
+	}
+	return s.repo.GetPlan(plan.ID)
 }
 
 func (s *Service) DeletePlan(id int64) error {
@@ -135,10 +140,14 @@ func (s *Service) CreateSheet(planID int64, input model.SheetInput) (model.TestS
 	if _, err := s.repo.GetPlan(planID); err != nil {
 		return model.TestSheet{}, err
 	}
-	if err := s.cancelRunningRunsForPlan(planID); err != nil {
+	sheet, err := s.repo.CreateSheet(planID, input)
+	if err != nil {
 		return model.TestSheet{}, err
 	}
-	return s.repo.CreateSheet(planID, input)
+	if err := s.markPlanChanged(planID); err != nil {
+		return model.TestSheet{}, err
+	}
+	return sheet, nil
 }
 
 func (s *Service) ListSheets(planID int64) ([]model.TestSheet, error) {
@@ -157,10 +166,14 @@ func (s *Service) UpdateSheet(id int64, input model.SheetInput) (model.TestSheet
 	if err != nil {
 		return model.TestSheet{}, err
 	}
-	if err := s.cancelRunningRunsForPlan(sheet.PlanID); err != nil {
+	updated, err := s.repo.UpdateSheet(id, input)
+	if err != nil {
 		return model.TestSheet{}, err
 	}
-	return s.repo.UpdateSheet(id, input)
+	if err := s.markPlanChanged(sheet.PlanID); err != nil {
+		return model.TestSheet{}, err
+	}
+	return updated, nil
 }
 
 func (s *Service) DeleteSheet(id int64) error {
@@ -168,18 +181,15 @@ func (s *Service) DeleteSheet(id int64) error {
 	if err != nil {
 		return err
 	}
-	if err := s.cancelRunningRunsForPlan(sheet.PlanID); err != nil {
+	if err := s.repo.DeleteSheet(id); err != nil {
 		return err
 	}
-	return s.repo.DeleteSheet(id)
+	return s.markPlanChanged(sheet.PlanID)
 }
 
 func (s *Service) DuplicateSheet(id int64) (model.TestSheet, error) {
 	sheet, err := s.repo.GetSheet(id)
 	if err != nil {
-		return model.TestSheet{}, err
-	}
-	if err := s.cancelRunningRunsForPlan(sheet.PlanID); err != nil {
 		return model.TestSheet{}, err
 	}
 	copySheet, err := s.repo.CreateSheet(sheet.PlanID, model.SheetInput{
@@ -207,6 +217,9 @@ func (s *Service) DuplicateSheet(id int64) (model.TestSheet, error) {
 			return model.TestSheet{}, err
 		}
 	}
+	if err := s.markPlanChanged(sheet.PlanID); err != nil {
+		return model.TestSheet{}, err
+	}
 	return s.repo.GetSheet(copySheet.ID)
 }
 
@@ -214,12 +227,18 @@ func (s *Service) CreateStep(sheetID int64, input model.StepInput) (model.TestSh
 	if strings.TrimSpace(input.Action) == "" && strings.TrimSpace(input.ExpectedResult) == "" {
 		return model.TestSheetStep{}, fmt.Errorf("step action or expected result is required")
 	}
-	if _, err := s.repo.GetSheet(sheetID); err != nil {
-		return model.TestSheetStep{}, err
-	} else if err := s.cancelRunningRunsForPlanFromSheet(sheetID); err != nil {
+	sheet, err := s.repo.GetSheet(sheetID)
+	if err != nil {
 		return model.TestSheetStep{}, err
 	}
-	return s.repo.CreateStep(sheetID, input)
+	step, err := s.repo.CreateStep(sheetID, input)
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	if err := s.markPlanChanged(sheet.PlanID); err != nil {
+		return model.TestSheetStep{}, err
+	}
+	return step, nil
 }
 
 func (s *Service) ListSteps(sheetID int64) ([]model.TestSheetStep, error) {
@@ -237,10 +256,18 @@ func (s *Service) UpdateStep(id int64, input model.StepInput) (model.TestSheetSt
 	if err != nil {
 		return model.TestSheetStep{}, err
 	}
-	if err := s.cancelRunningRunsForPlanFromSheet(step.SheetID); err != nil {
+	sheet, err := s.repo.GetSheet(step.SheetID)
+	if err != nil {
 		return model.TestSheetStep{}, err
 	}
-	return s.repo.UpdateStep(id, input)
+	updated, err := s.repo.UpdateStep(id, input)
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	if err := s.markPlanChanged(sheet.PlanID); err != nil {
+		return model.TestSheetStep{}, err
+	}
+	return updated, nil
 }
 
 func (s *Service) DeleteStep(id int64) error {
@@ -248,10 +275,14 @@ func (s *Service) DeleteStep(id int64) error {
 	if err != nil {
 		return err
 	}
-	if err := s.cancelRunningRunsForPlanFromSheet(step.SheetID); err != nil {
+	sheet, err := s.repo.GetSheet(step.SheetID)
+	if err != nil {
 		return err
 	}
-	return s.repo.DeleteStep(id)
+	if err := s.repo.DeleteStep(id); err != nil {
+		return err
+	}
+	return s.markPlanChanged(sheet.PlanID)
 }
 
 func (s *Service) DuplicateStep(id int64) (model.TestSheetStep, error) {
@@ -259,29 +290,39 @@ func (s *Service) DuplicateStep(id int64) (model.TestSheetStep, error) {
 	if err != nil {
 		return model.TestSheetStep{}, err
 	}
-	if err := s.cancelRunningRunsForPlanFromSheet(step.SheetID); err != nil {
+	sheet, err := s.repo.GetSheet(step.SheetID)
+	if err != nil {
 		return model.TestSheetStep{}, err
 	}
-	return s.repo.DuplicateStep(id)
+	duplicated, err := s.repo.DuplicateStep(id)
+	if err != nil {
+		return model.TestSheetStep{}, err
+	}
+	if err := s.markPlanChanged(sheet.PlanID); err != nil {
+		return model.TestSheetStep{}, err
+	}
+	return duplicated, nil
 }
 
 func (s *Service) ReorderSteps(sheetID int64, stepIDs []int64) error {
-	if _, err := s.repo.GetSheet(sheetID); err != nil {
-		return err
-	} else if err := s.cancelRunningRunsForPlanFromSheet(sheetID); err != nil {
+	sheet, err := s.repo.GetSheet(sheetID)
+	if err != nil {
 		return err
 	}
-	return s.repo.ReorderSteps(sheetID, stepIDs)
+	if err := s.repo.ReorderSteps(sheetID, stepIDs); err != nil {
+		return err
+	}
+	return s.markPlanChanged(sheet.PlanID)
 }
 
 func (s *Service) ReorderSheets(planID int64, sheetIDs []int64) error {
 	if _, err := s.repo.GetPlan(planID); err != nil {
 		return err
 	}
-	if err := s.cancelRunningRunsForPlan(planID); err != nil {
+	if err := s.repo.ReorderSheets(planID, sheetIDs); err != nil {
 		return err
 	}
-	return s.repo.ReorderSheets(planID, sheetIDs)
+	return s.markPlanChanged(planID)
 }
 
 func (s *Service) CreateRun(planID int64) (model.TestRun, error) {
@@ -446,15 +487,10 @@ func (s *Service) ensureRunEditable(runID int64) error {
 	return fmt.Errorf("Cette execution est terminee et ne peut plus etre modifiee.")
 }
 
-func (s *Service) cancelRunningRunsForPlanFromSheet(sheetID int64) error {
-	sheet, err := s.repo.GetSheet(sheetID)
-	if err != nil {
+func (s *Service) markPlanChanged(planID int64) error {
+	if err := s.repo.TouchPlan(planID); err != nil {
 		return err
 	}
-	return s.cancelRunningRunsForPlan(sheet.PlanID)
-}
-
-func (s *Service) cancelRunningRunsForPlan(planID int64) error {
 	runs, err := s.repo.ListPlanRuns(planID)
 	if err != nil {
 		return err

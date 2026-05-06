@@ -223,6 +223,17 @@ func (r *SQLiteRepository) GetPlan(id int64) (model.TestPlan, error) {
 	return scanPlan(row)
 }
 
+func (r *SQLiteRepository) TouchPlan(id int64) error {
+	res, err := r.db.Exec(`UPDATE test_plans SET updated_at = ? WHERE id = ?`, time.Now().UTC(), id)
+	if err != nil {
+		return err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (r *SQLiteRepository) UpdatePlan(id int64, input model.PlanInput) (model.TestPlan, error) {
 	res, err := r.db.Exec(`UPDATE test_plans SET name = ?, description = ?, mockup_settings = ?, updated_at = ? WHERE id = ?`,
 		input.Name, input.Description, input.MockupSettings, time.Now().UTC(), id)
