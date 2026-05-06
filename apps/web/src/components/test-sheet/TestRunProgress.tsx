@@ -2,6 +2,7 @@ import React from 'react';
 import { TestRunSheet } from '../../api/testSheet';
 import { Card } from '../ui/Card';
 import { StatusBadge } from './StatusBadge';
+import { getRunSheetProgress } from './runStatus';
 
 type Props = {
   status: string;
@@ -9,9 +10,9 @@ type Props = {
 };
 
 export function TestRunProgress({ status, sheets }: Props) {
-  const steps = sheets.flatMap((sheet) => sheet.steps ?? []);
-  const done = steps.filter((step) => step.status !== 'pending').length;
-  const total = steps.length;
+  const sheetProgress = sheets.map(getRunSheetProgress);
+  const done = sheetProgress.filter((item) => item.status !== 'pending').length;
+  const total = sheets.length;
   const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
   return (
@@ -19,7 +20,7 @@ export function TestRunProgress({ status, sheets }: Props) {
       <div className="run-progress-header">
         <div>
           <span className="section-kicker">Progression</span>
-          <strong>{done} / {total} etapes traitees</strong>
+          <strong>{done} / {total} tests traites</strong>
         </div>
         <StatusBadge status={status} />
       </div>
@@ -30,7 +31,7 @@ export function TestRunProgress({ status, sheets }: Props) {
         {(['pending', 'passed', 'failed', 'blocked', 'skipped'] as const).map((item) => (
           <div key={item}>
             <StatusBadge status={item} />
-            <strong>{steps.filter((step) => step.status === item).length}</strong>
+            <strong>{sheetProgress.filter((progress) => progress.status === item).length}</strong>
           </div>
         ))}
       </div>

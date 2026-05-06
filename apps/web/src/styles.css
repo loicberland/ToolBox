@@ -338,7 +338,7 @@ textarea {
 }
 
 .form-grid label,
-.run-card label {
+.run-step-detail label {
   display: grid;
   gap: 7px;
   color: #334e68;
@@ -371,14 +371,13 @@ textarea {
 
 .card-main h3,
 .test-sheet-card h3,
-.run-card h3 {
+.run-sheet-detail h3 {
   margin: 0 0 8px;
   font-size: 18px;
 }
 
 .card-main p,
-.test-sheet-card p,
-.run-card p {
+.test-sheet-card p {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
@@ -468,8 +467,7 @@ textarea {
   margin: 0;
 }
 
-.step-card-title,
-.run-step-title {
+.step-card-title {
   color: var(--text);
   font-size: 16px;
   font-weight: 800;
@@ -509,7 +507,7 @@ textarea {
 }
 
 .compact-definition-list,
-.run-card dl {
+.run-sheet-detail dl {
   display: grid;
   grid-template-columns: 110px 1fr;
   gap: 8px 12px;
@@ -517,14 +515,14 @@ textarea {
 }
 
 .compact-definition-list dt,
-.run-card dt {
+.run-sheet-detail dt {
   color: var(--muted);
   font-size: 13px;
   font-weight: 900;
 }
 
 .compact-definition-list dd,
-.run-card dd {
+.run-sheet-detail dd {
   margin: 0;
   color: #334e68;
 }
@@ -600,24 +598,15 @@ textarea {
 
 .run-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.35fr);
   gap: 18px;
   align-items: start;
 }
 
 .run-main,
-.run-side,
-.run-all-tests {
+.run-side {
   display: grid;
   gap: 18px;
-}
-
-.run-all-tests {
-  grid-column: 1 / -1;
-}
-
-.run-all-tests h3 {
-  margin: 0;
 }
 
 .run-progress-card {
@@ -664,17 +653,125 @@ textarea {
   background: var(--surface-soft);
 }
 
-.run-card {
+.run-sheet-list-card,
+.run-sheet-detail {
   display: grid;
   gap: 14px;
 }
 
-.run-step-list {
+.run-sheet-list {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
-.run-step-editor {
+.run-sheet-list-item,
+.run-action-list-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-soft);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.run-sheet-list-item {
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+
+.run-sheet-list-item:hover,
+.run-sheet-list-item:focus,
+.run-action-list-item:hover,
+.run-action-list-item:focus {
+  border-color: rgba(37, 99, 235, 0.45);
+  background: #eff6ff;
+  outline: none;
+}
+
+.run-sheet-list-item.active,
+.run-action-list-item.active {
+  border-color: rgba(37, 99, 235, 0.68);
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.run-list-order {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--primary-dark);
+  font-weight: 900;
+}
+
+.run-sheet-list-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.run-sheet-list-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.run-sheet-list-title strong {
+  min-width: 0;
+}
+
+.run-sheet-progress-summary {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.run-read-details {
+  display: grid;
+  gap: 8px;
+}
+
+.run-read-details details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface-soft);
+}
+
+.run-read-details summary {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.run-read-details .markdown-preview {
+  margin-top: 8px;
+}
+
+.run-action-list {
+  display: grid;
+  gap: 8px;
+}
+
+.run-action-title {
+  min-width: 0;
+}
+
+.run-action-title .markdown-preview--compact {
+  max-height: 58px;
+}
+
+.run-step-detail {
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -693,15 +790,6 @@ textarea {
   margin: 3px 0 0;
 }
 
-.run-step-title {
-  margin-top: 3px;
-}
-
-.run-card.current {
-  border-color: rgba(37, 99, 235, 0.45);
-  box-shadow: var(--shadow);
-}
-
 .run-card-header {
   display: flex;
   justify-content: space-between;
@@ -718,41 +806,6 @@ textarea {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-}
-
-.run-sheet-nav {
-  display: grid;
-  gap: 8px;
-}
-
-.run-sheet-nav-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-soft);
-}
-
-.run-sheet-nav-item.active {
-  border-color: rgba(37, 99, 235, 0.45);
-  background: #eff6ff;
-}
-
-.run-sheet-nav-item span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 800;
-}
-
-.run-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 14px;
 }
 
 .report-card {
@@ -867,9 +920,6 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .run-all-tests {
-    grid-column: auto;
-  }
 }
 
 @media (max-width: 720px) {
@@ -908,11 +958,7 @@ textarea {
   }
 
   .compact-definition-list,
-  .run-card dl {
-    grid-template-columns: 1fr;
-  }
-
-  .run-list {
+  .run-sheet-detail dl {
     grid-template-columns: 1fr;
   }
 }

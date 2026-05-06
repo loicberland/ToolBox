@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { testSheetApi, TestRun } from '../api/testSheet';
-import { TestRunSheetCard } from '../components/test-sheet/TestRunSheetCard';
 import { TestRunProgress } from '../components/test-sheet/TestRunProgress';
+import { TestRunSheetDetail } from '../components/test-sheet/TestRunSheetDetail';
+import { TestRunSheetList } from '../components/test-sheet/TestRunSheetList';
 import { Button } from '../components/ui/Button';
-import { Card, CardHeader } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/test-sheet/StatusBadge';
+import { getRunSheetProgress } from '../components/test-sheet/runStatus';
 
 type Props = {
   runId: number;
@@ -16,6 +17,7 @@ type Props = {
 export function TestRunPage({ runId, onBack, onReport }: Props) {
   const [run, setRun] = useState<TestRun | undefined>();
   const [error, setError] = useState('');
+  const [selectedSheetId, setSelectedSheetId] = useState<number | undefined>();
 
   const load = () => testSheetApi.getRun(runId).then(setRun).catch((err: Error) => setError(err.message));
 
@@ -23,19 +25,36 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
     load();
   }, [runId]);
 
-  const currentSheet = run?.sheets.find((sheet) => (sheet.steps ?? []).some((step) => step.status === 'pending')) ?? run?.sheets.find((sheet) => sheet.status === 'pending') ?? run?.sheets[0];
+  useEffect(() => {
+    if (!run?.sheets.length) {
+      setSelectedSheetId(undefined);
+      return;
+    }
+
+    const selectedSheetStillExists = run.sheets.some((sheet) => sheet.id === selectedSheetId);
+    if (selectedSheetStillExists) {
+      return;
+    }
+
+    const firstPending = run.sheets.find((sheet) => getRunSheetProgress(sheet).status === 'pending');
+    setSelectedSheetId((firstPending ?? run.sheets[0]).id);
+  }, [run, selectedSheetId]);
+
+  const selectedSheet = run?.sheets.find((sheet) => sheet.id === selectedSheetId);
+  const runFinished = run ? ['completed', 'finished'].includes(run.status) : false;
 
   return (
     <section className="workspace">
       <PageHeader
         eyebrow="Execution"
         title={run ? `#${run.id} - ${run.planName}` : 'Execution'}
-        description={currentSheet ? `Test courant : ${currentSheet.name}` : undefined}
+        description={selectedSheet ? `Test selectionne : ${selectedSheet.name}` : undefined}
         onBack={onBack}
         actions={(
           <div className="button-row">
+            {run && <StatusBadge status={run.status} />}
             <Button variant="secondary" type="button" onClick={() => onReport(runId)}>Rapport</Button>
-            <Button type="button" onClick={async () => { await testSheetApi.finishRun(runId); load(); }}>Terminer</Button>
+            {run && !runFinished && <Button type="button" onClick={async () => { await testSheetApi.finishRun(runId); await load(); }}>Terminer</Button>}
           </div>
         )}
       />
@@ -44,81 +63,25 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
         <div className="run-layout">
           <div className="run-main">
             <TestRunProgress status={run.status} sheets={run.sheets} />
-            {currentSheet && (
-              <TestRunSheetCard
-                sheet={currentSheet}
-                current
-                onSave={async (sheetId, input) => {
+            <TestRunSheetList sheets={run.sheets} selectedSheetId={selectedSheetId} onSelect={setSelectedSheetId} />
+          </div>
+          <aside className="run-side">
+            {selectedSheet && (
+              <TestRunSheetDetail
+                sheet={selectedSheet}
+                onSaveSheet={async (sheetId, input) => {
                   await testSheetApi.updateRunSheet(runId, sheetId, input);
-                  load();
+                  await load();
                 }}
                 onSaveStep={async (stepId, input) => {
                   await testSheetApi.updateRunStep(runId, stepId, input);
-                  load();
+                  await load();
                 }}
               />
             )}
-          </div>
-          <aside className="run-side">
-            <Card>
-              <CardHeader>
-                <div>
-                  <span className="section-kicker">Liste des tests</span>
-                  <h3>{run.sheets.length} fiches</h3>
-                </div>
-              </CardHeader>
-              <div className="run-sheet-nav">
-                {run.sheets.map((sheet) => (
-                  <div className={`run-sheet-nav-item ${sheet.id === currentSheet?.id ? 'active' : ''}`} key={sheet.id}>
-                    <span>{sheet.executionOrder}. {sheet.name}</span>
-                    <StatusBadge status={sheetStatus(sheet)} />
-                  </div>
-                ))}
-              </div>
-            </Card>
           </aside>
-          <div className="run-all-tests">
-            <h3>Toutes les fiches executees</h3>
-            <div className="run-list">
-              {run.sheets.map((sheet) => (
-                <TestRunSheetCard
-                  key={sheet.id}
-                  sheet={sheet}
-                  current={sheet.id === currentSheet?.id}
-                  onSave={async (sheetId, input) => {
-                    await testSheetApi.updateRunSheet(runId, sheetId, input);
-                    load();
-                  }}
-                  onSaveStep={async (stepId, input) => {
-                    await testSheetApi.updateRunStep(runId, stepId, input);
-                    load();
-                  }}
-                />
-              ))}
-            </div>
-          </div>
         </div>
       )}
     </section>
   );
-}
-
-function sheetStatus(sheet: TestRun['sheets'][number]) {
-  const steps = sheet.steps ?? [];
-  if (steps.length === 0) {
-    return sheet.status;
-  }
-  if (steps.some((step) => step.status === 'failed')) {
-    return 'failed';
-  }
-  if (steps.some((step) => step.status === 'blocked')) {
-    return 'blocked';
-  }
-  if (steps.some((step) => step.status === 'pending')) {
-    return 'pending';
-  }
-  if (steps.every((step) => step.status === 'skipped')) {
-    return 'skipped';
-  }
-  return 'passed';
 }
