@@ -6,6 +6,7 @@ const (
 	TestRunStatusPending   = "pending"
 	TestRunStatusRunning   = "running"
 	TestRunStatusCompleted = "completed"
+	TestRunStatusCanceled  = "canceled"
 	TestRunStatusArchived  = "archived"
 
 	RunSheetStatusPending = "pending"

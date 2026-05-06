@@ -455,7 +455,7 @@ func (r *SQLiteRepository) CreateRunWithSnapshot(planID int64) (model.TestRun, e
 		return model.TestRun{}, err
 	}
 	now := time.Now().UTC()
-	res, err := tx.Exec(`INSERT INTO test_runs (plan_id, plan_name, status, started_at) VALUES (?, ?, ?, ?)`, planID, planName, "running", now)
+	res, err := tx.Exec(`INSERT INTO test_runs (plan_id, plan_name, status, started_at) VALUES (?, ?, ?, ?)`, planID, planName, model.TestRunStatusRunning, now)
 	if err != nil {
 		return model.TestRun{}, err
 	}
@@ -676,6 +676,19 @@ func (r *SQLiteRepository) ArchiveRun(runID int64) (model.TestRun, error) {
 	return r.GetRun(runID)
 }
 
+func (r *SQLiteRepository) CancelRun(runID int64) (model.TestRun, error) {
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`UPDATE test_runs SET status = ?, finished_at = ? WHERE id = ? AND status = ?`,
+		model.TestRunStatusCanceled, now, runID, model.TestRunStatusRunning)
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.TestRun{}, sql.ErrNoRows
+	}
+	return r.GetRun(runID)
+}
+
 func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) {
 	rows, err := r.db.Query(`SELECT id, run_id, source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
 		FROM test_run_sheets WHERE run_id = ? ORDER BY execution_order ASC, id ASC`, runID)
@@ -705,9 +718,6 @@ func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) 
 }
 
 func (r *SQLiteRepository) UpdateRunSheet(runID, runSheetID int64, input model.RunSheetResultInput) (model.RunSheet, error) {
-	if err := r.markRunRunning(runID); err != nil {
-		return model.RunSheet{}, err
-	}
 	res, err := r.db.Exec(`UPDATE test_run_sheets SET status = ?, actual_result = ?, comment = ?, updated_at = ? WHERE id = ? AND run_id = ?`,
 		input.Status, input.ActualResult, input.Comment, time.Now().UTC(), runSheetID, runID)
 	if err != nil {
@@ -740,9 +750,6 @@ func (r *SQLiteRepository) ListRunSteps(runSheetID int64) ([]model.RunStep, erro
 }
 
 func (r *SQLiteRepository) UpdateRunStep(runID, runStepID int64, input model.RunStepResultInput) (model.RunStep, error) {
-	if err := r.markRunRunning(runID); err != nil {
-		return model.RunStep{}, err
-	}
 	res, err := r.db.Exec(`UPDATE test_run_steps SET status = ?, actual_result = ?, comment = ?, updated_at = ?
 		WHERE id = ? AND run_sheet_id IN (SELECT id FROM test_run_sheets WHERE run_id = ?)`,
 		input.Status, input.ActualResult, input.Comment, time.Now().UTC(), runStepID, runID)
@@ -759,7 +766,8 @@ func (r *SQLiteRepository) UpdateRunStep(runID, runStepID int64, input model.Run
 
 func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
 	now := time.Now().UTC()
-	res, err := r.db.Exec(`UPDATE test_runs SET status = ?, finished_at = ? WHERE id = ?`, model.TestRunStatusCompleted, now, runID)
+	res, err := r.db.Exec(`UPDATE test_runs SET status = ?, finished_at = ? WHERE id = ? AND status = ?`,
+		model.TestRunStatusCompleted, now, runID, model.TestRunStatusRunning)
 	if err != nil {
 		return model.TestRun{}, err
 	}
@@ -767,12 +775,6 @@ func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
 		return model.TestRun{}, sql.ErrNoRows
 	}
 	return r.GetRun(runID)
-}
-
-func (r *SQLiteRepository) markRunRunning(runID int64) error {
-	_, err := r.db.Exec(`UPDATE test_runs SET status = ? WHERE id = ? AND status NOT IN (?, ?)`,
-		model.TestRunStatusRunning, runID, model.TestRunStatusCompleted, model.TestRunStatusArchived)
-	return err
 }
 
 func (r *SQLiteRepository) nextSheetOrder(planID int64) (int, error) {

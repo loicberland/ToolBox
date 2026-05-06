@@ -668,6 +668,16 @@ textarea {
   color: var(--muted);
 }
 
+.readonly-notice {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--gray-soft);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .test-run-execution {
   display: grid;
   gap: 18px;

@@ -33,6 +33,7 @@ type Repository interface {
 	ListPlanSummaries() ([]model.TestPlanSummary, error)
 	ReplayRun(int64) (model.TestRun, error)
 	ArchiveRun(int64) (model.TestRun, error)
+	CancelRun(int64) (model.TestRun, error)
 	UpdateRunSheet(int64, int64, model.RunSheetResultInput) (model.RunSheet, error)
 	UpdateRunStep(int64, int64, model.RunStepResultInput) (model.RunStep, error)
 	FinishRun(int64) (model.TestRun, error)
@@ -269,7 +270,21 @@ func (s *Service) ArchiveRun(runID int64) (model.TestRun, error) {
 	return s.repo.ArchiveRun(runID)
 }
 
+func (s *Service) CancelRun(runID int64) (model.TestRun, error) {
+	run, err := s.repo.GetRun(runID)
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	if run.Status != model.TestRunStatusRunning {
+		return model.TestRun{}, fmt.Errorf("Cette execution est terminee et ne peut plus etre modifiee.")
+	}
+	return s.repo.CancelRun(runID)
+}
+
 func (s *Service) UpdateRunSheet(runID, runSheetID int64, input model.RunSheetResultInput) (model.RunSheet, error) {
+	if err := s.ensureRunEditable(runID); err != nil {
+		return model.RunSheet{}, err
+	}
 	if !isAllowedStatus(input.Status) {
 		return model.RunSheet{}, fmt.Errorf("invalid run sheet status")
 	}
@@ -277,6 +292,9 @@ func (s *Service) UpdateRunSheet(runID, runSheetID int64, input model.RunSheetRe
 }
 
 func (s *Service) UpdateRunStep(runID, runStepID int64, input model.RunStepResultInput) (model.RunStep, error) {
+	if err := s.ensureRunEditable(runID); err != nil {
+		return model.RunStep{}, err
+	}
 	if !isAllowedStatus(input.Status) {
 		return model.RunStep{}, fmt.Errorf("invalid run step status")
 	}
@@ -284,6 +302,9 @@ func (s *Service) UpdateRunStep(runID, runStepID int64, input model.RunStepResul
 }
 
 func (s *Service) FinishRun(runID int64) (model.TestRun, error) {
+	if err := s.ensureRunEditable(runID); err != nil {
+		return model.TestRun{}, err
+	}
 	return s.repo.FinishRun(runID)
 }
 
@@ -360,6 +381,17 @@ func isAllowedStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func (s *Service) ensureRunEditable(runID int64) error {
+	run, err := s.repo.GetRun(runID)
+	if err != nil {
+		return err
+	}
+	if run.Status == model.TestRunStatusRunning {
+		return nil
+	}
+	return fmt.Errorf("Cette execution est terminee et ne peut plus etre modifiee.")
 }
 
 func IsNotFound(err error) bool {

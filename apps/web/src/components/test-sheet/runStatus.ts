@@ -1,4 +1,4 @@
-import { TestRunSheet, TestRunStep } from '../../api/testSheet';
+import { TestRunSheet, TestRunStatus, TestRunStep } from '../../api/testSheet';
 
 export type RunItemStatus = TestRunSheet['status'];
 
@@ -67,4 +67,12 @@ export function getRunSheetProgressSummary(sheet: TestRunSheet) {
   }
 
   return parts.join(' - ');
+}
+
+export function isRunEditable(status?: TestRunStatus | string) {
+  return status === 'running';
+}
+
+export function isRunReadOnly(status?: TestRunStatus | string) {
+  return Boolean(status) && !isRunEditable(status);
 }

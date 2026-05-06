@@ -44,7 +44,7 @@ export type TestRun = {
   sheets: TestRunSheet[];
 };
 
-export type TestRunStatus = 'pending' | 'running' | 'completed' | 'archived';
+export type TestRunStatus = 'pending' | 'running' | 'completed' | 'canceled' | 'archived';
 
 export type TestRunSummary = {
   id: number;
@@ -161,6 +161,7 @@ export const testSheetApi = {
   getRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}`),
   replayRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/replay`, { method: 'POST' }),
   archiveRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/archive`, { method: 'PUT' }),
+  cancelRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/cancel`, { method: 'PUT' }),
   updateRunSheet: (runId: number, runSheetId: number, input: RunSheetInput) =>
     request<TestRunSheet>(`/test-sheet/runs/${runId}/sheets/${runSheetId}`, jsonRequest('PUT', input)),
   updateRunStep: (runId: number, runStepId: number, input: RunStepInput) =>

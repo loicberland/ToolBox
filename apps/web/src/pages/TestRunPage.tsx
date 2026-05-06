@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/test-sheet/StatusBadge';
-import { getRunSheetProgress } from '../components/test-sheet/runStatus';
+import { getRunSheetProgress, isRunEditable, isRunReadOnly } from '../components/test-sheet/runStatus';
 
 type Props = {
   runId: number;
@@ -43,9 +43,10 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
   }, [run, selectedSheetId]);
 
   const selectedSheet = run?.sheets.find((sheet) => sheet.id === selectedSheetId);
-  const runFinished = run ? ['completed', 'finished', 'archived'].includes(run.status) : false;
+  const readOnly = run ? isRunReadOnly(run.status) : false;
+  const runEditable = run ? isRunEditable(run.status) : false;
   const finish = async () => {
-    if (!run) {
+    if (!run || !runEditable) {
       return;
     }
     if (hasPendingWork(run)) {
@@ -67,7 +68,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
           <div className="button-row">
             {run && <StatusBadge status={run.status} />}
             <Button variant="secondary" type="button" onClick={() => onReport(runId)}>Rapport</Button>
-            {run && !runFinished && <Button type="button" onClick={finish}>Terminer</Button>}
+            {runEditable && <Button type="button" onClick={finish}>Terminer</Button>}
           </div>
         )}
       />
@@ -85,11 +86,18 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
               {selectedSheet && (
                 <TestRunSheetDetail
                   sheet={selectedSheet}
+                  readOnly={readOnly}
                   onSaveSheet={async (sheetId, input) => {
+                    if (readOnly) {
+                      return;
+                    }
                     await testSheetApi.updateRunSheet(runId, sheetId, input);
                     await load();
                   }}
                   onSaveStep={async (stepId, input) => {
+                    if (readOnly) {
+                      return;
+                    }
                     await testSheetApi.updateRunStep(runId, stepId, input);
                     await load();
                   }}
@@ -106,6 +114,10 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
         confirmLabel="Terminer quand meme"
         onCancel={() => setConfirmFinish(false)}
         onConfirm={async () => {
+          if (!runEditable) {
+            setConfirmFinish(false);
+            return;
+          }
           await testSheetApi.finishRun(runId);
           setConfirmFinish(false);
           await load();
