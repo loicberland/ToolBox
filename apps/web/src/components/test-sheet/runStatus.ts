@@ -6,24 +6,27 @@ export function computeSheetStatusFromSteps(steps: TestRunStep[], fallback: RunI
   if (steps.length === 0) {
     return fallback;
   }
-  if (steps.some((step) => step.status === 'failed')) {
-    return 'failed';
-  }
-  if (steps.some((step) => step.status === 'blocked')) {
-    return 'blocked';
-  }
-  if (steps.every((step) => step.status === 'passed')) {
-    return 'passed';
-  }
-  if (steps.every((step) => step.status === 'skipped')) {
+
+  const nonSkippedSteps = steps.filter((step) => step.status !== 'skipped');
+  if (nonSkippedSteps.length === 0) {
     return 'skipped';
   }
-  return 'pending';
+  if (nonSkippedSteps.some((step) => step.status === 'failed')) {
+    return 'failed';
+  }
+  if (nonSkippedSteps.some((step) => step.status === 'blocked')) {
+    return 'blocked';
+  }
+  if (nonSkippedSteps.some((step) => step.status === 'pending')) {
+    return 'pending';
+  }
+  if (nonSkippedSteps.every((step) => step.status === 'passed')) {
+    return 'passed';
+  }
+  return fallback;
 }
 
-export function getRunSheetProgress(sheet: TestRunSheet) {
-  const steps = sheet.steps ?? [];
-
+export function getRunStepProgress(steps: TestRunStep[] = []) {
   return {
     total: steps.length,
     pending: steps.filter((step) => step.status === 'pending').length,
@@ -31,6 +34,14 @@ export function getRunSheetProgress(sheet: TestRunSheet) {
     failed: steps.filter((step) => step.status === 'failed').length,
     blocked: steps.filter((step) => step.status === 'blocked').length,
     skipped: steps.filter((step) => step.status === 'skipped').length,
+    done: steps.filter((step) => step.status !== 'pending').length,
+  };
+}
+
+export function getRunSheetProgress(sheet: TestRunSheet) {
+  const steps = sheet.steps ?? [];
+  return {
+    ...getRunStepProgress(steps),
     status: computeSheetStatusFromSteps(steps, sheet.status),
   };
 }

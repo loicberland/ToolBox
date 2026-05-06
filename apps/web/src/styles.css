@@ -807,6 +807,40 @@ textarea {
   background: var(--surface-soft);
 }
 
+.run-step-progress {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.run-step-progress-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-step-progress-header div {
+  display: grid;
+  gap: 4px;
+}
+
+.run-step-progress-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.run-step-progress-summary div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
 .run-step-header {
   display: flex;
   justify-content: space-between;
@@ -980,6 +1014,7 @@ textarea {
   .sheet-form,
   .step-form,
   .status-summary,
+  .run-step-progress-summary,
   .status-action-grid {
     grid-template-columns: 1fr;
   }

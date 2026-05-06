@@ -140,7 +140,7 @@
 
 .copyable-code-block pre {
   margin: 0;
-  padding-top: 2.4rem;
+  padding-right: 2.8rem;
 }
 
 .copy-code-button {
@@ -148,12 +148,26 @@
   top: 0.5rem;
   right: 0.5rem;
   z-index: 2;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--surface);
-  color: var(--text);
-  font-size: 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
   font-weight: 800;
   cursor: pointer;
+  opacity: 0.72;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.copy-code-button:hover,
+.copy-code-button:focus {
+  color: var(--text);
+  opacity: 1;
+  outline: none;
 }

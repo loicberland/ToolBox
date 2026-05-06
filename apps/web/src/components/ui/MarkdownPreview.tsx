@@ -49,8 +49,14 @@ function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="copyable-code-block">
-      <button className="copy-code-button" type="button" onClick={copy}>
-        {copied ? 'Copie' : 'Copier'}
+      <button
+        aria-label={copied ? 'Copie effectuee' : 'Copier'}
+        className="copy-code-button"
+        title={copied ? 'Copie effectuee' : 'Copier'}
+        type="button"
+        onClick={copy}
+      >
+        <span aria-hidden="true">{copied ? '✓' : '⧉'}</span>
       </button>
       <pre>{children}</pre>
     </div>

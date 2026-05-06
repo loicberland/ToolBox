@@ -6,6 +6,7 @@ import { MarkdownCollapsibleSection } from '../ui/MarkdownCollapsibleSection';
 import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
 import { SmartEllipsisText } from '../ui/SmartEllipsisText';
 import { StatusBadge } from './StatusBadge';
+import { TestRunStepProgress } from './TestRunStepProgress';
 import { getRunSheetProgress } from './runStatus';
 
 type Props = {
@@ -43,6 +44,8 @@ export function TestRunSheetDetail({ sheet, onSaveSheet, onSaveStep }: Props) {
           <h3>{sheet.executionOrder}. {sheet.name}</h3>
         </div>
       </header>
+
+      <TestRunStepProgress steps={sheet.steps ?? []} />
 
       <RunSheetReadDetails sheet={sheet} />
 
