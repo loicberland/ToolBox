@@ -3,6 +3,7 @@ import { TestPlan } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
+import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
 import { StatusBadge } from './StatusBadge';
 
 type Props = {
@@ -25,7 +26,7 @@ export function TestPlanCard({ plan, sheetCount, onEdit, onRun, onDuplicate, onD
       </div>
       <div className="card-main">
         <h3>{plan.name}</h3>
-        <p>{plan.description || 'Sans description'}</p>
+        {hasMarkdownContent(plan.description) ? <MarkdownPreview content={plan.description} compact /> : <p>Sans description</p>}
       </div>
       <div className="card-meta">
         <span>Mis a jour</span>

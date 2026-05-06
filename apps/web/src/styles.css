@@ -468,6 +468,13 @@ textarea {
   margin: 0;
 }
 
+.step-card-title,
+.run-step-title {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+}
+
 .test-sheet-card {
   display: grid;
   grid-template-columns: 44px 1fr;
@@ -676,6 +683,10 @@ textarea {
   margin: 3px 0 0;
 }
 
+.run-step-title {
+  margin-top: 3px;
+}
+
 .run-card.current {
   border-color: rgba(37, 99, 235, 0.45);
   box-shadow: var(--shadow);
@@ -759,10 +770,14 @@ textarea {
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #0f172a;
-  color: #e2e8f0;
-  white-space: pre-wrap;
+  background: var(--surface-soft);
+  color: var(--text);
   line-height: 1.55;
+}
+
+.report-preview > p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .actions {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
 
 type Props = {
   markdown: string;
@@ -20,7 +21,9 @@ export function ReportPreview({ markdown }: Props) {
         </div>
         <Button type="button" variant="secondary" onClick={copy} disabled={!markdown}>Copier</Button>
       </div>
-      <pre className="report-preview">{markdown || 'Chargement du rapport...'}</pre>
+      <div className="report-preview">
+        {hasMarkdownContent(markdown) ? <MarkdownPreview content={markdown} /> : <p>Chargement du rapport...</p>}
+      </div>
     </Card>
   );
 }

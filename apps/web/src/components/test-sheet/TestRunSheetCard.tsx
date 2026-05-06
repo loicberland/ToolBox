@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { RunSheetInput, RunStepInput, TestRunSheet, TestRunStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
 import { StatusBadge } from './StatusBadge';
 
 type Props = {
@@ -48,11 +49,11 @@ export function TestRunSheetCard({ sheet, current = false, onSave, onSaveStep }:
       </header>
       <dl>
         <dt>Prerequis</dt>
-        <dd>{sheet.prerequisites || '-'}</dd>
+        <dd>{hasMarkdownContent(sheet.prerequisites) ? <MarkdownPreview content={sheet.prerequisites} compact /> : '-'}</dd>
         <dt>Configuration</dt>
-        <dd>{sheet.config || '-'}</dd>
+        <dd>{hasMarkdownContent(sheet.config) ? <MarkdownPreview content={sheet.config} compact /> : '-'}</dd>
         <dt>Commande</dt>
-        <dd>{sheet.command || '-'}</dd>
+        <dd>{hasMarkdownContent(sheet.command) ? <MarkdownPreview content={sheet.command} compact /> : '-'}</dd>
       </dl>
       {sheet.steps && sheet.steps.length > 0 ? (
         <div className="run-step-list">
@@ -118,15 +119,21 @@ function RunStepEditor({ step, onSave }: { step: TestRunStep; onSave: (stepId: n
       <div className="run-step-header">
         <div>
           <span className="section-kicker">Etape {step.executionOrder}</span>
-          <h4>{step.field || 'Action de test'}</h4>
+          {hasMarkdownContent(step.field) ? (
+            <div className="run-step-title">
+              <MarkdownPreview content={step.field} compact />
+            </div>
+          ) : (
+            <h4>Action de test</h4>
+          )}
         </div>
         <StatusBadge status={value.status} />
       </div>
       <dl className="compact-definition-list">
         <dt>Action</dt>
-        <dd>{step.action || '-'}</dd>
+        <dd>{hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} compact /> : '-'}</dd>
         <dt>Attendu</dt>
-        <dd>{step.expectedResult || '-'}</dd>
+        <dd>{hasMarkdownContent(step.expectedResult) ? <MarkdownPreview content={step.expectedResult} compact /> : '-'}</dd>
       </dl>
       <div className="status-action-grid" aria-label="Changer le statut de l etape">
         <Button type="button" variant="success" size="sm" onClick={() => save({ ...value, status: 'passed' })}>Reussi</Button>
