@@ -101,6 +101,9 @@ func (r *SQLiteRepository) Migrate() error {
 			return err
 		}
 	}
+	if err := r.ensureNullableDateTimeColumn("test_plans", "deleted_at"); err != nil {
+		return err
+	}
 	return r.migrateLegacySteps()
 }
 
@@ -113,6 +116,18 @@ func (r *SQLiteRepository) ensureTextColumn(table, column string) error {
 		return nil
 	}
 	_, err = r.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT ''", table, column))
+	return err
+}
+
+func (r *SQLiteRepository) ensureNullableDateTimeColumn(table, column string) error {
+	exists, err := r.columnExists(table, column)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = r.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s DATETIME", table, column))
 	return err
 }
 
@@ -202,7 +217,7 @@ func (r *SQLiteRepository) CreatePlan(input model.PlanInput) (model.TestPlan, er
 }
 
 func (r *SQLiteRepository) ListPlans() ([]model.TestPlan, error) {
-	rows, err := r.db.Query(`SELECT id, name, description, mockup_settings, created_at, updated_at FROM test_plans ORDER BY updated_at DESC, id DESC`)
+	rows, err := r.db.Query(`SELECT id, name, description, mockup_settings, created_at, updated_at, deleted_at FROM test_plans WHERE deleted_at IS NULL ORDER BY updated_at DESC, id DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +234,7 @@ func (r *SQLiteRepository) ListPlans() ([]model.TestPlan, error) {
 }
 
 func (r *SQLiteRepository) GetPlan(id int64) (model.TestPlan, error) {
-	row := r.db.QueryRow(`SELECT id, name, description, mockup_settings, created_at, updated_at FROM test_plans WHERE id = ?`, id)
+	row := r.db.QueryRow(`SELECT id, name, description, mockup_settings, created_at, updated_at, deleted_at FROM test_plans WHERE id = ?`, id)
 	return scanPlan(row)
 }
 
@@ -247,6 +262,18 @@ func (r *SQLiteRepository) UpdatePlan(id int64, input model.PlanInput) (model.Te
 }
 
 func (r *SQLiteRepository) DeletePlan(id int64) error {
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`UPDATE test_plans SET deleted_at = ?, updated_at = ? WHERE id = ?`, now, now, id)
+	if err != nil {
+		return err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *SQLiteRepository) PermanentDeletePlan(id int64) error {
 	res, err := r.db.Exec(`DELETE FROM test_plans WHERE id = ?`, id)
 	if err != nil {
 		return err
@@ -255,6 +282,18 @@ func (r *SQLiteRepository) DeletePlan(id int64) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (r *SQLiteRepository) RestorePlan(id int64) (model.TestPlan, error) {
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`UPDATE test_plans SET deleted_at = NULL, updated_at = ? WHERE id = ?`, now, id)
+	if err != nil {
+		return model.TestPlan{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.TestPlan{}, sql.ErrNoRows
+	}
+	return r.GetPlan(id)
 }
 
 func (r *SQLiteRepository) CreateSheet(planID int64, input model.SheetInput) (model.TestSheet, error) {
@@ -558,8 +597,8 @@ func (r *SQLiteRepository) ListRunSummaries() ([]model.TestRunSummary, error) {
 	return r.listRunSummaries(``, nil)
 }
 
-func (r *SQLiteRepository) ListPlanSummaries() ([]model.TestPlanSummary, error) {
-	plans, err := r.ListPlans()
+func (r *SQLiteRepository) ListPlanSummaries(includeDeleted bool) ([]model.TestPlanSummary, error) {
+	plans, err := r.listPlans(includeDeleted)
 	if err != nil {
 		return nil, err
 	}
@@ -581,6 +620,7 @@ func (r *SQLiteRepository) ListPlanSummaries() ([]model.TestPlanSummary, error) 
 			SheetCount:  sheetCount,
 			RunCount:    len(runs),
 			UpdatedAt:   plan.UpdatedAt,
+			DeletedAt:   plan.DeletedAt,
 		}
 		if len(runs) > 0 {
 			latest := runs[0]
@@ -590,6 +630,29 @@ func (r *SQLiteRepository) ListPlanSummaries() ([]model.TestPlanSummary, error) 
 		summaries = append(summaries, summary)
 	}
 	return summaries, nil
+}
+
+func (r *SQLiteRepository) listPlans(includeDeleted bool) ([]model.TestPlan, error) {
+	query := `SELECT id, name, description, mockup_settings, created_at, updated_at, deleted_at FROM test_plans`
+	if !includeDeleted {
+		query += ` WHERE deleted_at IS NULL`
+	}
+	query += ` ORDER BY updated_at DESC, id DESC`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	plans := []model.TestPlan{}
+	for rows.Next() {
+		plan, err := scanPlan(rows)
+		if err != nil {
+			return nil, err
+		}
+		plans = append(plans, plan)
+	}
+	return plans, rows.Err()
 }
 
 func (r *SQLiteRepository) listRunSummaries(where string, arg any) ([]model.TestRunSummary, error) {
@@ -812,7 +875,11 @@ func (r *SQLiteRepository) nextStepOrder(sheetID int64) (int, error) {
 
 func scanPlan(scanner interface{ Scan(...any) error }) (model.TestPlan, error) {
 	var plan model.TestPlan
-	err := scanner.Scan(&plan.ID, &plan.Name, &plan.Description, &plan.MockupSettings, &plan.CreatedAt, &plan.UpdatedAt)
+	var deleted sql.NullTime
+	err := scanner.Scan(&plan.ID, &plan.Name, &plan.Description, &plan.MockupSettings, &plan.CreatedAt, &plan.UpdatedAt, &deleted)
+	if deleted.Valid {
+		plan.DeletedAt = &deleted.Time
+	}
 	return plan, err
 }
 
@@ -924,7 +991,8 @@ CREATE TABLE IF NOT EXISTS test_plans (
 	description TEXT NOT NULL DEFAULT '',
 	mockup_settings TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL,
-	updated_at DATETIME NOT NULL
+	updated_at DATETIME NOT NULL,
+	deleted_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS test_sheets (

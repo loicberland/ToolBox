@@ -17,12 +17,13 @@ const (
 )
 
 type TestPlan struct {
-	ID             int64     `json:"id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	MockupSettings string    `json:"mockupSettings"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID             int64      `json:"id"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	MockupSettings string     `json:"mockupSettings"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	DeletedAt      *time.Time `json:"deletedAt,omitempty"`
 }
 
 type TestSheet struct {
@@ -98,6 +99,7 @@ type TestPlanSummary struct {
 	RunCount    int             `json:"runCount"`
 	LatestRun   *TestRunSummary `json:"latestRun,omitempty"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
+	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
 }
 
 type RunSheet struct {

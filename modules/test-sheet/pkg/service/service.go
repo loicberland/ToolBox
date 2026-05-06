@@ -15,6 +15,8 @@ type Repository interface {
 	TouchPlan(int64) error
 	UpdatePlan(int64, model.PlanInput) (model.TestPlan, error)
 	DeletePlan(int64) error
+	PermanentDeletePlan(int64) error
+	RestorePlan(int64) (model.TestPlan, error)
 	CreateSheet(int64, model.SheetInput) (model.TestSheet, error)
 	ListSheets(int64) ([]model.TestSheet, error)
 	GetSheet(int64) (model.TestSheet, error)
@@ -32,7 +34,7 @@ type Repository interface {
 	GetRun(int64) (model.TestRun, error)
 	ListPlanRuns(int64) ([]model.TestRunSummary, error)
 	ListRunSummaries() ([]model.TestRunSummary, error)
-	ListPlanSummaries() ([]model.TestPlanSummary, error)
+	ListPlanSummaries(bool) ([]model.TestPlanSummary, error)
 	ReplayRun(int64) (model.TestRun, error)
 	ArchiveRun(int64) (model.TestRun, error)
 	CancelRun(int64) (model.TestRun, error)
@@ -81,7 +83,18 @@ func (s *Service) UpdatePlan(id int64, input model.PlanInput) (model.TestPlan, e
 }
 
 func (s *Service) DeletePlan(id int64) error {
-	return s.repo.DeletePlan(id)
+	if err := s.repo.DeletePlan(id); err != nil {
+		return err
+	}
+	return s.cancelRunningRunsForPlan(id)
+}
+
+func (s *Service) PermanentDeletePlan(id int64) error {
+	return s.repo.PermanentDeletePlan(id)
+}
+
+func (s *Service) RestorePlan(id int64) (model.TestPlan, error) {
+	return s.repo.RestorePlan(id)
 }
 
 func (s *Service) DuplicatePlan(id int64) (model.TestPlan, error) {
@@ -351,8 +364,8 @@ func (s *Service) ListRunSummaries() ([]model.TestRunSummary, error) {
 	return s.repo.ListRunSummaries()
 }
 
-func (s *Service) ListPlanSummaries() ([]model.TestPlanSummary, error) {
-	return s.repo.ListPlanSummaries()
+func (s *Service) ListPlanSummaries(includeDeleted bool) ([]model.TestPlanSummary, error) {
+	return s.repo.ListPlanSummaries(includeDeleted)
 }
 
 func (s *Service) ReplayRun(runID int64) (model.TestRun, error) {
@@ -491,6 +504,10 @@ func (s *Service) markPlanChanged(planID int64) error {
 	if err := s.repo.TouchPlan(planID); err != nil {
 		return err
 	}
+	return s.cancelRunningRunsForPlan(planID)
+}
+
+func (s *Service) cancelRunningRunsForPlan(planID int64) error {
 	runs, err := s.repo.ListPlanRuns(planID)
 	if err != nil {
 		return err

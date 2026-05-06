@@ -26,6 +26,8 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/plans/{planId}", h.getPlan).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans/{planId}", h.updatePlan).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/plans/{planId}", h.deletePlan).Methods(http.MethodDelete)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/permanent", h.permanentDeletePlan).Methods(http.MethodDelete)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/restore", h.restorePlan).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/duplicate", h.duplicatePlan).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets", h.listSheets).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets", h.createSheet).Methods(http.MethodPost)
@@ -56,8 +58,9 @@ func (h *Handler) listPlans(w http.ResponseWriter, _ *http.Request) {
 	respond(w, plans, err)
 }
 
-func (h *Handler) listPlanSummaries(w http.ResponseWriter, _ *http.Request) {
-	summaries, err := h.service.ListPlanSummaries()
+func (h *Handler) listPlanSummaries(w http.ResponseWriter, r *http.Request) {
+	includeDeleted := r.URL.Query().Get("includeDeleted") == "true"
+	summaries, err := h.service.ListPlanSummaries(includeDeleted)
 	respond(w, summaries, err)
 }
 
@@ -98,6 +101,23 @@ func (h *Handler) deletePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondNoContent(w, h.service.DeletePlan(id))
+}
+
+func (h *Handler) permanentDeletePlan(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.PermanentDeletePlan(id))
+}
+
+func (h *Handler) restorePlan(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	plan, err := h.service.RestorePlan(id)
+	respond(w, plan, err)
 }
 
 func (h *Handler) duplicatePlan(w http.ResponseWriter, r *http.Request) {

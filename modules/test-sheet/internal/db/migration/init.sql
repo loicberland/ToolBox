@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS test_plans (
 	description TEXT NOT NULL DEFAULT '',
 	mockup_settings TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL,
-	updated_at DATETIME NOT NULL
+	updated_at DATETIME NOT NULL,
+	deleted_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS test_sheets (

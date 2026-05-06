@@ -7,6 +7,7 @@ export type TestPlan = {
   mockupSettings: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
 };
 
 export type TestSheet = {
@@ -71,6 +72,7 @@ export type TestPlanSummary = {
   runCount: number;
   latestRun?: TestRunSummary;
   updatedAt: string;
+  deletedAt?: string;
 };
 
 export type TestRunSheet = {
@@ -137,11 +139,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const testSheetApi = {
   listPlans: () => request<TestPlan[]>('/test-sheet/plans'),
-  listPlanSummaries: () => request<TestPlanSummary[]>('/test-sheet/plans/summary'),
+  listPlanSummaries: (includeDeleted = false) => request<TestPlanSummary[]>(`/test-sheet/plans/summary${includeDeleted ? '?includeDeleted=true' : ''}`),
   createPlan: (input: PlanInput) => request<TestPlan>('/test-sheet/plans', jsonRequest('POST', input)),
   getPlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}`),
   updatePlan: (planId: number, input: PlanInput) => request<TestPlan>(`/test-sheet/plans/${planId}`, jsonRequest('PUT', input)),
   deletePlan: (planId: number) => request<void>(`/test-sheet/plans/${planId}`, { method: 'DELETE' }),
+  permanentDeletePlan: (planId: number) => request<void>(`/test-sheet/plans/${planId}/permanent`, { method: 'DELETE' }),
+  restorePlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}/restore`, { method: 'PUT' }),
   duplicatePlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}/duplicate`, { method: 'POST' }),
   listSheets: (planId: number) => request<TestSheet[]>(`/test-sheet/plans/${planId}/sheets`),
   createSheet: (planId: number, input: SheetInput) => request<TestSheet>(`/test-sheet/plans/${planId}/sheets`, jsonRequest('POST', input)),
