@@ -19,19 +19,68 @@ const statuses: TestRunStep['status'][] = ['pending', 'passed', 'failed', 'block
 
 export function TestRunSheetDetail({ sheet, onSaveSheet, onSaveStep }: Props) {
   const [openedStepId, setOpenedStepId] = useState<number | undefined>();
+  const [stepDrafts, setStepDrafts] = useState<Record<number, RunStepInput>>({});
   const progress = getRunSheetProgress(sheet);
-  const openedStep = (sheet.steps ?? []).find((step) => step.id === openedStepId);
 
-  const toggleStepWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>, stepId: number) => {
+  const getStepDraft = (step: TestRunStep): RunStepInput => stepDrafts[step.id] ?? {
+    status: step.status,
+    actualResult: step.actualResult,
+    comment: step.comment,
+  };
+
+  const updateStepDraft = (stepId: number, draft: RunStepInput) => {
+    setStepDrafts((current) => ({ ...current, [stepId]: draft }));
+  };
+
+  const removeStepDraft = (stepId: number) => {
+    setStepDrafts((current) => {
+      const next = { ...current };
+      delete next[stepId];
+      return next;
+    });
+  };
+
+  const toggleStep = async (step: TestRunStep) => {
+    if (openedStepId === step.id) {
+      await onSaveStep(step.id, getStepDraft(step));
+      removeStepDraft(step.id);
+      setOpenedStepId(undefined);
+      return;
+    }
+    if (openedStepId) {
+      const currentStep = (sheet.steps ?? []).find((item) => item.id === openedStepId);
+      if (currentStep) {
+        await onSaveStep(currentStep.id, getStepDraft(currentStep));
+        removeStepDraft(currentStep.id);
+      }
+    }
+    updateStepDraft(step.id, getStepDraft(step));
+    setOpenedStepId(step.id);
+  };
+
+  const toggleStepWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>, step: TestRunStep) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      setOpenedStepId(stepId === openedStepId ? undefined : stepId);
+      void toggleStep(step);
     }
   };
 
   useEffect(() => {
     setOpenedStepId(undefined);
+    setStepDrafts({});
   }, [sheet.id]);
+
+  useEffect(() => {
+    setStepDrafts((current) => {
+      const next: Record<number, RunStepInput> = {};
+      for (const step of sheet.steps ?? []) {
+        if (current[step.id]) {
+          next[step.id] = current[step.id];
+        }
+      }
+      return next;
+    });
+  }, [sheet.steps]);
 
   return (
     <Card className="run-sheet-detail">
@@ -52,32 +101,36 @@ export function TestRunSheetDetail({ sheet, onSaveSheet, onSaveStep }: Props) {
       {sheet.steps && sheet.steps.length > 0 ? (
         <div className="run-action-list">
           {sheet.steps.map((step) => (
-            <div
-              className={`run-action-list-item ${step.id === openedStepId ? 'active' : ''}`}
-              key={step.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setOpenedStepId(step.id === openedStepId ? undefined : step.id)}
-              onKeyDown={(event) => toggleStepWithKeyboard(event, step.id)}
-            >
-              <span className="run-list-order">{step.executionOrder}</span>
-              <div className="run-action-title">
-                <SmartEllipsisText text={hasMarkdownContent(step.action) ? step.action : 'Action non renseignee'} />
+            <React.Fragment key={step.id}>
+              <div
+                className={`run-action-list-item ${step.id === openedStepId ? 'active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => { void toggleStep(step); }}
+                onKeyDown={(event) => toggleStepWithKeyboard(event, step)}
+              >
+                <span className="run-list-order">{step.executionOrder}</span>
+                <div className="run-action-title">
+                  <SmartEllipsisText text={hasMarkdownContent(step.action) ? step.action : 'Action non renseignee'} />
+                </div>
+                <StatusBadge status={getStepDraft(step).status} />
               </div>
-              <StatusBadge status={step.status} />
-            </div>
+              {step.id === openedStepId && (
+                <TestRunStepDetail
+                  draft={getStepDraft(step)}
+                  step={step}
+                  onDraftChange={(draft) => updateStepDraft(step.id, draft)}
+                  onSave={async (input) => {
+                    updateStepDraft(step.id, input);
+                    await onSaveStep(step.id, input);
+                  }}
+                />
+              )}
+            </React.Fragment>
           ))}
         </div>
       ) : (
         <RunSheetResultEditor sheet={sheet} onSave={onSaveSheet} />
-      )}
-
-      {openedStep && (
-        <TestRunStepDetail
-          step={openedStep}
-          onSave={onSaveStep}
-          onSaved={() => setOpenedStepId(undefined)}
-        />
       )}
     </Card>
   );
@@ -101,32 +154,28 @@ function RunSheetReadDetails({ sheet }: { sheet: TestRunSheet }) {
   );
 }
 
-function TestRunStepDetail({ step, onSave, onSaved }: { step: TestRunStep; onSave: (stepId: number, input: RunStepInput) => Promise<void>; onSaved: () => void }) {
-  const [value, setValue] = useState<RunStepInput>({
-    status: step.status,
-    actualResult: step.actualResult,
-    comment: step.comment,
-  });
-  const [saving, setSaving] = useState(false);
+function TestRunStepDetail({
+  step,
+  draft,
+  onDraftChange,
+  onSave,
+}: {
+  step: TestRunStep;
+  draft: RunStepInput;
+  onDraftChange: (draft: RunStepInput) => void;
+  onSave: (input: RunStepInput) => Promise<void>;
+}) {
+  const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    setValue({
-      status: step.status,
-      actualResult: step.actualResult,
-      comment: step.comment,
-    });
-  }, [step]);
-
-  const save = async (input: RunStepInput = value) => {
-    setSaving(true);
+  const setStatusAndSave = async (status: TestRunStep['status']) => {
+    const nextDraft = { ...draft, status };
+    onDraftChange(nextDraft);
+    setIsSaving(true);
     try {
-      await onSave(step.id, input);
-    } catch (error) {
-      setSaving(false);
-      throw error;
+      await onSave(nextDraft);
+    } finally {
+      setIsSaving(false);
     }
-    setSaving(false);
-    onSaved();
   };
   const hasReadDetails = hasMarkdownContent(step.field) || hasMarkdownContent(step.expectedResult);
 
@@ -137,7 +186,7 @@ function TestRunStepDetail({ step, onSave, onSaved }: { step: TestRunStep; onSav
           <span className="section-kicker">Action {step.executionOrder}</span>
           {hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} /> : <h4>Etape sans action</h4>}
         </div>
-        <StatusBadge status={value.status} />
+        <StatusBadge status={draft.status} />
       </div>
       {hasReadDetails && (
         <dl className="compact-definition-list">
@@ -157,21 +206,18 @@ function TestRunStepDetail({ step, onSave, onSaved }: { step: TestRunStep; onSav
       )}
       <label>
         Resultat obtenu
-        <textarea value={value.actualResult} onChange={(event) => setValue({ ...value, actualResult: event.target.value })} />
+        <textarea value={draft.actualResult} onChange={(event) => onDraftChange({ ...draft, actualResult: event.target.value })} />
       </label>
       <label>
         Commentaire
-        <textarea value={value.comment} onChange={(event) => setValue({ ...value, comment: event.target.value })} />
+        <textarea value={draft.comment} onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })} />
       </label>
       <div className="status-action-grid" aria-label="Changer le statut de l action">
-        <Button type="button" variant="success" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'passed' })}>Reussi</Button>
-        <Button type="button" variant="danger" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'failed' })}>Echoue</Button>
-        <Button type="button" variant="warning" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'blocked' })}>Bloque</Button>
-        <Button type="button" variant="secondary" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'skipped' })}>Ignore</Button>
+        <Button type="button" variant="success" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('passed'); }}>Reussi</Button>
+        <Button type="button" variant="danger" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('failed'); }}>Echoue</Button>
+        <Button type="button" variant="warning" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('blocked'); }}>Bloque</Button>
+        <Button type="button" variant="secondary" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('skipped'); }}>Ignore</Button>
       </div>
-      <Button type="button" disabled={saving} onClick={() => save()}>
-        {saving ? 'Sauvegarde...' : 'Sauvegarder'}
-      </Button>
     </div>
   );
 }

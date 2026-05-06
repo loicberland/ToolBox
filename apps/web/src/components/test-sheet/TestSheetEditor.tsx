@@ -174,15 +174,23 @@ export function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSa
             onDelete={deleteStep}
             onDuplicate={duplicateStep}
             onMove={moveStep}
+            editingStepId={stepEditorMode === 'edit' ? editingStep?.id : undefined}
+            renderEditor={(step) => (
+              <TestStepForm
+                step={step}
+                nextOrder={nextStepOrder}
+                onSubmit={saveStep}
+                onCancel={closeStepEditor}
+              />
+            )}
           />
           {stepEditorMode === 'closed' && (
             <div className="add-sheet-row">
               <Button type="button" onClick={openCreateStep}>+ Ajouter une etape</Button>
             </div>
           )}
-          {stepEditorMode !== 'closed' && (
+          {stepEditorMode === 'create' && (
             <TestStepForm
-              step={stepEditorMode === 'edit' ? editingStep : undefined}
               nextOrder={nextStepOrder}
               onSubmit={saveStep}
               onCancel={closeStepEditor}

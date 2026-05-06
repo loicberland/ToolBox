@@ -143,6 +143,19 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 await testSheetApi.reorderSheets(effectivePlanId, next.map((item) => item.id));
                 await refreshSheets();
               }}
+              editingSheetId={sheetEditorMode === 'edit' ? editingSheet?.id : undefined}
+              renderEditor={(sheet) => (
+                <TestSheetEditor
+                  mode="edit"
+                  planId={effectivePlanId}
+                  sheet={sheet}
+                  nextOrder={nextOrder}
+                  onCancel={closeEditor}
+                  onSaved={afterSheetSaved}
+                  onCreated={afterSheetCreated}
+                  onRefresh={refreshSheets}
+                />
+              )}
             />
 
             {sheetEditorMode === 'closed' && (
@@ -151,9 +164,9 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               </div>
             )}
 
-            {sheetEditorMode !== 'closed' && (
+            {sheetEditorMode === 'create' && (
               <TestSheetEditor
-                mode={sheetEditorMode === 'create' ? 'create' : 'edit'}
+                mode="create"
                 planId={effectivePlanId}
                 sheet={editingSheet}
                 nextOrder={nextOrder}

@@ -8,25 +8,29 @@ type Props = {
   onDelete: (sheet: TestSheet) => void;
   onDuplicate: (sheet: TestSheet) => void;
   onMove: (sheet: TestSheet, direction: -1 | 1) => void;
+  editingSheetId?: number;
+  renderEditor?: (sheet: TestSheet) => React.ReactNode;
 };
 
-export function TestSheetList({ sheets, onEdit, onDelete, onDuplicate, onMove }: Props) {
+export function TestSheetList({ sheets, onEdit, onDelete, onDuplicate, onMove, editingSheetId, renderEditor }: Props) {
   if (sheets.length === 0) {
     return null;
   }
   return (
     <div className="sheet-list">
       {sheets.map((sheet, index) => (
-        <TestSheetCard
-          key={sheet.id}
-          sheet={sheet}
-          index={index}
-          total={sheets.length}
-          onEdit={() => onEdit(sheet)}
-          onDelete={() => onDelete(sheet)}
-          onDuplicate={() => onDuplicate(sheet)}
-          onMove={(direction) => onMove(sheet, direction)}
-        />
+        <React.Fragment key={sheet.id}>
+          <TestSheetCard
+            sheet={sheet}
+            index={index}
+            total={sheets.length}
+            onEdit={() => onEdit(sheet)}
+            onDelete={() => onDelete(sheet)}
+            onDuplicate={() => onDuplicate(sheet)}
+            onMove={(direction) => onMove(sheet, direction)}
+          />
+          {sheet.id === editingSheetId && renderEditor?.(sheet)}
+        </React.Fragment>
       ))}
     </div>
   );
