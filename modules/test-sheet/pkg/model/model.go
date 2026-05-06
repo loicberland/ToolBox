@@ -3,6 +3,11 @@ package model
 import "time"
 
 const (
+	TestRunStatusPending   = "pending"
+	TestRunStatusRunning   = "running"
+	TestRunStatusCompleted = "completed"
+	TestRunStatusArchived  = "archived"
+
 	RunSheetStatusPending = "pending"
 	RunSheetStatusPassed  = "passed"
 	RunSheetStatusFailed  = "failed"
@@ -65,6 +70,33 @@ type TestRun struct {
 	StartedAt  time.Time  `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
 	Sheets     []RunSheet `json:"sheets,omitempty"`
+}
+
+type TestRunSummary struct {
+	ID           int64      `json:"id"`
+	PlanID       int64      `json:"planId"`
+	PlanName     string     `json:"planName"`
+	Status       string     `json:"status"`
+	StartedAt    time.Time  `json:"startedAt"`
+	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
+	TotalSheets  int        `json:"totalSheets"`
+	TotalSteps   int        `json:"totalSteps"`
+	PendingSteps int        `json:"pendingSteps"`
+	PassedSteps  int        `json:"passedSteps"`
+	FailedSteps  int        `json:"failedSteps"`
+	BlockedSteps int        `json:"blockedSteps"`
+	SkippedSteps int        `json:"skippedSteps"`
+}
+
+type TestPlanSummary struct {
+	ID          int64           `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Status      string          `json:"status"`
+	SheetCount  int             `json:"sheetCount"`
+	RunCount    int             `json:"runCount"`
+	LatestRun   *TestRunSummary `json:"latestRun,omitempty"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
 }
 
 type RunSheet struct {

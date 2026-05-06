@@ -38,10 +38,39 @@ export type TestRun = {
   id: number;
   planId: number;
   planName: string;
-  status: string;
+  status: TestRunStatus | string;
   startedAt: string;
   finishedAt?: string;
   sheets: TestRunSheet[];
+};
+
+export type TestRunStatus = 'pending' | 'running' | 'completed' | 'archived';
+
+export type TestRunSummary = {
+  id: number;
+  planId: number;
+  planName: string;
+  status: TestRunStatus;
+  startedAt: string;
+  finishedAt?: string;
+  totalSheets: number;
+  totalSteps: number;
+  pendingSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  blockedSteps: number;
+  skippedSteps: number;
+};
+
+export type TestPlanSummary = {
+  id: number;
+  name: string;
+  description: string;
+  status: TestRunStatus | 'pending';
+  sheetCount: number;
+  runCount: number;
+  latestRun?: TestRunSummary;
+  updatedAt: string;
 };
 
 export type TestRunSheet = {
@@ -108,6 +137,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const testSheetApi = {
   listPlans: () => request<TestPlan[]>('/test-sheet/plans'),
+  listPlanSummaries: () => request<TestPlanSummary[]>('/test-sheet/plans/summary'),
   createPlan: (input: PlanInput) => request<TestPlan>('/test-sheet/plans', jsonRequest('POST', input)),
   getPlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}`),
   updatePlan: (planId: number, input: PlanInput) => request<TestPlan>(`/test-sheet/plans/${planId}`, jsonRequest('PUT', input)),
@@ -126,7 +156,11 @@ export const testSheetApi = {
   duplicateStep: (stepId: number) => request<TestSheetStep>(`/test-sheet/steps/${stepId}/duplicate`, { method: 'POST' }),
   reorderSteps: (sheetId: number, stepIds: number[]) => request<void>(`/test-sheet/sheets/${sheetId}/steps/reorder`, jsonRequest('PUT', { stepIds })),
   createRun: (planId: number) => request<TestRun>(`/test-sheet/plans/${planId}/runs`, { method: 'POST' }),
+  listPlanRuns: (planId: number) => request<TestRunSummary[]>(`/test-sheet/plans/${planId}/runs`),
+  listRunSummaries: () => request<TestRunSummary[]>('/test-sheet/runs'),
   getRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}`),
+  replayRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/replay`, { method: 'POST' }),
+  archiveRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/archive`, { method: 'PUT' }),
   updateRunSheet: (runId: number, runSheetId: number, input: RunSheetInput) =>
     request<TestRunSheet>(`/test-sheet/runs/${runId}/sheets/${runSheetId}`, jsonRequest('PUT', input)),
   updateRunStep: (runId: number, runStepId: number, input: RunStepInput) =>

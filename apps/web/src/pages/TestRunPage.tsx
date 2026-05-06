@@ -4,6 +4,7 @@ import { TestRunProgress } from '../components/test-sheet/TestRunProgress';
 import { TestRunSheetDetail } from '../components/test-sheet/TestRunSheetDetail';
 import { TestRunSheetList } from '../components/test-sheet/TestRunSheetList';
 import { Button } from '../components/ui/Button';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/test-sheet/StatusBadge';
 import { getRunSheetProgress } from '../components/test-sheet/runStatus';
@@ -18,6 +19,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
   const [run, setRun] = useState<TestRun | undefined>();
   const [error, setError] = useState('');
   const [selectedSheetId, setSelectedSheetId] = useState<number | undefined>();
+  const [confirmFinish, setConfirmFinish] = useState(false);
 
   const load = () => testSheetApi.getRun(runId).then(setRun).catch((err: Error) => setError(err.message));
 
@@ -41,7 +43,18 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
   }, [run, selectedSheetId]);
 
   const selectedSheet = run?.sheets.find((sheet) => sheet.id === selectedSheetId);
-  const runFinished = run ? ['completed', 'finished'].includes(run.status) : false;
+  const runFinished = run ? ['completed', 'finished', 'archived'].includes(run.status) : false;
+  const finish = async () => {
+    if (!run) {
+      return;
+    }
+    if (hasPendingWork(run)) {
+      setConfirmFinish(true);
+      return;
+    }
+    await testSheetApi.finishRun(runId);
+    await load();
+  };
 
   return (
     <section className="workspace">
@@ -54,7 +67,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
           <div className="button-row">
             {run && <StatusBadge status={run.status} />}
             <Button variant="secondary" type="button" onClick={() => onReport(runId)}>Rapport</Button>
-            {run && !runFinished && <Button type="button" onClick={async () => { await testSheetApi.finishRun(runId); await load(); }}>Terminer</Button>}
+            {run && !runFinished && <Button type="button" onClick={finish}>Terminer</Button>}
           </div>
         )}
       />
@@ -86,6 +99,28 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmFinish}
+        title="Terminer l execution"
+        message="Il reste des fiches ou actions en attente. Certaines parties du plan de test n'ont pas ete terminees. Voulez-vous quand meme terminer cette execution ?"
+        confirmLabel="Terminer quand meme"
+        onCancel={() => setConfirmFinish(false)}
+        onConfirm={async () => {
+          await testSheetApi.finishRun(runId);
+          setConfirmFinish(false);
+          await load();
+        }}
+      />
     </section>
   );
+}
+
+function hasPendingWork(run: TestRun) {
+  return run.sheets.some((sheet) => {
+    const steps = sheet.steps ?? [];
+    if (steps.length === 0) {
+      return sheet.status === 'pending';
+    }
+    return steps.some((step) => step.status === 'pending');
+  });
 }

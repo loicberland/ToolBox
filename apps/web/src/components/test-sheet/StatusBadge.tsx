@@ -9,6 +9,7 @@ type Status =
   | 'skipped'
   | 'running'
   | 'completed'
+  | 'archived'
   | 'finished'
   | 'aborted'
   | 'draft'
@@ -22,6 +23,7 @@ const labels: Record<Status, string> = {
   skipped: 'Ignore',
   running: 'En cours',
   completed: 'Termine',
+  archived: 'Archive',
   finished: 'Termine',
   aborted: 'Abandonne',
   draft: 'Brouillon',
@@ -36,6 +38,7 @@ const tones: Record<Status, 'neutral' | 'blue' | 'green' | 'red' | 'orange' | 'g
   skipped: 'neutral',
   running: 'blue',
   completed: 'green',
+  archived: 'neutral',
   finished: 'green',
   aborted: 'red',
   draft: 'gray',

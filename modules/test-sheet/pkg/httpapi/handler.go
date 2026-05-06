@@ -21,6 +21,7 @@ func NewHandler(service *service.Service) *Handler {
 
 func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/plans", h.listPlans).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/plans/summary", h.listPlanSummaries).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans", h.createPlan).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}", h.getPlan).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans/{planId}", h.updatePlan).Methods(http.MethodPut)
@@ -39,7 +40,11 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/steps/{stepId}/duplicate", h.duplicateStep).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps/reorder", h.reorderSteps).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/runs", h.createRun).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/runs", h.listPlanRuns).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/runs", h.listRunSummaries).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/runs/{runId}", h.getRun).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/runs/{runId}/replay", h.replayRun).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/runs/{runId}/archive", h.archiveRun).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/sheets/{runSheetId}", h.updateRunSheet).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/steps/{runStepId}", h.updateRunStep).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/finish", h.finishRun).Methods(http.MethodPut)
@@ -49,6 +54,11 @@ func (h *Handler) Register(r *mux.Router) {
 func (h *Handler) listPlans(w http.ResponseWriter, _ *http.Request) {
 	plans, err := h.service.ListPlans()
 	respond(w, plans, err)
+}
+
+func (h *Handler) listPlanSummaries(w http.ResponseWriter, _ *http.Request) {
+	summaries, err := h.service.ListPlanSummaries()
+	respond(w, summaries, err)
 }
 
 func (h *Handler) createPlan(w http.ResponseWriter, r *http.Request) {
@@ -236,12 +246,44 @@ func (h *Handler) createRun(w http.ResponseWriter, r *http.Request) {
 	respondCreated(w, run, err)
 }
 
+func (h *Handler) listPlanRuns(w http.ResponseWriter, r *http.Request) {
+	planID, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	runs, err := h.service.ListPlanRuns(planID)
+	respond(w, runs, err)
+}
+
+func (h *Handler) listRunSummaries(w http.ResponseWriter, _ *http.Request) {
+	runs, err := h.service.ListRunSummaries()
+	respond(w, runs, err)
+}
+
 func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 	runID, ok := pathID(w, r, "runId")
 	if !ok {
 		return
 	}
 	run, err := h.service.GetRun(runID)
+	respond(w, run, err)
+}
+
+func (h *Handler) replayRun(w http.ResponseWriter, r *http.Request) {
+	runID, ok := pathID(w, r, "runId")
+	if !ok {
+		return
+	}
+	run, err := h.service.ReplayRun(runID)
+	respondCreated(w, run, err)
+}
+
+func (h *Handler) archiveRun(w http.ResponseWriter, r *http.Request) {
+	runID, ok := pathID(w, r, "runId")
+	if !ok {
+		return
+	}
+	run, err := h.service.ArchiveRun(runID)
 	respond(w, run, err)
 }
 

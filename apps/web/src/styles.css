@@ -357,6 +357,66 @@ textarea {
   gap: 18px;
 }
 
+.plan-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(150px, 200px) minmax(170px, 220px);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.plan-summary-list {
+  display: grid;
+  gap: 14px;
+}
+
+.test-plan-summary-card {
+  display: grid;
+  gap: 14px;
+}
+
+.plan-summary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.plan-summary-header h3 {
+  margin: 8px 0 0;
+}
+
+.plan-run-progress {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plan-run-progress.compact {
+  gap: 6px;
+}
+
+.plan-run-progress p {
+  margin: 0;
+}
+
+.run-history-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.run-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
 .test-plan-card {
   display: grid;
   gap: 16px;
@@ -1025,6 +1085,7 @@ textarea {
 
   .sheet-form,
   .step-form,
+  .plan-toolbar,
   .status-summary,
   .run-step-progress-summary,
   .status-action-grid {
@@ -1039,5 +1100,10 @@ textarea {
   .compact-definition-list,
   .run-sheet-detail dl {
     grid-template-columns: 1fr;
+  }
+
+  .plan-summary-header,
+  .run-history-item {
+    display: grid;
   }
 }

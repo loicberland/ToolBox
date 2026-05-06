@@ -539,6 +539,143 @@ func (r *SQLiteRepository) GetRun(runID int64) (model.TestRun, error) {
 	return run, nil
 }
 
+func (r *SQLiteRepository) ListPlanRuns(planID int64) ([]model.TestRunSummary, error) {
+	return r.listRunSummaries(`WHERE r.plan_id = ?`, planID)
+}
+
+func (r *SQLiteRepository) ListRunSummaries() ([]model.TestRunSummary, error) {
+	return r.listRunSummaries(``, nil)
+}
+
+func (r *SQLiteRepository) ListPlanSummaries() ([]model.TestPlanSummary, error) {
+	plans, err := r.ListPlans()
+	if err != nil {
+		return nil, err
+	}
+	summaries := make([]model.TestPlanSummary, 0, len(plans))
+	for _, plan := range plans {
+		runs, err := r.ListPlanRuns(plan.ID)
+		if err != nil {
+			return nil, err
+		}
+		var sheetCount int
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM test_sheets WHERE plan_id = ?`, plan.ID).Scan(&sheetCount); err != nil {
+			return nil, err
+		}
+		summary := model.TestPlanSummary{
+			ID:          plan.ID,
+			Name:        plan.Name,
+			Description: plan.Description,
+			Status:      model.TestRunStatusPending,
+			SheetCount:  sheetCount,
+			RunCount:    len(runs),
+			UpdatedAt:   plan.UpdatedAt,
+		}
+		if len(runs) > 0 {
+			latest := runs[0]
+			summary.LatestRun = &latest
+			summary.Status = normalizeRunStatus(latest.Status)
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries, nil
+}
+
+func (r *SQLiteRepository) listRunSummaries(where string, arg any) ([]model.TestRunSummary, error) {
+	query := `SELECT r.id, r.plan_id, r.plan_name, r.status, r.started_at, r.finished_at,
+		COUNT(DISTINCT rs.id) AS total_sheets,
+		COUNT(rst.id) AS total_steps,
+		COALESCE(SUM(CASE WHEN rst.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_steps,
+		COALESCE(SUM(CASE WHEN rst.status = 'passed' THEN 1 ELSE 0 END), 0) AS passed_steps,
+		COALESCE(SUM(CASE WHEN rst.status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_steps,
+		COALESCE(SUM(CASE WHEN rst.status = 'blocked' THEN 1 ELSE 0 END), 0) AS blocked_steps,
+		COALESCE(SUM(CASE WHEN rst.status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped_steps
+		FROM test_runs r
+		LEFT JOIN test_run_sheets rs ON rs.run_id = r.id
+		LEFT JOIN test_run_steps rst ON rst.run_sheet_id = rs.id ` + where + `
+		GROUP BY r.id
+		ORDER BY r.started_at DESC, r.id DESC`
+	var rows *sql.Rows
+	var err error
+	if where == "" {
+		rows, err = r.db.Query(query)
+	} else {
+		rows, err = r.db.Query(query, arg)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	summaries := []model.TestRunSummary{}
+	for rows.Next() {
+		summary, err := scanRunSummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries, rows.Err()
+}
+
+func (r *SQLiteRepository) ReplayRun(runID int64) (model.TestRun, error) {
+	source, err := r.GetRun(runID)
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	defer rollback(tx)
+	now := time.Now().UTC()
+	res, err := tx.Exec(`INSERT INTO test_runs (plan_id, plan_name, status, started_at) VALUES (?, ?, ?, ?)`,
+		source.PlanID, source.PlanName, model.TestRunStatusRunning, now)
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	newRunID, err := res.LastInsertId()
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	for _, sheet := range source.Sheets {
+		res, err := tx.Exec(`INSERT INTO test_run_sheets
+			(run_id, source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?)`,
+			newRunID, sheet.SourceSheetID, sheet.Name, sheet.Description, sheet.Prerequisites, sheet.Config, sheet.Command, sheet.Notes, sheet.Action, sheet.ExpectedResult, sheet.ExecutionOrder, model.RunSheetStatusPending, now, now)
+		if err != nil {
+			return model.TestRun{}, err
+		}
+		newRunSheetID, err := res.LastInsertId()
+		if err != nil {
+			return model.TestRun{}, err
+		}
+		for _, step := range sheet.Steps {
+			_, err := tx.Exec(`INSERT INTO test_run_steps
+				(run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, actual_result, comment, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, '', '', ?, ?)`,
+				newRunSheetID, step.SourceStepID, step.Action, step.Field, step.ExpectedResult, step.ExecutionOrder, model.RunSheetStatusPending, now, now)
+			if err != nil {
+				return model.TestRun{}, err
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return model.TestRun{}, err
+	}
+	return r.GetRun(newRunID)
+}
+
+func (r *SQLiteRepository) ArchiveRun(runID int64) (model.TestRun, error) {
+	res, err := r.db.Exec(`UPDATE test_runs SET status = ? WHERE id = ?`, model.TestRunStatusArchived, runID)
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.TestRun{}, sql.ErrNoRows
+	}
+	return r.GetRun(runID)
+}
+
 func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) {
 	rows, err := r.db.Query(`SELECT id, run_id, source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
 		FROM test_run_sheets WHERE run_id = ? ORDER BY execution_order ASC, id ASC`, runID)
@@ -568,6 +705,9 @@ func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) 
 }
 
 func (r *SQLiteRepository) UpdateRunSheet(runID, runSheetID int64, input model.RunSheetResultInput) (model.RunSheet, error) {
+	if err := r.markRunRunning(runID); err != nil {
+		return model.RunSheet{}, err
+	}
 	res, err := r.db.Exec(`UPDATE test_run_sheets SET status = ?, actual_result = ?, comment = ?, updated_at = ? WHERE id = ? AND run_id = ?`,
 		input.Status, input.ActualResult, input.Comment, time.Now().UTC(), runSheetID, runID)
 	if err != nil {
@@ -600,6 +740,9 @@ func (r *SQLiteRepository) ListRunSteps(runSheetID int64) ([]model.RunStep, erro
 }
 
 func (r *SQLiteRepository) UpdateRunStep(runID, runStepID int64, input model.RunStepResultInput) (model.RunStep, error) {
+	if err := r.markRunRunning(runID); err != nil {
+		return model.RunStep{}, err
+	}
 	res, err := r.db.Exec(`UPDATE test_run_steps SET status = ?, actual_result = ?, comment = ?, updated_at = ?
 		WHERE id = ? AND run_sheet_id IN (SELECT id FROM test_run_sheets WHERE run_id = ?)`,
 		input.Status, input.ActualResult, input.Comment, time.Now().UTC(), runStepID, runID)
@@ -616,7 +759,7 @@ func (r *SQLiteRepository) UpdateRunStep(runID, runStepID int64, input model.Run
 
 func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
 	now := time.Now().UTC()
-	res, err := r.db.Exec(`UPDATE test_runs SET status = ?, finished_at = ? WHERE id = ?`, "finished", now, runID)
+	res, err := r.db.Exec(`UPDATE test_runs SET status = ?, finished_at = ? WHERE id = ?`, model.TestRunStatusCompleted, now, runID)
 	if err != nil {
 		return model.TestRun{}, err
 	}
@@ -624,6 +767,12 @@ func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
 		return model.TestRun{}, sql.ErrNoRows
 	}
 	return r.GetRun(runID)
+}
+
+func (r *SQLiteRepository) markRunRunning(runID int64) error {
+	_, err := r.db.Exec(`UPDATE test_runs SET status = ? WHERE id = ? AND status NOT IN (?, ?)`,
+		model.TestRunStatusRunning, runID, model.TestRunStatusCompleted, model.TestRunStatusArchived)
+	return err
 }
 
 func (r *SQLiteRepository) nextSheetOrder(planID int64) (int, error) {
@@ -685,7 +834,40 @@ func scanRun(scanner interface{ Scan(...any) error }) (model.TestRun, error) {
 	if finished.Valid {
 		run.FinishedAt = &finished.Time
 	}
+	run.Status = normalizeRunStatus(run.Status)
 	return run, err
+}
+
+func scanRunSummary(scanner interface{ Scan(...any) error }) (model.TestRunSummary, error) {
+	var summary model.TestRunSummary
+	var finished sql.NullTime
+	err := scanner.Scan(
+		&summary.ID,
+		&summary.PlanID,
+		&summary.PlanName,
+		&summary.Status,
+		&summary.StartedAt,
+		&finished,
+		&summary.TotalSheets,
+		&summary.TotalSteps,
+		&summary.PendingSteps,
+		&summary.PassedSteps,
+		&summary.FailedSteps,
+		&summary.BlockedSteps,
+		&summary.SkippedSteps,
+	)
+	if finished.Valid {
+		summary.FinishedAt = &finished.Time
+	}
+	summary.Status = normalizeRunStatus(summary.Status)
+	return summary, err
+}
+
+func normalizeRunStatus(status string) string {
+	if status == "finished" {
+		return model.TestRunStatusCompleted
+	}
+	return status
 }
 
 func scanRunSheet(scanner interface{ Scan(...any) error }) (model.RunSheet, error) {

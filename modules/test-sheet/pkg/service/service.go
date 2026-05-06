@@ -28,6 +28,11 @@ type Repository interface {
 	ReorderSheets(int64, []int64) error
 	CreateRunWithSnapshot(int64) (model.TestRun, error)
 	GetRun(int64) (model.TestRun, error)
+	ListPlanRuns(int64) ([]model.TestRunSummary, error)
+	ListRunSummaries() ([]model.TestRunSummary, error)
+	ListPlanSummaries() ([]model.TestPlanSummary, error)
+	ReplayRun(int64) (model.TestRun, error)
+	ArchiveRun(int64) (model.TestRun, error)
 	UpdateRunSheet(int64, int64, model.RunSheetResultInput) (model.RunSheet, error)
 	UpdateRunStep(int64, int64, model.RunStepResultInput) (model.RunStep, error)
 	FinishRun(int64) (model.TestRun, error)
@@ -239,6 +244,29 @@ func (s *Service) CreateRun(planID int64) (model.TestRun, error) {
 
 func (s *Service) GetRun(runID int64) (model.TestRun, error) {
 	return s.repo.GetRun(runID)
+}
+
+func (s *Service) ListPlanRuns(planID int64) ([]model.TestRunSummary, error) {
+	if _, err := s.repo.GetPlan(planID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListPlanRuns(planID)
+}
+
+func (s *Service) ListRunSummaries() ([]model.TestRunSummary, error) {
+	return s.repo.ListRunSummaries()
+}
+
+func (s *Service) ListPlanSummaries() ([]model.TestPlanSummary, error) {
+	return s.repo.ListPlanSummaries()
+}
+
+func (s *Service) ReplayRun(runID int64) (model.TestRun, error) {
+	return s.repo.ReplayRun(runID)
+}
+
+func (s *Service) ArchiveRun(runID int64) (model.TestRun, error) {
+	return s.repo.ArchiveRun(runID)
 }
 
 func (s *Service) UpdateRunSheet(runID, runSheetID int64, input model.RunSheetResultInput) (model.RunSheet, error) {

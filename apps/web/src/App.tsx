@@ -60,6 +60,7 @@ const App = () => {
               <TestPlanListPage
                 onEdit={(planId) => setView({ name: 'test-plan-edit', planId })}
                 onRun={(runId) => setView({ name: 'test-run', runId })}
+                onReport={(runId) => setView({ name: 'test-report', runId })}
               />
             )}
             {view.name === 'test-plan-edit' && (
