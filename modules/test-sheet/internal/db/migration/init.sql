@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS test_plans (
 CREATE TABLE IF NOT EXISTS test_sheets (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	plan_id INTEGER NOT NULL,
+	group_id INTEGER,
 	name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	prerequisites TEXT NOT NULL DEFAULT '',
@@ -23,6 +24,18 @@ CREATE TABLE IF NOT EXISTS test_sheets (
 	expected_result TEXT NOT NULL DEFAULT '',
 	execution_order INTEGER NOT NULL DEFAULT 0,
 	mockup_settings TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE,
+	FOREIGN KEY (group_id) REFERENCES test_plan_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_plan_groups (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	plan_id INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	execution_order INTEGER NOT NULL DEFAULT 0,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
@@ -87,11 +100,14 @@ CREATE TABLE IF NOT EXISTS test_step_documents (
 CREATE TABLE IF NOT EXISTS test_runs (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	plan_id INTEGER NOT NULL,
+	group_id INTEGER,
 	plan_name TEXT NOT NULL,
+	group_name TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'running',
 	started_at DATETIME NOT NULL,
 	finished_at DATETIME,
-	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
+	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE,
+	FOREIGN KEY (group_id) REFERENCES test_plan_groups(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS test_run_sheets (

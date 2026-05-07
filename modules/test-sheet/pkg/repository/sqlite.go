@@ -101,13 +101,25 @@ func (r *SQLiteRepository) Migrate() error {
 			return err
 		}
 	}
+	if err := r.ensureTextColumn("test_runs", "group_name"); err != nil {
+		return err
+	}
 	if err := r.ensureNullableDateTimeColumn("test_plans", "deleted_at"); err != nil {
 		return err
 	}
 	if err := r.ensureIntegerColumn("test_run_evidences", "size_bytes"); err != nil {
 		return err
 	}
+	if err := r.ensureNullableIntegerColumn("test_sheets", "group_id"); err != nil {
+		return err
+	}
+	if err := r.ensureNullableIntegerColumn("test_runs", "group_id"); err != nil {
+		return err
+	}
 	if _, err := r.db.Exec(documentMigrationSQL); err != nil {
+		return err
+	}
+	if err := r.migrateDefaultGroups(); err != nil {
 		return err
 	}
 	return r.migrateLegacySteps()
@@ -146,6 +158,50 @@ func (r *SQLiteRepository) ensureIntegerColumn(table, column string) error {
 		return nil
 	}
 	_, err = r.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s INTEGER NOT NULL DEFAULT 0", table, column))
+	return err
+}
+
+func (r *SQLiteRepository) ensureNullableIntegerColumn(table, column string) error {
+	exists, err := r.columnExists(table, column)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = r.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s INTEGER", table, column))
+	return err
+}
+
+func (r *SQLiteRepository) migrateDefaultGroups() error {
+	_, err := r.db.Exec(`
+INSERT INTO test_plan_groups (plan_id, name, description, execution_order, created_at, updated_at)
+SELECT p.id, 'Sous-plan principal', '', 1, p.created_at, p.updated_at
+FROM test_plans p
+WHERE NOT EXISTS (SELECT 1 FROM test_plan_groups g WHERE g.plan_id = p.id);
+
+UPDATE test_sheets
+SET group_id = (
+	SELECT g.id FROM test_plan_groups g
+	WHERE g.plan_id = test_sheets.plan_id
+	ORDER BY g.execution_order ASC, g.id ASC
+	LIMIT 1
+)
+WHERE group_id IS NULL;
+
+UPDATE test_runs
+SET group_id = (
+	SELECT g.id FROM test_plan_groups g
+	WHERE g.plan_id = test_runs.plan_id
+	ORDER BY g.execution_order ASC, g.id ASC
+	LIMIT 1
+)
+WHERE group_id IS NULL;
+
+UPDATE test_runs
+SET group_name = COALESCE((SELECT g.name FROM test_plan_groups g WHERE g.id = test_runs.group_id), '')
+WHERE TRIM(group_name) = '';
+`)
 	return err
 }
 
@@ -231,6 +287,9 @@ func (r *SQLiteRepository) CreatePlan(input model.PlanInput) (model.TestPlan, er
 	if err != nil {
 		return model.TestPlan{}, err
 	}
+	if _, err := r.CreateGroup(id, model.GroupInput{Name: "Sous-plan principal", ExecutionOrder: 1}); err != nil {
+		return model.TestPlan{}, err
+	}
 	return r.GetPlan(id)
 }
 
@@ -314,9 +373,151 @@ func (r *SQLiteRepository) RestorePlan(id int64) (model.TestPlan, error) {
 	return r.GetPlan(id)
 }
 
-func (r *SQLiteRepository) CreateSheet(planID int64, input model.SheetInput) (model.TestSheet, error) {
+func (r *SQLiteRepository) CreateGroup(planID int64, input model.GroupInput) (model.TestGroup, error) {
 	if input.ExecutionOrder == 0 {
-		next, err := r.nextSheetOrder(planID)
+		next, err := r.nextGroupOrder(planID)
+		if err != nil {
+			return model.TestGroup{}, err
+		}
+		input.ExecutionOrder = next
+	}
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`INSERT INTO test_plan_groups (plan_id, name, description, execution_order, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, planID, input.Name, input.Description, input.ExecutionOrder, now, now)
+	if err != nil {
+		return model.TestGroup{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.TestGroup{}, err
+	}
+	return r.GetGroup(id)
+}
+
+func (r *SQLiteRepository) ListGroups(planID int64) ([]model.TestGroup, error) {
+	rows, err := r.db.Query(`SELECT id, plan_id, name, description, execution_order, created_at, updated_at
+		FROM test_plan_groups WHERE plan_id = ? ORDER BY execution_order ASC, id ASC`, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	groups := []model.TestGroup{}
+	for rows.Next() {
+		group, err := scanGroup(rows)
+		if err != nil {
+			return nil, err
+		}
+		runs, err := r.ListGroupRuns(group.ID)
+		if err != nil {
+			return nil, err
+		}
+		group.RunCount = len(runs)
+		if len(runs) > 0 {
+			latest := runs[0]
+			group.LatestRun = &latest
+		}
+		groups = append(groups, group)
+	}
+	return groups, rows.Err()
+}
+
+func (r *SQLiteRepository) GetGroup(id int64) (model.TestGroup, error) {
+	row := r.db.QueryRow(`SELECT id, plan_id, name, description, execution_order, created_at, updated_at
+		FROM test_plan_groups WHERE id = ?`, id)
+	group, err := scanGroup(row)
+	if err != nil {
+		return model.TestGroup{}, err
+	}
+	group.Sheets, err = r.ListSheetsByGroup(id)
+	if err != nil {
+		return model.TestGroup{}, err
+	}
+	runs, err := r.ListGroupRuns(id)
+	if err != nil {
+		return model.TestGroup{}, err
+	}
+	group.RunCount = len(runs)
+	if len(runs) > 0 {
+		latest := runs[0]
+		group.LatestRun = &latest
+	}
+	return group, nil
+}
+
+func (r *SQLiteRepository) UpdateGroup(id int64, input model.GroupInput) (model.TestGroup, error) {
+	res, err := r.db.Exec(`UPDATE test_plan_groups SET name = ?, description = ?, execution_order = ?, updated_at = ? WHERE id = ?`,
+		input.Name, input.Description, input.ExecutionOrder, time.Now().UTC(), id)
+	if err != nil {
+		return model.TestGroup{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.TestGroup{}, sql.ErrNoRows
+	}
+	return r.GetGroup(id)
+}
+
+func (r *SQLiteRepository) TouchGroup(id int64) error {
+	res, err := r.db.Exec(`UPDATE test_plan_groups SET updated_at = ? WHERE id = ?`, time.Now().UTC(), id)
+	if err != nil {
+		return err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *SQLiteRepository) DeleteGroup(id int64) error {
+	res, err := r.db.Exec(`DELETE FROM test_plan_groups WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *SQLiteRepository) ReorderGroups(planID int64, groupIDs []int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	for index, groupID := range groupIDs {
+		res, err := tx.Exec(`UPDATE test_plan_groups SET execution_order = ?, updated_at = ? WHERE id = ? AND plan_id = ?`,
+			index+1, time.Now().UTC(), groupID, planID)
+		if err != nil {
+			return err
+		}
+		if changed, _ := res.RowsAffected(); changed == 0 {
+			return sql.ErrNoRows
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *SQLiteRepository) DefaultGroupID(planID int64) (int64, error) {
+	var id int64
+	err := r.db.QueryRow(`SELECT id FROM test_plan_groups WHERE plan_id = ? ORDER BY execution_order ASC, id ASC LIMIT 1`, planID).Scan(&id)
+	return id, err
+}
+
+func (r *SQLiteRepository) CreateSheet(planID int64, input model.SheetInput) (model.TestSheet, error) {
+	groupID, err := r.DefaultGroupID(planID)
+	if err != nil {
+		return model.TestSheet{}, err
+	}
+	return r.CreateSheetInGroup(groupID, input)
+}
+
+func (r *SQLiteRepository) CreateSheetInGroup(groupID int64, input model.SheetInput) (model.TestSheet, error) {
+	group, err := r.GetGroup(groupID)
+	if err != nil {
+		return model.TestSheet{}, err
+	}
+	if input.ExecutionOrder == 0 {
+		next, err := r.nextSheetOrder(groupID)
 		if err != nil {
 			return model.TestSheet{}, err
 		}
@@ -324,9 +525,9 @@ func (r *SQLiteRepository) CreateSheet(planID int64, input model.SheetInput) (mo
 	}
 	now := time.Now().UTC()
 	res, err := r.db.Exec(`INSERT INTO test_sheets
-		(plan_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		planID, input.Name, input.Description, input.Prerequisites, input.Config, input.Command, input.Notes, input.Action, input.ExpectedResult, input.ExecutionOrder, input.MockupSettings, now, now)
+		(plan_id, group_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		group.PlanID, groupID, input.Name, input.Description, input.Prerequisites, input.Config, input.Command, input.Notes, input.Action, input.ExpectedResult, input.ExecutionOrder, input.MockupSettings, now, now)
 	if err != nil {
 		return model.TestSheet{}, err
 	}
@@ -338,7 +539,7 @@ func (r *SQLiteRepository) CreateSheet(planID int64, input model.SheetInput) (mo
 }
 
 func (r *SQLiteRepository) ListSheets(planID int64) ([]model.TestSheet, error) {
-	rows, err := r.db.Query(`SELECT id, plan_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at
+	rows, err := r.db.Query(`SELECT id, plan_id, COALESCE(group_id, 0), name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at
 		FROM test_sheets WHERE plan_id = ? ORDER BY execution_order ASC, id ASC`, planID)
 	if err != nil {
 		return nil, err
@@ -363,8 +564,34 @@ func (r *SQLiteRepository) ListSheets(planID int64) ([]model.TestSheet, error) {
 	return sheets, nil
 }
 
+func (r *SQLiteRepository) ListSheetsByGroup(groupID int64) ([]model.TestSheet, error) {
+	rows, err := r.db.Query(`SELECT id, plan_id, COALESCE(group_id, 0), name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at
+		FROM test_sheets WHERE group_id = ? ORDER BY execution_order ASC, id ASC`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	sheets, err := scanSheets(rows)
+	if err != nil {
+		return nil, err
+	}
+	for index := range sheets {
+		steps, err := r.ListSteps(sheets[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		sheets[index].Steps = steps
+		documents, err := r.ListSheetDocuments(sheets[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		sheets[index].Documents = documents
+	}
+	return sheets, nil
+}
+
 func (r *SQLiteRepository) GetSheet(id int64) (model.TestSheet, error) {
-	row := r.db.QueryRow(`SELECT id, plan_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at
+	row := r.db.QueryRow(`SELECT id, plan_id, COALESCE(group_id, 0), name, description, prerequisites, config, command, notes, action, expected_result, execution_order, mockup_settings, created_at, updated_at
 		FROM test_sheets WHERE id = ?`, id)
 	sheet, err := scanSheet(row)
 	if err != nil {
@@ -512,14 +739,22 @@ func (r *SQLiteRepository) ReorderSteps(sheetID int64, stepIDs []int64) error {
 }
 
 func (r *SQLiteRepository) ReorderSheets(planID int64, sheetIDs []int64) error {
+	groupID, err := r.DefaultGroupID(planID)
+	if err != nil {
+		return err
+	}
+	return r.ReorderGroupSheets(groupID, sheetIDs)
+}
+
+func (r *SQLiteRepository) ReorderGroupSheets(groupID int64, sheetIDs []int64) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer rollback(tx)
 	for index, sheetID := range sheetIDs {
-		res, err := tx.Exec(`UPDATE test_sheets SET execution_order = ?, updated_at = ? WHERE id = ? AND plan_id = ?`,
-			index+1, time.Now().UTC(), sheetID, planID)
+		res, err := tx.Exec(`UPDATE test_sheets SET execution_order = ?, updated_at = ? WHERE id = ? AND group_id = ?`,
+			index+1, time.Now().UTC(), sheetID, groupID)
 		if err != nil {
 			return err
 		}
@@ -638,18 +873,27 @@ func (r *SQLiteRepository) ListStepDocuments(stepID int64) ([]model.TestDocument
 }
 
 func (r *SQLiteRepository) CreateRunWithSnapshot(planID int64) (model.TestRun, error) {
+	groupID, err := r.DefaultGroupID(planID)
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	return r.CreateRunWithGroupSnapshot(groupID)
+}
+
+func (r *SQLiteRepository) CreateRunWithGroupSnapshot(groupID int64) (model.TestRun, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return model.TestRun{}, err
 	}
 	defer rollback(tx)
 
-	var planName string
-	if err := tx.QueryRow(`SELECT name FROM test_plans WHERE id = ?`, planID).Scan(&planName); err != nil {
+	var planID int64
+	var planName, groupName string
+	if err := tx.QueryRow(`SELECT p.id, p.name, g.name FROM test_plan_groups g INNER JOIN test_plans p ON p.id = g.plan_id WHERE g.id = ?`, groupID).Scan(&planID, &planName, &groupName); err != nil {
 		return model.TestRun{}, err
 	}
 	now := time.Now().UTC()
-	res, err := tx.Exec(`INSERT INTO test_runs (plan_id, plan_name, status, started_at) VALUES (?, ?, ?, ?)`, planID, planName, model.TestRunStatusRunning, now)
+	res, err := tx.Exec(`INSERT INTO test_runs (plan_id, group_id, plan_name, group_name, status, started_at) VALUES (?, ?, ?, ?, ?, ?)`, planID, groupID, planName, groupName, model.TestRunStatusRunning, now)
 	if err != nil {
 		return model.TestRun{}, err
 	}
@@ -658,7 +902,7 @@ func (r *SQLiteRepository) CreateRunWithSnapshot(planID int64) (model.TestRun, e
 		return model.TestRun{}, err
 	}
 	rows, err := tx.Query(`SELECT id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order
-		FROM test_sheets WHERE plan_id = ? ORDER BY execution_order ASC, id ASC`, planID)
+		FROM test_sheets WHERE group_id = ? ORDER BY execution_order ASC, id ASC`, groupID)
 	if err != nil {
 		return model.TestRun{}, err
 	}
@@ -722,9 +966,9 @@ func (r *SQLiteRepository) CreateRunWithSnapshot(planID int64) (model.TestRun, e
 func (r *SQLiteRepository) GetRun(runID int64) (model.TestRun, error) {
 	row := r.db.QueryRow(`SELECT r.id,
 		(SELECT COUNT(*) FROM test_runs numbered
-			WHERE numbered.plan_id = r.plan_id
+			WHERE numbered.group_id = r.group_id
 				AND (numbered.started_at < r.started_at OR (numbered.started_at = r.started_at AND numbered.id <= r.id))) AS run_number,
-		r.plan_id, r.plan_name, r.status, r.started_at, r.finished_at
+		r.plan_id, COALESCE(r.group_id, 0), r.plan_name, r.group_name, r.status, r.started_at, r.finished_at
 		FROM test_runs r WHERE r.id = ?`, runID)
 	run, err := scanRun(row)
 	if err != nil {
@@ -740,6 +984,10 @@ func (r *SQLiteRepository) GetRun(runID int64) (model.TestRun, error) {
 
 func (r *SQLiteRepository) ListPlanRuns(planID int64) ([]model.TestRunSummary, error) {
 	return r.listRunSummaries(`WHERE r.plan_id = ?`, planID)
+}
+
+func (r *SQLiteRepository) ListGroupRuns(groupID int64) ([]model.TestRunSummary, error) {
+	return r.listRunSummaries(`WHERE r.group_id = ?`, groupID)
 }
 
 func (r *SQLiteRepository) ListRunSummaries() ([]model.TestRunSummary, error) {
@@ -761,12 +1009,17 @@ func (r *SQLiteRepository) ListPlanSummaries(includeDeleted bool) ([]model.TestP
 		if err := r.db.QueryRow(`SELECT COUNT(*) FROM test_sheets WHERE plan_id = ?`, plan.ID).Scan(&sheetCount); err != nil {
 			return nil, err
 		}
+		var groupCount int
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM test_plan_groups WHERE plan_id = ?`, plan.ID).Scan(&groupCount); err != nil {
+			return nil, err
+		}
 		summary := model.TestPlanSummary{
 			ID:          plan.ID,
 			Name:        plan.Name,
 			Description: plan.Description,
 			Status:      model.TestRunStatusPending,
 			SheetCount:  sheetCount,
+			GroupCount:  groupCount,
 			RunCount:    len(runs),
 			UpdatedAt:   plan.UpdatedAt,
 			DeletedAt:   plan.DeletedAt,
@@ -806,10 +1059,10 @@ func (r *SQLiteRepository) listPlans(includeDeleted bool) ([]model.TestPlan, err
 
 func (r *SQLiteRepository) listRunSummaries(where string, arg any) ([]model.TestRunSummary, error) {
 	query := `WITH numbered_runs AS (
-			SELECT id, ROW_NUMBER() OVER (PARTITION BY plan_id ORDER BY started_at ASC, id ASC) AS run_number
+			SELECT id, ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY started_at ASC, id ASC) AS run_number
 			FROM test_runs
 		)
-		SELECT r.id, nr.run_number, r.plan_id, r.plan_name, r.status, r.started_at, r.finished_at,
+		SELECT r.id, nr.run_number, r.plan_id, COALESCE(r.group_id, 0), r.plan_name, r.group_name, r.status, r.started_at, r.finished_at,
 		COUNT(DISTINCT rs.id) AS total_sheets,
 		COUNT(rst.id) AS total_steps,
 		COALESCE(SUM(CASE WHEN rst.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_steps,
@@ -856,8 +1109,8 @@ func (r *SQLiteRepository) ReplayRun(runID int64) (model.TestRun, error) {
 	}
 	defer rollback(tx)
 	now := time.Now().UTC()
-	res, err := tx.Exec(`INSERT INTO test_runs (plan_id, plan_name, status, started_at) VALUES (?, ?, ?, ?)`,
-		source.PlanID, source.PlanName, model.TestRunStatusRunning, now)
+	res, err := tx.Exec(`INSERT INTO test_runs (plan_id, group_id, plan_name, group_name, status, started_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		source.PlanID, source.GroupID, source.PlanName, source.GroupName, model.TestRunStatusRunning, now)
 	if err != nil {
 		return model.TestRun{}, err
 	}
@@ -1178,9 +1431,20 @@ func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
 	return r.GetRun(runID)
 }
 
-func (r *SQLiteRepository) nextSheetOrder(planID int64) (int, error) {
+func (r *SQLiteRepository) nextGroupOrder(planID int64) (int, error) {
 	var next sql.NullInt64
-	if err := r.db.QueryRow(`SELECT MAX(execution_order) + 1 FROM test_sheets WHERE plan_id = ?`, planID).Scan(&next); err != nil {
+	if err := r.db.QueryRow(`SELECT MAX(execution_order) + 1 FROM test_plan_groups WHERE plan_id = ?`, planID).Scan(&next); err != nil {
+		return 0, err
+	}
+	if !next.Valid {
+		return 1, nil
+	}
+	return int(next.Int64), nil
+}
+
+func (r *SQLiteRepository) nextSheetOrder(groupID int64) (int, error) {
+	var next sql.NullInt64
+	if err := r.db.QueryRow(`SELECT MAX(execution_order) + 1 FROM test_sheets WHERE group_id = ?`, groupID).Scan(&next); err != nil {
 		return 0, err
 	}
 	if !next.Valid {
@@ -1210,6 +1474,12 @@ func scanPlan(scanner interface{ Scan(...any) error }) (model.TestPlan, error) {
 	return plan, err
 }
 
+func scanGroup(scanner interface{ Scan(...any) error }) (model.TestGroup, error) {
+	var group model.TestGroup
+	err := scanner.Scan(&group.ID, &group.PlanID, &group.Name, &group.Description, &group.ExecutionOrder, &group.CreatedAt, &group.UpdatedAt)
+	return group, err
+}
+
 func scanSheets(rows *sql.Rows) ([]model.TestSheet, error) {
 	sheets := []model.TestSheet{}
 	for rows.Next() {
@@ -1224,7 +1494,7 @@ func scanSheets(rows *sql.Rows) ([]model.TestSheet, error) {
 
 func scanSheet(scanner interface{ Scan(...any) error }) (model.TestSheet, error) {
 	var sheet model.TestSheet
-	err := scanner.Scan(&sheet.ID, &sheet.PlanID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Config, &sheet.Command, &sheet.Notes, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder, &sheet.MockupSettings, &sheet.CreatedAt, &sheet.UpdatedAt)
+	err := scanner.Scan(&sheet.ID, &sheet.PlanID, &sheet.GroupID, &sheet.Name, &sheet.Description, &sheet.Prerequisites, &sheet.Config, &sheet.Command, &sheet.Notes, &sheet.Action, &sheet.ExpectedResult, &sheet.ExecutionOrder, &sheet.MockupSettings, &sheet.CreatedAt, &sheet.UpdatedAt)
 	return sheet, err
 }
 
@@ -1255,7 +1525,7 @@ func scanDocument(scanner interface{ Scan(...any) error }) (model.TestDocument, 
 func scanRun(scanner interface{ Scan(...any) error }) (model.TestRun, error) {
 	var run model.TestRun
 	var finished sql.NullTime
-	err := scanner.Scan(&run.ID, &run.RunNumber, &run.PlanID, &run.PlanName, &run.Status, &run.StartedAt, &finished)
+	err := scanner.Scan(&run.ID, &run.RunNumber, &run.PlanID, &run.GroupID, &run.PlanName, &run.GroupName, &run.Status, &run.StartedAt, &finished)
 	if finished.Valid {
 		run.FinishedAt = &finished.Time
 	}
@@ -1270,7 +1540,9 @@ func scanRunSummary(scanner interface{ Scan(...any) error }) (model.TestRunSumma
 		&summary.ID,
 		&summary.RunNumber,
 		&summary.PlanID,
+		&summary.GroupID,
 		&summary.PlanName,
+		&summary.GroupName,
 		&summary.Status,
 		&summary.StartedAt,
 		&finished,
@@ -1356,6 +1628,7 @@ CREATE TABLE IF NOT EXISTS test_plans (
 CREATE TABLE IF NOT EXISTS test_sheets (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	plan_id INTEGER NOT NULL,
+	group_id INTEGER,
 	name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	prerequisites TEXT NOT NULL DEFAULT '',
@@ -1366,6 +1639,18 @@ CREATE TABLE IF NOT EXISTS test_sheets (
 	expected_result TEXT NOT NULL DEFAULT '',
 	execution_order INTEGER NOT NULL DEFAULT 0,
 	mockup_settings TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE,
+	FOREIGN KEY (group_id) REFERENCES test_plan_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_plan_groups (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	plan_id INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	execution_order INTEGER NOT NULL DEFAULT 0,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
@@ -1396,11 +1681,14 @@ CREATE TABLE IF NOT EXISTS test_attachments (
 CREATE TABLE IF NOT EXISTS test_runs (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	plan_id INTEGER NOT NULL,
+	group_id INTEGER,
 	plan_name TEXT NOT NULL,
+	group_name TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'running',
 	started_at DATETIME NOT NULL,
 	finished_at DATETIME,
-	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE
+	FOREIGN KEY (plan_id) REFERENCES test_plans(id) ON DELETE CASCADE,
+	FOREIGN KEY (group_id) REFERENCES test_plan_groups(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS test_run_sheets (

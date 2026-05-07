@@ -13,6 +13,7 @@ export type TestPlan = {
 export type TestSheet = {
   id: number;
   planId: number;
+  groupId: number;
   name: string;
   description: string;
   prerequisites: string;
@@ -25,6 +26,19 @@ export type TestSheet = {
   mockupSettings: string;
   steps?: TestSheetStep[];
   documents?: TestDocument[];
+};
+
+export type TestGroup = {
+  id: number;
+  planId: number;
+  name: string;
+  description: string;
+  executionOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  sheets?: TestSheet[];
+  latestRun?: TestRunSummary;
+  runCount: number;
 };
 
 export type TestSheetStep = {
@@ -64,7 +78,9 @@ export type TestRun = {
   id: number;
   runNumber: number;
   planId: number;
+  groupId: number;
   planName: string;
+  groupName: string;
   status: TestRunStatus | string;
   startedAt: string;
   finishedAt?: string;
@@ -77,7 +93,9 @@ export type TestRunSummary = {
   id: number;
   runNumber: number;
   planId: number;
+  groupId: number;
   planName: string;
+  groupName: string;
   status: TestRunStatus;
   startedAt: string;
   finishedAt?: string;
@@ -96,6 +114,7 @@ export type TestPlanSummary = {
   description: string;
   status: TestRunStatus | 'pending';
   sheetCount: number;
+  groupCount: number;
   runCount: number;
   latestRun?: TestRunSummary;
   updatedAt: string;
@@ -139,7 +158,8 @@ export type TestRunStep = {
 };
 
 export type PlanInput = Pick<TestPlan, 'name' | 'description' | 'mockupSettings'>;
-export type SheetInput = Omit<TestSheet, 'id' | 'planId'>;
+export type SheetInput = Omit<TestSheet, 'id' | 'planId' | 'groupId'>;
+export type GroupInput = Pick<TestGroup, 'name' | 'description' | 'executionOrder'>;
 export type RunSheetInput = Pick<TestRunSheet, 'status' | 'actualResult' | 'comment'>;
 export type StepInput = Omit<TestSheetStep, 'id' | 'sheetId'>;
 export type RunStepInput = Pick<TestRunStep, 'status' | 'actualResult' | 'comment'>;
@@ -178,8 +198,19 @@ export const testSheetApi = {
   permanentDeletePlan: (planId: number) => request<void>(`/test-sheet/plans/${planId}/permanent`, { method: 'DELETE' }),
   restorePlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}/restore`, { method: 'PUT' }),
   duplicatePlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}/duplicate`, { method: 'POST' }),
+  listGroups: (planId: number) => request<TestGroup[]>(`/test-sheet/plans/${planId}/groups`),
+  createGroup: (planId: number, input: GroupInput) => request<TestGroup>(`/test-sheet/plans/${planId}/groups`, jsonRequest('POST', input)),
+  getGroup: (groupId: number) => request<TestGroup>(`/test-sheet/groups/${groupId}`),
+  updateGroup: (groupId: number, input: GroupInput) => request<TestGroup>(`/test-sheet/groups/${groupId}`, jsonRequest('PUT', input)),
+  deleteGroup: (groupId: number) => request<void>(`/test-sheet/groups/${groupId}`, { method: 'DELETE' }),
+  duplicateGroup: (groupId: number, input: { targetPlanId?: number; name?: string } = {}) =>
+    request<TestGroup>(`/test-sheet/groups/${groupId}/duplicate`, jsonRequest('POST', input)),
+  reorderGroups: (planId: number, groupIds: number[]) => request<void>(`/test-sheet/plans/${planId}/groups/reorder`, jsonRequest('PUT', { groupIds })),
   listSheets: (planId: number) => request<TestSheet[]>(`/test-sheet/plans/${planId}/sheets`),
   createSheet: (planId: number, input: SheetInput) => request<TestSheet>(`/test-sheet/plans/${planId}/sheets`, jsonRequest('POST', input)),
+  listGroupSheets: (groupId: number) => request<TestSheet[]>(`/test-sheet/groups/${groupId}/sheets`),
+  createGroupSheet: (groupId: number, input: SheetInput) => request<TestSheet>(`/test-sheet/groups/${groupId}/sheets`, jsonRequest('POST', input)),
+  reorderGroupSheets: (groupId: number, sheetIds: number[]) => request<void>(`/test-sheet/groups/${groupId}/sheets/reorder`, jsonRequest('PUT', { sheetIds })),
   updateSheet: (sheetId: number, input: SheetInput) => request<TestSheet>(`/test-sheet/sheets/${sheetId}`, jsonRequest('PUT', input)),
   deleteSheet: (sheetId: number) => request<void>(`/test-sheet/sheets/${sheetId}`, { method: 'DELETE' }),
   duplicateSheet: (sheetId: number) => request<TestSheet>(`/test-sheet/sheets/${sheetId}/duplicate`, { method: 'POST' }),
@@ -199,7 +230,9 @@ export const testSheetApi = {
   duplicateStep: (stepId: number) => request<TestSheetStep>(`/test-sheet/steps/${stepId}/duplicate`, { method: 'POST' }),
   reorderSteps: (sheetId: number, stepIds: number[]) => request<void>(`/test-sheet/sheets/${sheetId}/steps/reorder`, jsonRequest('PUT', { stepIds })),
   createRun: (planId: number) => request<TestRun>(`/test-sheet/plans/${planId}/runs`, { method: 'POST' }),
+  createGroupRun: (groupId: number) => request<TestRun>(`/test-sheet/groups/${groupId}/runs`, { method: 'POST' }),
   listPlanRuns: (planId: number) => request<TestRunSummary[]>(`/test-sheet/plans/${planId}/runs`),
+  listGroupRuns: (groupId: number) => request<TestRunSummary[]>(`/test-sheet/groups/${groupId}/runs`),
   listRunSummaries: () => request<TestRunSummary[]>('/test-sheet/runs'),
   getRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}`),
   replayRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/replay`, { method: 'POST' }),

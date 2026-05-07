@@ -26,9 +26,23 @@ type TestPlan struct {
 	DeletedAt      *time.Time `json:"deletedAt,omitempty"`
 }
 
+type TestGroup struct {
+	ID             int64       `json:"id"`
+	PlanID         int64       `json:"planId"`
+	Name           string      `json:"name"`
+	Description    string      `json:"description"`
+	ExecutionOrder int         `json:"executionOrder"`
+	CreatedAt      time.Time   `json:"createdAt"`
+	UpdatedAt      time.Time   `json:"updatedAt"`
+	Sheets         []TestSheet `json:"sheets,omitempty"`
+	LatestRun      *TestRunSummary `json:"latestRun,omitempty"`
+	RunCount       int         `json:"runCount"`
+}
+
 type TestSheet struct {
 	ID             int64           `json:"id"`
 	PlanID         int64           `json:"planId"`
+	GroupID        int64           `json:"groupId"`
 	Name           string          `json:"name"`
 	Description    string          `json:"description"`
 	Prerequisites  string          `json:"prerequisites"`
@@ -83,7 +97,9 @@ type TestRun struct {
 	ID         int64      `json:"id"`
 	RunNumber  int        `json:"runNumber"`
 	PlanID     int64      `json:"planId"`
+	GroupID    int64      `json:"groupId"`
 	PlanName   string     `json:"planName"`
+	GroupName  string     `json:"groupName"`
 	Status     string     `json:"status"`
 	StartedAt  time.Time  `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
@@ -94,7 +110,9 @@ type TestRunSummary struct {
 	ID           int64      `json:"id"`
 	RunNumber    int        `json:"runNumber"`
 	PlanID       int64      `json:"planId"`
+	GroupID      int64      `json:"groupId"`
 	PlanName     string     `json:"planName"`
+	GroupName    string     `json:"groupName"`
 	Status       string     `json:"status"`
 	StartedAt    time.Time  `json:"startedAt"`
 	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
@@ -113,6 +131,7 @@ type TestPlanSummary struct {
 	Description string          `json:"description"`
 	Status      string          `json:"status"`
 	SheetCount  int             `json:"sheetCount"`
+	GroupCount  int             `json:"groupCount"`
 	RunCount    int             `json:"runCount"`
 	LatestRun   *TestRunSummary `json:"latestRun,omitempty"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
@@ -190,9 +209,21 @@ type SheetInput struct {
 	MockupSettings string `json:"mockupSettings"`
 }
 
+type GroupInput struct {
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	ExecutionOrder int    `json:"executionOrder"`
+}
+
+type DuplicateGroupInput struct {
+	TargetPlanID int64  `json:"targetPlanId"`
+	Name         string `json:"name"`
+}
+
 type ReorderInput struct {
 	SheetIDs []int64 `json:"sheetIds"`
 	StepIDs  []int64 `json:"stepIds"`
+	GroupIDs []int64 `json:"groupIds"`
 }
 
 type StepInput struct {

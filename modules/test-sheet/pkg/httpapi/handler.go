@@ -32,8 +32,20 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/plans/{planId}/duplicate", h.duplicatePlan).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/documents", h.listDocuments).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/documents", h.uploadDocument).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/groups", h.listGroups).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/groups", h.createGroup).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/groups/reorder", h.reorderGroups).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets", h.listSheets).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/sheets", h.createSheet).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}", h.getGroup).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}", h.updateGroup).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}", h.deleteGroup).Methods(http.MethodDelete)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}/duplicate", h.duplicateGroup).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}/sheets", h.listGroupSheets).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}/sheets", h.createGroupSheet).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}/sheets/reorder", h.reorderGroupSheets).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}/runs", h.createGroupRun).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/groups/{groupId}/runs", h.listGroupRuns).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}", h.updateSheet).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}", h.deleteSheet).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/duplicate", h.duplicateSheet).Methods(http.MethodPost)
@@ -174,6 +186,83 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 	respondCreated(w, document, err)
 }
 
+func (h *Handler) listGroups(w http.ResponseWriter, r *http.Request) {
+	planID, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	groups, err := h.service.ListGroups(planID)
+	respond(w, groups, err)
+}
+
+func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
+	planID, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	var input model.GroupInput
+	if !decode(w, r, &input) {
+		return
+	}
+	group, err := h.service.CreateGroup(planID, input)
+	respondCreated(w, group, err)
+}
+
+func (h *Handler) getGroup(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	group, err := h.service.GetGroup(groupID)
+	respond(w, group, err)
+}
+
+func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	var input model.GroupInput
+	if !decode(w, r, &input) {
+		return
+	}
+	group, err := h.service.UpdateGroup(groupID, input)
+	respond(w, group, err)
+}
+
+func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.DeleteGroup(groupID))
+}
+
+func (h *Handler) duplicateGroup(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	var input model.DuplicateGroupInput
+	if !decode(w, r, &input) {
+		return
+	}
+	group, err := h.service.DuplicateGroup(groupID, input)
+	respondCreated(w, group, err)
+}
+
+func (h *Handler) reorderGroups(w http.ResponseWriter, r *http.Request) {
+	planID, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	var input model.ReorderInput
+	if !decode(w, r, &input) {
+		return
+	}
+	respondNoContent(w, h.service.ReorderGroups(planID, input.GroupIDs))
+}
+
 func (h *Handler) listSheets(w http.ResponseWriter, r *http.Request) {
 	planID, ok := pathID(w, r, "planId")
 	if !ok {
@@ -181,6 +270,28 @@ func (h *Handler) listSheets(w http.ResponseWriter, r *http.Request) {
 	}
 	sheets, err := h.service.ListSheets(planID)
 	respond(w, sheets, err)
+}
+
+func (h *Handler) listGroupSheets(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	sheets, err := h.service.ListSheetsByGroup(groupID)
+	respond(w, sheets, err)
+}
+
+func (h *Handler) createGroupSheet(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	var input model.SheetInput
+	if !decode(w, r, &input) {
+		return
+	}
+	sheet, err := h.service.CreateSheetInGroup(groupID, input)
+	respondCreated(w, sheet, err)
 }
 
 func (h *Handler) createSheet(w http.ResponseWriter, r *http.Request) {
@@ -260,6 +371,18 @@ func (h *Handler) reorderSheets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondNoContent(w, h.service.ReorderSheets(planID, input.SheetIDs))
+}
+
+func (h *Handler) reorderGroupSheets(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	var input model.ReorderInput
+	if !decode(w, r, &input) {
+		return
+	}
+	respondNoContent(w, h.service.ReorderGroupSheets(groupID, input.SheetIDs))
 }
 
 func (h *Handler) listSteps(w http.ResponseWriter, r *http.Request) {
@@ -384,12 +507,30 @@ func (h *Handler) createRun(w http.ResponseWriter, r *http.Request) {
 	respondCreated(w, run, err)
 }
 
+func (h *Handler) createGroupRun(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	run, err := h.service.CreateGroupRun(groupID)
+	respondCreated(w, run, err)
+}
+
 func (h *Handler) listPlanRuns(w http.ResponseWriter, r *http.Request) {
 	planID, ok := pathID(w, r, "planId")
 	if !ok {
 		return
 	}
 	runs, err := h.service.ListPlanRuns(planID)
+	respond(w, runs, err)
+}
+
+func (h *Handler) listGroupRuns(w http.ResponseWriter, r *http.Request) {
+	groupID, ok := pathID(w, r, "groupId")
+	if !ok {
+		return
+	}
+	runs, err := h.service.ListGroupRuns(groupID)
 	respond(w, runs, err)
 }
 

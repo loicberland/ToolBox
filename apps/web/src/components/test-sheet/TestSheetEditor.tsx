@@ -14,6 +14,7 @@ type StepEditorMode = 'closed' | 'create' | 'edit';
 const emptySheet: TestSheet = {
   id: 0,
   planId: 0,
+  groupId: 0,
   name: '',
   description: '',
   prerequisites: '',
@@ -30,6 +31,7 @@ const emptySheet: TestSheet = {
 type Props = {
   mode: Mode;
   planId: number;
+  groupId?: number;
   sheet?: TestSheet;
   nextOrder: number;
   onCancel: () => void;
@@ -45,7 +47,7 @@ export type TestSheetEditorHandle = {
   submit: () => Promise<void>;
 };
 
-export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation, planDocuments, onDocumentsChanged }, ref) {
+export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, groupId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation, planDocuments, onDocumentsChanged }, ref) {
   const sheetFormRef = useRef<TestSheetFormHandle>(null);
   const stepFormRef = useRef<TestStepFormHandle>(null);
   const stepEditorContainerRef = useRef<HTMLDivElement | null>(null);
@@ -121,7 +123,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
       mockupSettings: sheet?.mockupSettings ?? input.mockupSettings ?? '',
     };
     if (isCreate) {
-      const created = await onModelMutation(() => testSheetApi.createSheet(planId, normalizedInput));
+      const created = await onModelMutation(() => groupId ? testSheetApi.createGroupSheet(groupId, normalizedInput) : testSheetApi.createSheet(planId, normalizedInput));
       const loadedSheets = await onRefresh();
       const createdSheet = loadedSheets.find((item) => item.id === created.id) ?? created;
       closeStepEditor();

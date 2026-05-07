@@ -730,6 +730,39 @@ textarea {
   margin-top: 18px;
 }
 
+.sub-plan-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sub-plan-tab {
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: grid;
+  gap: 2px;
+  background: var(--surface-soft);
+  color: var(--text);
+  text-align: left;
+}
+
+.sub-plan-tab.active,
+.sub-plan-tab:hover,
+.sub-plan-tab:focus {
+  border-color: rgba(37, 99, 235, 0.55);
+  background: #eff6ff;
+  outline: none;
+}
+
+.sub-plan-tab span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .add-sheet-row {
   display: flex;
   justify-content: flex-start;

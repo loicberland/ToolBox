@@ -82,12 +82,18 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
   };
 
   const createRun = async (plan: TestPlanSummary) => {
-    const existingRun = findRunningRun(plan, runsByPlan[plan.id]);
+    const groups = await testSheetApi.listGroups(plan.id);
+    const selectedGroup = groups.length === 1 ? groups[0] : chooseGroup(groups);
+    if (!selectedGroup) {
+      return;
+    }
+    const groupRuns = await testSheetApi.listGroupRuns(selectedGroup.id);
+    const existingRun = findRunningRun(plan, groupRuns);
     if (existingRun) {
       setRunConflict({ plan, run: existingRun });
       return;
     }
-    const run = await testSheetApi.createRun(plan.id);
+    const run = await testSheetApi.createGroupRun(selectedGroup.id);
     onRun(run.id);
   };
 
@@ -149,6 +155,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                 <div className="card-topline">
                   <StatusBadge status={plan.status} />
                   {plan.deletedAt && <span className="soft-delete-badge">{messages.testSheet.plans.hidden}</span>}
+                  <span className="muted">{plan.groupCount} {messages.testSheet.plans.groupSingular}{plan.groupCount > 1 ? 's' : ''}</span>
                   <span className="muted">{plan.sheetCount} {messages.testSheet.plans.sheetSingular}{plan.sheetCount > 1 ? 's' : ''}</span>
                   <span className="muted">{plan.runCount} {messages.testSheet.plans.runSingular}{plan.runCount > 1 ? 's' : ''}</span>
                 </div>
@@ -270,7 +277,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
               <Button type="button" variant="secondary" onClick={() => { onRun(runConflict.run.id); }}>{messages.testSheet.plans.continue}</Button>
               <Button type="button" onClick={async () => {
                 await testSheetApi.cancelRun(runConflict.run.id);
-                const run = await testSheetApi.createRun(runConflict.plan.id);
+                const run = await testSheetApi.createGroupRun(runConflict.run.groupId);
                 setRunConflict(undefined);
                 onRun(run.id);
               }}>{messages.testSheet.dialogs.cancelAndReplay}</Button>
@@ -317,6 +324,15 @@ function comparePlans(a: TestPlanSummary, b: TestPlanSummary, sortKey: SortKey) 
 
 function findRunningRun(plan: TestPlanSummary, runs?: TestRunSummary[]) {
   return (runs ?? (plan.latestRun ? [plan.latestRun] : [])).find((run) => run.status === 'running');
+}
+
+function chooseGroup(groups: Array<{ id: number; name: string }>) {
+  if (groups.length === 0) {
+    return undefined;
+  }
+  const choice = window.prompt(`${messages.testSheet.edit.chooseSubPlanRun}\n\n${groups.map((group, index) => `${index + 1}. ${group.name}`).join('\n')}`, '1');
+  const index = Number(choice) - 1;
+  return Number.isInteger(index) && index >= 0 && index < groups.length ? groups[index] : undefined;
 }
 
 function dateValue(value?: string) {
