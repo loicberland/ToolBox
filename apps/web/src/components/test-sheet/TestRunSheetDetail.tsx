@@ -96,6 +96,11 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
             <span className="current-marker">{progress.total} action{progress.total > 1 ? 's' : ''}</span>
           </div>
           <h3>{sheet.executionOrder}. {sheet.name}</h3>
+          {hasMarkdownContent(sheet.description) && (
+            <div className="run-sheet-intro">
+              <MarkdownPreview content={sheet.description} compact />
+            </div>
+          )}
         </div>
       </header>
 
@@ -141,6 +146,18 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
                     }
                     updateStepDraft(step.id, input);
                     await onSaveStep(step.id, input);
+                    if (input.status !== 'passed' && input.status !== 'skipped') {
+                      return;
+                    }
+                    const steps = sheet.steps ?? [];
+                    const currentIndex = steps.findIndex((item) => item.id === step.id);
+                    const nextStep = currentIndex >= 0 ? steps[currentIndex + 1] : undefined;
+                    if (!nextStep) {
+                      return;
+                    }
+                    removeStepDraft(step.id);
+                    updateStepDraft(nextStep.id, getStepDraft(nextStep));
+                    setOpenedStepId(nextStep.id);
                   }}
                 />
               )}
@@ -165,7 +182,6 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
 
 function RunSheetReadDetails({ sheet }: { sheet: TestRunSheet }) {
   const details = [
-    ['Description', sheet.description],
     ['Prerequis', sheet.prerequisites],
     ['Configuration', sheet.config],
     ['Commande', sheet.command],
@@ -209,7 +225,7 @@ function TestRunStepDetail({
       setIsSaving(false);
     }
   };
-  const hasReadDetails = hasMarkdownContent(step.field) || hasMarkdownContent(step.expectedResult);
+  const hasField = hasMarkdownContent(step.field);
 
   return (
     <div className="run-step-detail">
@@ -220,21 +236,19 @@ function TestRunStepDetail({
         </div>
         <StatusBadge status={draft.status} />
       </div>
-      {hasReadDetails && (
+      {hasField && (
         <dl className="compact-definition-list">
-          {hasMarkdownContent(step.field) && (
-            <>
-              <dt>Specifique</dt>
-              <dd><MarkdownPreview content={step.field} compact /></dd>
-            </>
-          )}
-          {hasMarkdownContent(step.expectedResult) && (
-            <>
-              <dt>Attendu</dt>
-              <dd><MarkdownPreview content={step.expectedResult} compact /></dd>
-            </>
-          )}
+          <dt>Specifique</dt>
+          <dd><MarkdownPreview content={step.field} compact /></dd>
         </dl>
+      )}
+      {hasMarkdownContent(step.expectedResult) && (
+        <section className="expected-result-block">
+          <h4 className="expected-result-title">Resultat attendu</h4>
+          <div className="expected-result-content">
+            <MarkdownPreview content={step.expectedResult} compact />
+          </div>
+        </section>
       )}
       {step.documents && step.documents.length > 0 && (
         <section className="run-read-details">

@@ -14,8 +14,8 @@ export function PageHeader({ eyebrow, title, description, backLabel = 'Retour', 
     <header className="page-header">
       <div className="page-title-group">
         {onBack && (
-          <button className="back-button" type="button" onClick={onBack}>
-            <span aria-hidden="true">&lt;</span>
+          <button className="ui-button secondary back-button" type="button" onClick={onBack}>
+            <span aria-hidden="true">←</span>
             {backLabel}
           </button>
         )}
