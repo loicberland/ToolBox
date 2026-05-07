@@ -1,5 +1,6 @@
 import React from 'react';
 import { testSheetApi, TestDocument } from '../../api/testSheet';
+import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
 
 type Props = {
@@ -9,7 +10,7 @@ type Props = {
   onDelete?: (document: TestDocument) => void;
 };
 
-export function DocumentList({ documents = [], emptyText = 'Aucun document', onRemove, onDelete }: Props) {
+export function DocumentList({ documents = [], emptyText = messages.testSheet.documents.noDocument, onRemove, onDelete }: Props) {
   if (documents.length === 0) {
     return <p className="muted">{emptyText}</p>;
   }
@@ -28,9 +29,9 @@ export function DocumentList({ documents = [], emptyText = 'Aucun document', onR
             )}
           </div>
           <div className="button-row end">
-            <a className="ui-button secondary sm" href={testSheetApi.documentDownloadUrl(document.id)}>Telecharger</a>
-            {onRemove && <Button type="button" size="sm" variant="secondary" onClick={() => onRemove(document)}>Retirer</Button>}
-            {onDelete && <Button type="button" size="sm" variant="danger" onClick={() => onDelete(document)}>Supprimer</Button>}
+            <a className="ui-button secondary sm" href={testSheetApi.documentDownloadUrl(document.id)}>{messages.common.download}</a>
+            {onRemove && <Button type="button" size="sm" variant="secondary" onClick={() => onRemove(document)}>{messages.common.remove}</Button>}
+            {onDelete && <Button type="button" size="sm" variant="danger" onClick={() => onDelete(document)}>{messages.common.delete}</Button>}
           </div>
         </div>
       ))}
@@ -46,7 +47,7 @@ type DocumentFilePickerProps = {
   label?: string;
 };
 
-export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = 'Choisir un fichier' }: DocumentFilePickerProps) {
+export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = messages.testSheet.documents.chooseFile }: DocumentFilePickerProps) {
   return (
     <div className="document-file-picker">
       <input
@@ -60,7 +61,7 @@ export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = '
         {label}
       </label>
       <span className={file ? 'document-file-name' : 'document-file-name muted'}>
-        {file?.name ?? 'aucun fichier selectionne'}
+        {file?.name ?? messages.testSheet.documents.noFileSelected}
       </span>
     </div>
   );

@@ -5,6 +5,7 @@
         "jsx": "react", // Support pour JSX
         "strict": true, // Active toutes les vérifications de type strictes
         "esModuleInterop": true, // Facilite l'importation des modules CommonJS
+        "resolveJsonModule": true,
         "skipLibCheck": true, // Ignore les vérifications de type pour les fichiers de définition
         "forceConsistentCasingInFileNames": true // Force une casse cohérente dans les noms de fichiers
     },

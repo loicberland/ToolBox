@@ -1,4 +1,5 @@
 import React from 'react';
+import { statusLabel } from '../../i18n';
 import { Badge } from '../ui/Badge';
 
 type Status =
@@ -15,22 +16,6 @@ type Status =
   | 'aborted'
   | 'draft'
   | 'ready';
-
-const labels: Record<Status, string> = {
-  pending: 'En attente',
-  passed: 'Reussi',
-  failed: 'Echoue',
-  blocked: 'Bloque',
-  skipped: 'Ignore',
-  running: 'En cours',
-  completed: 'Termine',
-  canceled: 'Annule',
-  archived: 'Archive',
-  finished: 'Termine',
-  aborted: 'Abandonne',
-  draft: 'Brouillon',
-  ready: 'Pret',
-};
 
 const tones: Record<Status, 'neutral' | 'blue' | 'green' | 'red' | 'orange' | 'gray'> = {
   pending: 'gray',
@@ -50,5 +35,5 @@ const tones: Record<Status, 'neutral' | 'blue' | 'green' | 'red' | 'orange' | 'g
 
 export function StatusBadge({ status }: { status: Status | string }) {
   const knownStatus = status as Status;
-  return <Badge tone={tones[knownStatus] ?? 'neutral'}>{labels[knownStatus] ?? status}</Badge>;
+  return <Badge tone={tones[knownStatus] ?? 'neutral'}>{statusLabel(status)}</Badge>;
 }

@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
+import { messages } from '../../i18n';
 
 type Props = {
   sheet: TestSheet;
@@ -32,17 +33,17 @@ export function TestSheetCard({ sheet, index, total, onEdit, onDelete, onDuplica
       <div className="sheet-card-order">{sheet.executionOrder}</div>
       <div className="sheet-card-content">
         <div className="card-topline">
-          <Badge tone="blue">Fiche</Badge>
-          <Badge tone="neutral">{stepCount} etape{stepCount > 1 ? 's' : ''}</Badge>
+          <Badge tone="blue">{messages.testSheet.edit.sheet}</Badge>
+          <Badge tone="neutral">{stepCount} {messages.testSheet.edit.step}{stepCount > 1 ? 's' : ''}</Badge>
         </div>
         <h3>{sheet.name}</h3>
-        {hasMarkdownContent(sheet.description) ? <MarkdownPreview content={sheet.description} compact /> : <p>Aucune description</p>}
+        {hasMarkdownContent(sheet.description) ? <MarkdownPreview content={sheet.description} compact /> : <p>{messages.testSheet.plans.noDescription}</p>}
         <div className="button-row">
-          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, () => onMove(-1))} disabled={index === 0}>Monter</Button>
-          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, () => onMove(1))} disabled={index === total - 1}>Descendre</Button>
-          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, onEdit)}>Modifier</Button>
-          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, onDuplicate)}>Dupliquer</Button>
-          <Button type="button" variant="danger" size="sm" onClick={(event) => stopAndRun(event, onDelete)}>Supprimer</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, () => onMove(-1))} disabled={index === 0}>{messages.common.moveUp}</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, () => onMove(1))} disabled={index === total - 1}>{messages.common.moveDown}</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, onEdit)}>{messages.common.edit}</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={(event) => stopAndRun(event, onDuplicate)}>{messages.testSheet.plans.duplicate}</Button>
+          <Button type="button" variant="danger" size="sm" onClick={(event) => stopAndRun(event, onDelete)}>{messages.common.delete}</Button>
         </div>
       </div>
     </Card>

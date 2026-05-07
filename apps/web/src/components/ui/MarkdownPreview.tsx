@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { messages } from '../../i18n';
 import './MarkdownPreview.css';
 
 type Props = {
@@ -50,13 +51,13 @@ function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
   return (
     <div className="copyable-code-block">
       <button
-        aria-label={copied ? 'Copie effectuee' : 'Copier'}
+        aria-label={copied ? messages.testSheet.report.copied : messages.testSheet.report.copy}
         className="copy-code-button"
-        title={copied ? 'Copie effectuee' : 'Copier'}
+        title={copied ? messages.testSheet.report.copied : messages.testSheet.report.copy}
         type="button"
         onClick={copy}
       >
-        <span aria-hidden="true">{copied ? '✓' : '⧉'}</span>
+        <span aria-hidden="true">{copied ? 'OK' : 'Copy'}</span>
       </button>
       <pre>{children}</pre>
     </div>
@@ -75,3 +76,4 @@ function getNodeText(node: React.ReactNode): string {
   }
   return '';
 }
+

@@ -1,5 +1,6 @@
 import React from 'react';
 import { TestRunStep } from '../../api/testSheet';
+import { messages } from '../../i18n';
 import { StatusBadge } from './StatusBadge';
 import { getRunStepProgress } from './runStatus';
 
@@ -8,7 +9,7 @@ type Props = {
   title?: string;
 };
 
-export function TestRunStepProgress({ steps, title = 'Progression du test' }: Props) {
+export function TestRunStepProgress({ steps, title = messages.testSheet.run.progress }: Props) {
   const progress = getRunStepProgress(steps);
   const percent = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
 
@@ -17,7 +18,7 @@ export function TestRunStepProgress({ steps, title = 'Progression du test' }: Pr
       <div className="run-step-progress-header">
         <div>
           <span className="section-kicker">{title}</span>
-          <strong>{progress.done} / {progress.total} actions traitees</strong>
+          <strong>{progress.done} / {progress.total} {messages.testSheet.run.actionsProcessed}</strong>
         </div>
       </div>
       <div className="progress-track" aria-label={`Progression ${percent}%`}>

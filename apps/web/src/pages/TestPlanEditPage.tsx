@@ -7,6 +7,7 @@ import { TestSheetList } from '../components/test-sheet/TestSheetList';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
+import { messages } from '../i18n';
 
 type Props = {
   planId: number;
@@ -16,7 +17,7 @@ type Props = {
 
 type SheetEditorMode = 'closed' | 'create' | 'edit';
 
-const modelChangedRunCanceledMessage = "Le plan a ete modifie. L'execution en cours a ete annulee car elle ne correspondait plus a la nouvelle version du plan.";
+const modelChangedRunCanceledMessage = messages.testSheet.dialogs.modelChangedRunCanceled;
 
 export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [plan, setPlan] = useState<TestPlan | undefined>();
@@ -124,9 +125,9 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   return (
     <section className="workspace">
       <PageHeader
-        eyebrow="Edition"
-        title={isNew ? 'Nouveau plan' : plan?.name ?? 'Plan de test'}
-        description={isNew ? 'Enregistrez le plan avant d ajouter les fiches.' : `${sheets.length} fiche${sheets.length > 1 ? 's' : ''} dans ce plan.`}
+        eyebrow={messages.testSheet.plans.editEyebrow}
+        title={isNew ? messages.testSheet.plans.newPlan : plan?.name ?? messages.testSheet.plans.testPlan}
+        description={isNew ? messages.testSheet.plans.savePlanBeforeSheets : `${sheets.length} ${messages.testSheet.plans.sheetSingular}${sheets.length > 1 ? 's' : ''} ${messages.testSheet.plans.sheetsInPlan}`}
         onBack={onBack}
         actions={!isNew && (
           <Button
@@ -137,7 +138,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               onRun(run.id);
             }}
           >
-            Lancer une execution
+            {messages.testSheet.plans.startRun}
           </Button>
         )}
       />
@@ -148,8 +149,8 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       <Card>
         <CardHeader>
           <div>
-            <span className="section-kicker">Informations generales</span>
-            <h3>Plan</h3>
+            <span className="section-kicker">{messages.testSheet.plans.generalInfo}</span>
+            <h3>{messages.testSheet.plans.plan}</h3>
           </div>
         </CardHeader>
         <TestPlanForm plan={plan} onSubmit={savePlan} />
@@ -159,8 +160,8 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
         <Card>
           <CardHeader>
             <div>
-              <span className="section-kicker">Bibliotheque</span>
-              <h3>Documents du plan</h3>
+              <span className="section-kicker">{messages.testSheet.plans.library}</span>
+              <h3>{messages.testSheet.plans.planDocuments}</h3>
             </div>
           </CardHeader>
           <PlanDocumentsPanel
@@ -177,8 +178,8 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       <section className="sheet-list-section">
         <div className="section-header">
           <div>
-            <span className="section-kicker">Ordre d execution</span>
-            <h3>Fiches de test</h3>
+            <span className="section-kicker">{messages.testSheet.plans.executionOrder}</span>
+            <h3>{messages.testSheet.edit.sheets}</h3>
           </div>
         </div>
 
@@ -230,7 +231,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
 
             {sheetEditorMode === 'closed' && (
               <div className="add-sheet-row">
-                <Button type="button" onClick={openCreateSheet}>+ Ajouter une fiche</Button>
+                <Button type="button" onClick={openCreateSheet}>+ {messages.testSheet.edit.addSheet}</Button>
               </div>
             )}
 
@@ -311,7 +312,7 @@ function PlanDocumentsPanel({
       <DocumentList
         documents={documents}
         onDelete={async (document) => {
-          if (!window.confirm('Ce document sera supprime du plan et ne sera plus disponible pour les fiches/actions associees.')) {
+          if (!window.confirm(messages.testSheet.dialogs.deletePlanDocumentConfirm)) {
             return;
           }
           setDeletingDocumentId(document.id);
@@ -330,10 +331,10 @@ function PlanDocumentsPanel({
           file={file}
           inputRef={fileInputRef}
           onFileChange={setFile}
-          label="+ Choisir un fichier"
+          label={`+ ${messages.testSheet.documents.chooseFile}`}
         />
-        <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description optionnelle" />
-        <Button type="button" disabled={!file || uploading || deletingDocumentId !== undefined} onClick={upload}>{uploading ? 'Import...' : '+ Ajouter un document'}</Button>
+        <input value={description} onChange={(event) => setDescription(event.target.value)} />
+        <Button type="button" disabled={!file || uploading || deletingDocumentId !== undefined} onClick={upload}>{uploading ? messages.testSheet.documents.importing : `+ ${messages.testSheet.documents.addDocument}`}</Button>
       </div>
     </div>
   );

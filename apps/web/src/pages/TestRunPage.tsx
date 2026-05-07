@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/test-sheet/StatusBadge';
 import { getRunSheetProgress, isRunEditable, isRunReadOnly } from '../components/test-sheet/runStatus';
+import { messages } from '../i18n';
 
 type Props = {
   runId: number;
@@ -60,15 +61,15 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
   return (
     <section className="workspace">
       <PageHeader
-        eyebrow="Execution"
-        title={run ? `Execution n°${run.runNumber} - ${run.planName}` : 'Execution'}
-        description={selectedSheet ? `Test selectionne : ${selectedSheet.name}` : undefined}
+        eyebrow={messages.testSheet.run.eyebrow}
+        title={run ? `${messages.testSheet.plans.executionNumber}${run.runNumber} - ${run.planName}` : messages.testSheet.run.eyebrow}
+        description={selectedSheet ? `${messages.testSheet.run.selectedTest} : ${selectedSheet.name}` : undefined}
         onBack={onBack}
         actions={(
           <div className="button-row">
             {run && <StatusBadge status={run.status} />}
-            <Button variant="secondary" type="button" onClick={() => onReport(runId)}>Rapport</Button>
-            {runEditable && <Button type="button" onClick={finish}>Terminer</Button>}
+            <Button variant="secondary" type="button" onClick={() => onReport(runId)}>{messages.testSheet.run.report}</Button>
+            {runEditable && <Button type="button" onClick={finish}>{messages.testSheet.run.finish}</Button>}
           </div>
         )}
       />
@@ -110,9 +111,9 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
       )}
       <ConfirmDialog
         open={confirmFinish}
-        title="Terminer l execution"
-        message="Il reste des fiches ou actions en attente. Certaines parties du plan de test n'ont pas ete terminees. Voulez-vous quand meme terminer cette execution ?"
-        confirmLabel="Terminer quand meme"
+        title={messages.testSheet.run.finishTitle}
+        message={messages.testSheet.run.finishMessage}
+        confirmLabel={messages.testSheet.run.finishAnyway}
         onCancel={() => setConfirmFinish(false)}
         onConfirm={async () => {
           if (!runEditable) {

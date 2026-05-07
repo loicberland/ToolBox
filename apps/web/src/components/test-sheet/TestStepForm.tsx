@@ -1,5 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { StepInput, TestSheetStep } from '../../api/testSheet';
+import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
 
 type Props = {
@@ -51,20 +52,20 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
       }}
     >
       <label>
-        Champ specifique
-        <input value={value.field} onChange={(event) => setValue({ ...value, field: event.target.value })} placeholder="Ex: bouton Valider, champ email..." />
+        {messages.testSheet.edit.specificField}
+        <input value={value.field} onChange={(event) => setValue({ ...value, field: event.target.value })} />
       </label>
       <label>
         Action
         <textarea value={value.action} onChange={(event) => setValue({ ...value, action: event.target.value })} required />
       </label>
       <label>
-        Resultat attendu
+        {messages.testSheet.edit.expectedResult}
         <textarea value={value.expectedResult} onChange={(event) => setValue({ ...value, expectedResult: event.target.value })} />
       </label>
       <div className="button-row">
-        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : step ? 'Sauvegarder' : 'Ajouter l etape'}</Button>
-        {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>Annuler</Button>}
+        <Button type="submit" disabled={saving}>{saving ? messages.common.saving : step ? messages.common.save : messages.testSheet.edit.addStep}</Button>
+        {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>{messages.common.cancel}</Button>}
       </div>
     </form>
   );

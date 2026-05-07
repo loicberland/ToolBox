@@ -1,4 +1,5 @@
 import { TestRunSheet, TestRunStatus, TestRunStep } from '../../api/testSheet';
+import { messages } from '../../i18n';
 
 export type RunItemStatus = TestRunSheet['status'];
 
@@ -51,19 +52,19 @@ export function getRunSheetProgressSummary(sheet: TestRunSheet) {
   const parts = [`${progress.total} action${progress.total > 1 ? 's' : ''}`];
 
   if (progress.passed > 0) {
-    parts.push(`${progress.passed} reussie${progress.passed > 1 ? 's' : ''}`);
+    parts.push(`${progress.passed} ${messages.testSheet.run.passedPlural}`);
   }
   if (progress.failed > 0) {
-    parts.push(`${progress.failed} echouee${progress.failed > 1 ? 's' : ''}`);
+    parts.push(`${progress.failed} ${messages.testSheet.run.failedPlural}`);
   }
   if (progress.blocked > 0) {
-    parts.push(`${progress.blocked} bloquee${progress.blocked > 1 ? 's' : ''}`);
+    parts.push(`${progress.blocked} ${messages.testSheet.run.blockedPlural}`);
   }
   if (progress.skipped > 0) {
-    parts.push(`${progress.skipped} ignoree${progress.skipped > 1 ? 's' : ''}`);
+    parts.push(`${progress.skipped} ${messages.testSheet.run.skippedPlural}`);
   }
   if (progress.pending > 0 || parts.length === 1) {
-    parts.push(`${progress.pending} en attente`);
+    parts.push(`${progress.pending} ${messages.status.pending.toLowerCase()}`);
   }
 
   return parts.join(' - ');

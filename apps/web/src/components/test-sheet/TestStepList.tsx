@@ -3,6 +3,7 @@ import { TestSheetStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
+import { messages } from '../../i18n';
 
 type Props = {
   steps: TestSheetStep[];
@@ -31,13 +32,13 @@ export function TestStepList({ steps, onEdit, onDelete, onDuplicate, onMove, edi
           }}>
             <div className="sheet-card-order">{step.executionOrder}</div>
             <div className="step-card-content">
-              {hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} compact /> : <p className="muted">Etape sans action</p>}
+              {hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} compact /> : <p className="muted">{messages.testSheet.run.noAction}</p>}
               <div className="button-row">
-                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onMove(step, -1); }} disabled={index === 0}>Monter</Button>
-                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onMove(step, 1); }} disabled={index === steps.length - 1}>Descendre</Button>
-                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onEdit(step); }}>Modifier</Button>
-                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onDuplicate(step); }}>Dupliquer</Button>
-                <Button type="button" variant="danger" size="sm" onClick={(event) => { event.stopPropagation(); void onDelete(step); }}>Supprimer</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onMove(step, -1); }} disabled={index === 0}>{messages.common.moveUp}</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onMove(step, 1); }} disabled={index === steps.length - 1}>{messages.common.moveDown}</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onEdit(step); }}>{messages.common.edit}</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); void onDuplicate(step); }}>{messages.testSheet.plans.duplicate}</Button>
+                <Button type="button" variant="danger" size="sm" onClick={(event) => { event.stopPropagation(); void onDelete(step); }}>{messages.common.delete}</Button>
               </div>
             </div>
           </Card>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PlanInput, TestPlan } from '../../api/testSheet';
+import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
 
 type Props = {
@@ -28,15 +29,15 @@ export function TestPlanForm({ plan, onSubmit }: Props) {
       }}
     >
       <label>
-        Nom
+        {messages.testSheet.edit.name}
         <input value={value.name} onChange={(event) => setValue({ ...value, name: event.target.value })} required />
       </label>
       <label>
-        Description
+        {messages.testSheet.edit.description}
         <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
       </label>
       <div className="form-actions">
-        <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</Button>
+        <Button type="submit" disabled={saving}>{saving ? messages.common.saving : messages.common.save}</Button>
       </div>
     </form>
   );

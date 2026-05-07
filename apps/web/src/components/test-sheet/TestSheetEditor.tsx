@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, use
 import { SheetInput, StepInput, testSheetApi, TestDocument, TestSheet, TestSheetStep } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
+import { messages } from '../../i18n';
 import { DocumentFilePicker, DocumentList } from './DocumentList';
 import { TestSheetForm, TestSheetFormHandle } from './TestSheetForm';
 import { TestStepForm, TestStepFormHandle } from './TestStepForm';
@@ -172,8 +173,8 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     <Card className="sheet-editor-card">
       <CardHeader>
         <div>
-          <span className="section-kicker">{isCreate ? 'Nouvelle fiche' : 'Modification'}</span>
-          <h3>{isCreate ? 'Ajouter une fiche' : activeSheet?.name ?? 'Modifier la fiche'}</h3>
+          <span className="section-kicker">{isCreate ? messages.testSheet.edit.newSheet : messages.testSheet.edit.editing}</span>
+          <h3>{isCreate ? messages.testSheet.edit.addSheet : activeSheet?.name ?? messages.testSheet.edit.editSheet}</h3>
         </div>
       </CardHeader>
       <TestSheetForm
@@ -186,7 +187,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
       />
       {canEditSteps && activeSheet && (
         <DocumentAssociationPanel
-          title="Documents de la fiche"
+          title={messages.testSheet.run.sheetDocuments}
           documents={activeSheet.documents ?? []}
           planDocuments={planDocuments}
           onLink={(documentId) => onModelMutation(() => testSheetApi.linkSheetDocument(activeSheet.id, documentId))}
@@ -205,8 +206,8 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
         <div className="sheet-steps-panel">
           <div className="section-header compact">
             <div>
-              <span className="section-kicker">Etapes de test</span>
-              <h3>{steps.length} etape{steps.length > 1 ? 's' : ''}</h3>
+              <span className="section-kicker">{messages.testSheet.edit.testSteps}</span>
+              <h3>{steps.length} {messages.testSheet.edit.step}{steps.length > 1 ? 's' : ''}</h3>
             </div>
           </div>
           <TestStepList
@@ -226,7 +227,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
                   onCancel={closeStepEditor}
                 />
                 <DocumentAssociationPanel
-                  title="Documents de l action"
+                  title={messages.testSheet.run.actionDocuments}
                   documents={step.documents ?? []}
                   planDocuments={planDocuments}
                   onLink={(documentId) => onModelMutation(() => testSheetApi.linkStepDocument(step.id, documentId))}
@@ -245,7 +246,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
           />
           {stepEditorMode === 'closed' && (
             <div className="add-sheet-row">
-              <Button type="button" onClick={openCreateStep}>+ Ajouter une etape</Button>
+              <Button type="button" onClick={openCreateStep}>+ {messages.testSheet.edit.addStep}</Button>
             </div>
           )}
           {stepEditorMode === 'create' && (
@@ -259,8 +260,8 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
         </div>
       )}
       <div className="button-row end editor-footer">
-        <Button type="submit" form={formId}>{isCreate ? 'Creer la fiche' : 'Enregistrer'}</Button>
-        <Button type="button" variant="secondary" onClick={onCancel}>Annuler</Button>
+        <Button type="submit" form={formId}>{isCreate ? messages.testSheet.edit.createSheet : messages.common.save}</Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>{messages.common.cancel}</Button>
       </div>
     </Card>
   );
@@ -301,13 +302,13 @@ function DocumentAssociationPanel({
     <section className="document-association-panel">
       <div className="section-header compact">
         <div>
-          <span className="section-kicker">Documents</span>
+          <span className="section-kicker">{messages.testSheet.documents.documents}</span>
           <h3>{title}</h3>
         </div>
       </div>
       <DocumentList
         documents={documents}
-        emptyText="Aucun document associe"
+        emptyText={messages.testSheet.documents.noAssociatedDocument}
         onRemove={async (document) => {
           await onUnlink(document.id);
           await onChanged();
@@ -315,7 +316,7 @@ function DocumentAssociationPanel({
       />
       <div className="document-upload-row">
         <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} disabled={availableDocuments.length === 0}>
-          <option value="">Associer un document existant</option>
+          <option value="">{messages.testSheet.documents.associateExistingDocument}</option>
           {availableDocuments.map((document) => (
             <option key={document.id} value={document.id}>{document.originalName}</option>
           ))}
@@ -330,7 +331,7 @@ function DocumentAssociationPanel({
             await onChanged();
           }}
         >
-          Associer
+          {messages.testSheet.documents.associate}
         </Button>
       </div>
       <div className="document-upload-row">
@@ -339,7 +340,7 @@ function DocumentAssociationPanel({
           file={file}
           inputRef={fileInputRef}
           onFileChange={setFile}
-          label="+ Choisir un fichier"
+          label={`+ ${messages.testSheet.documents.chooseFile}`}
         />
         <Button
           type="button"
@@ -353,7 +354,7 @@ function DocumentAssociationPanel({
             await onChanged();
           }}
         >
-          Importer et associer
+          {messages.testSheet.documents.importAndAssociate}
         </Button>
       </div>
     </section>

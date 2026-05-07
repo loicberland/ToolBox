@@ -1,5 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { SheetInput, TestSheet } from '../../api/testSheet';
+import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
 
 type Props = {
@@ -58,37 +59,33 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
       }}
     >
       <label>
-        Nom
+        {messages.testSheet.edit.name}
         <input value={value.name} onChange={(event) => setValue({ ...value, name: event.target.value })} required />
       </label>
       <label>
-        Description
+        {messages.testSheet.edit.description}
         <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
       </label>
       <label>
-        Prerequis
-        <textarea
-          value={value.prerequisites}
-          onChange={(event) => setValue({ ...value, prerequisites: event.target.value })}
-          placeholder={'Markdown accepte.\n\nFichier a charger :\n\n```txt\nTEST\n```\n\nConfigurer RealTerm sur le Digi en .51.'}
-        />
+        {messages.testSheet.edit.prerequisites}
+        <textarea value={value.prerequisites} onChange={(event) => setValue({ ...value, prerequisites: event.target.value })} />
       </label>
       <label>
-        Configuration
-        <textarea value={value.config} onChange={(event) => setValue({ ...value, config: event.target.value })} placeholder="Markdown accepte" />
+        {messages.testSheet.edit.configuration}
+        <textarea value={value.config} onChange={(event) => setValue({ ...value, config: event.target.value })} />
       </label>
       <label>
-        Commande
-        <textarea value={value.command} onChange={(event) => setValue({ ...value, command: event.target.value })} placeholder="Markdown accepte" />
+        {messages.testSheet.edit.command}
+        <textarea value={value.command} onChange={(event) => setValue({ ...value, command: event.target.value })} />
       </label>
       <label>
-        Notes
-        <textarea value={value.notes} onChange={(event) => setValue({ ...value, notes: event.target.value })} placeholder="Markdown accepte" />
+        {messages.testSheet.edit.notes}
+        <textarea value={value.notes} onChange={(event) => setValue({ ...value, notes: event.target.value })} />
       </label>
       {!hideActions && (
         <div className="button-row">
-          <Button type="submit" disabled={saving}>{saving ? 'Enregistrement...' : isEditing ? 'Sauvegarder' : 'Ajouter'}</Button>
-          {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>Annuler</Button>}
+          <Button type="submit" disabled={saving}>{saving ? messages.common.saving : isEditing ? messages.common.save : messages.common.add}</Button>
+          {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>{messages.common.cancel}</Button>}
         </div>
       )}
     </form>

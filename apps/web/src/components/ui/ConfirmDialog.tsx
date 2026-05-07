@@ -1,4 +1,5 @@
 import React from 'react';
+import { messages } from '../../i18n';
 import { Button } from './Button';
 
 type Props = {
@@ -10,7 +11,7 @@ type Props = {
   onCancel: () => void;
 };
 
-export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmer', onConfirm, onCancel }: Props) {
+export function ConfirmDialog({ open, title, message, confirmLabel = messages.common.confirm, onConfirm, onCancel }: Props) {
   if (!open) {
     return null;
   }
@@ -20,7 +21,7 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmer'
         <h3 id="confirm-dialog-title">{title}</h3>
         <p>{message}</p>
         <div className="button-row end">
-          <Button type="button" variant="secondary" onClick={onCancel}>Annuler</Button>
+          <Button type="button" variant="secondary" onClick={onCancel}>{messages.common.cancel}</Button>
           <Button type="button" variant="danger" onClick={onConfirm}>{confirmLabel}</Button>
         </div>
       </div>

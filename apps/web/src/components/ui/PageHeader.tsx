@@ -1,4 +1,5 @@
 import React from 'react';
+import { messages } from '../../i18n';
 
 type Props = {
   eyebrow?: string;
@@ -9,7 +10,7 @@ type Props = {
   actions?: React.ReactNode;
 };
 
-export function PageHeader({ eyebrow, title, description, backLabel = 'Retour', onBack, actions }: Props) {
+export function PageHeader({ eyebrow, title, description, backLabel = messages.common.back, onBack, actions }: Props) {
   return (
     <header className="page-header">
       <div className="page-title-group">

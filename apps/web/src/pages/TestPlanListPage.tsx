@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { MarkdownPreview, hasMarkdownContent } from '../components/ui/MarkdownPreview';
 import { StatusBadge } from '../components/test-sheet/StatusBadge';
+import { messages, statusLabel } from '../i18n';
 
 type Props = {
   onEdit: (planId: number) => void;
@@ -15,10 +16,10 @@ type Props = {
 
 type SortKey = 'updatedAt' | 'latestRun' | 'status' | 'name';
 const statusFilterOptions: Array<{ status: TestRunStatus | 'pending'; label: string }> = [
-  { status: 'pending', label: 'En attente' },
-  { status: 'running', label: 'En cours' },
-  { status: 'completed', label: 'Termine' },
-  { status: 'canceled', label: 'Annule' },
+  { status: 'pending', label: statusLabel('pending') },
+  { status: 'running', label: statusLabel('running') },
+  { status: 'completed', label: statusLabel('completed') },
+  { status: 'canceled', label: statusLabel('canceled') },
 ];
 
 export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
@@ -99,18 +100,18 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
     <section className="workspace">
       <PageHeader
         eyebrow="Test Sheet"
-        title="Plans de test"
-        description="Suivi des modeles et historique des executions."
-        actions={<Button type="button" onClick={() => onEdit(0)}>Nouveau plan</Button>}
+        title={messages.testSheet.plans.title}
+        description={messages.testSheet.plans.description}
+        actions={<Button type="button" onClick={() => onEdit(0)}>{messages.testSheet.plans.newPlan}</Button>}
       />
       {error && <p className="error">{error}</p>}
       {info && <p className="info-message">{info}</p>}
 
       <div className="plan-toolbar">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un plan" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={messages.testSheet.plans.search} />
         <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-          <option value="latestRun">Derniere execution</option>
-          <option value="updatedAt">Derniere modification</option>
+          <option value="latestRun">{messages.testSheet.plans.latestRun}</option>
+          <option value="updatedAt">{messages.testSheet.plans.latestUpdate}</option>
           <option value="status">Statut</option>
           <option value="name">Nom</option>
         </select>
@@ -118,7 +119,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
 
       <div className="plan-filter-panel">
         <div className="filter-group" aria-label="Filtrer par statut">
-          <span className="filter-label">Statuts</span>
+          <span className="filter-label">{messages.testSheet.plans.statusFilters}</span>
           {statusFilterOptions.map((option) => (
             <label key={option.status} className="checkbox-filter">
               <input
@@ -136,7 +137,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
             checked={showDeletedPlans}
             onChange={(event) => setShowDeletedPlans(event.target.checked)}
           />
-          Afficher les plans masques
+          {messages.testSheet.plans.showHiddenPlans}
         </label>
       </div>
 
@@ -147,27 +148,27 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
               <div>
                 <div className="card-topline">
                   <StatusBadge status={plan.status} />
-                  {plan.deletedAt && <span className="soft-delete-badge">Masque</span>}
-                  <span className="muted">{plan.sheetCount} fiche{plan.sheetCount > 1 ? 's' : ''}</span>
-                  <span className="muted">{plan.runCount} execution{plan.runCount > 1 ? 's' : ''}</span>
+                  {plan.deletedAt && <span className="soft-delete-badge">{messages.testSheet.plans.hidden}</span>}
+                  <span className="muted">{plan.sheetCount} {messages.testSheet.plans.sheetSingular}{plan.sheetCount > 1 ? 's' : ''}</span>
+                  <span className="muted">{plan.runCount} {messages.testSheet.plans.runSingular}{plan.runCount > 1 ? 's' : ''}</span>
                 </div>
                 <h3>{plan.name}</h3>
               </div>
               <div className="button-row end">
-                <Button type="button" variant="secondary" onClick={() => openHistory(plan)}>Historique</Button>
+                <Button type="button" variant="secondary" onClick={() => openHistory(plan)}>{messages.testSheet.plans.history}</Button>
                 {plan.deletedAt ? (
                   <>
-                    <Button type="button" onClick={async () => { await testSheetApi.restorePlan(plan.id); await load(); }}>Restaurer</Button>
-                    <Button type="button" variant="danger" onClick={() => setPlanToPermanentDelete(plan)}>Supprimer definitivement</Button>
+                    <Button type="button" onClick={async () => { await testSheetApi.restorePlan(plan.id); await load(); }}>{messages.common.restore}</Button>
+                    <Button type="button" variant="danger" onClick={() => setPlanToPermanentDelete(plan)}>{messages.testSheet.plans.permanentDelete}</Button>
                   </>
                 ) : (
                   <>
-                    {plan.latestRun?.status === 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>Continuer</Button>}
-                    {plan.latestRun && plan.latestRun.status !== 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>Ouvrir</Button>}
-                    <Button type="button" variant="secondary" disabled={plan.sheetCount === 0} onClick={() => createRun(plan)}>Nouvelle execution</Button>
-                    <Button type="button" variant="secondary" onClick={() => onEdit(plan.id)}>Modifier le modele</Button>
-                    <Button type="button" variant="secondary" onClick={async () => { await testSheetApi.duplicatePlan(plan.id); await load(); }}>Dupliquer</Button>
-                    <Button type="button" variant="danger" onClick={() => setPlanToDelete(plan)}>Masquer</Button>
+                    {plan.latestRun?.status === 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.continue}</Button>}
+                    {plan.latestRun && plan.latestRun.status !== 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.open}</Button>}
+                    <Button type="button" variant="secondary" disabled={plan.sheetCount === 0} onClick={() => createRun(plan)}>{messages.testSheet.plans.newRun}</Button>
+                    <Button type="button" variant="secondary" onClick={() => onEdit(plan.id)}>{messages.testSheet.plans.editModel}</Button>
+                    <Button type="button" variant="secondary" onClick={async () => { await testSheetApi.duplicatePlan(plan.id); await load(); }}>{messages.testSheet.plans.duplicate}</Button>
+                    <Button type="button" variant="danger" onClick={() => setPlanToDelete(plan)}>{messages.testSheet.plans.hide}</Button>
                   </>
                 )}
               </div>
@@ -176,9 +177,9 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
             {hasMarkdownContent(plan.description) && <MarkdownPreview content={plan.description} compact />}
             <PlanRunProgress run={plan.latestRun} />
             <div className="card-meta">
-              <span>Mis a jour</span>
+              <span>{messages.testSheet.plans.updatedAt}</span>
               <strong>{formatDate(plan.updatedAt)}</strong>
-              <span>Derniere execution</span>
+              <span>{messages.testSheet.plans.latestRun}</span>
               <strong>{plan.latestRun ? formatDate(plan.latestRun.startedAt) : '-'}</strong>
             </div>
 
@@ -189,14 +190,14 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                     <div>
                       <div className="card-topline">
                         <StatusBadge status={run.status} />
-                        <strong>Execution n°{run.runNumber}</strong>
+                        <strong>{messages.testSheet.plans.executionNumber}{run.runNumber}</strong>
                       </div>
-                      <p className="muted">Debut : {formatDate(run.startedAt)}{run.finishedAt ? ` - Fin : ${formatDate(run.finishedAt)}` : ''}</p>
+                      <p className="muted">{messages.testSheet.plans.begin} : {formatDate(run.startedAt)}{run.finishedAt ? ` - ${messages.testSheet.plans.end} : ${formatDate(run.finishedAt)}` : ''}</p>
                       <PlanRunProgress run={run} compact />
                     </div>
                     <div className="button-row end">
-                      <Button type="button" variant="secondary" onClick={() => onRun(run.id)}>{run.status === 'running' ? 'Continuer' : 'Consulter'}</Button>
-                      <Button type="button" variant="secondary" onClick={() => onReport(run.id)}>Rapport</Button>
+                      <Button type="button" variant="secondary" onClick={() => onRun(run.id)}>{run.status === 'running' ? messages.testSheet.plans.continue : messages.testSheet.plans.consult}</Button>
+                      <Button type="button" variant="secondary" onClick={() => onReport(run.id)}>{messages.testSheet.run.report}</Button>
                     </div>
                   </div>
                 ))}
@@ -208,9 +209,9 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
 
       <ConfirmDialog
         open={Boolean(planToDelete)}
-        title="Masquer le plan"
-        message={`"${planToDelete?.name ?? ''}" sera masque de la liste principale, mais son historique d'executions et ses rapports seront conserves. Vous pourrez le restaurer plus tard.`}
-        confirmLabel="Masquer le plan"
+        title={messages.testSheet.dialogs.hidePlanTitle}
+        message={`"${planToDelete?.name ?? ''}" ${messages.testSheet.dialogs.hidePlanMessage}`}
+        confirmLabel={messages.testSheet.dialogs.hidePlanConfirm}
         onCancel={() => setPlanToDelete(undefined)}
         onConfirm={async () => {
           if (planToDelete) {
@@ -224,14 +225,11 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
       {planToPermanentDelete && (
         <div className="dialog-backdrop" role="presentation">
           <div className="confirm-dialog permanent-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="permanent-delete-title">
-            <h3 id="permanent-delete-title">Supprimer definitivement ce plan ?</h3>
-            <p>
-              Cette action est irreversible. Le plan, ses fiches, ses etapes, son historique d'executions,
-              les resultats, les commentaires, les rapports et les pieces jointes associees seront definitivement supprimes.
-            </p>
-            <p>Cette action ne pourra pas etre annulee.</p>
+            <h3 id="permanent-delete-title">{messages.testSheet.dialogs.deletePlanTitle}</h3>
+            <p>{messages.testSheet.dialogs.deletePlanWarning}</p>
+            <p>{messages.testSheet.dialogs.deletePlanNoUndo}</p>
             <label>
-              Pour confirmer, saisissez le nom du plan : <strong>{planToPermanentDelete.name}</strong>
+              {messages.testSheet.dialogs.deletePlanConfirmation} <strong>{planToPermanentDelete.name}</strong>
               <input
                 value={permanentDeleteConfirmation}
                 onChange={(event) => setPermanentDeleteConfirmation(event.target.value)}
@@ -239,7 +237,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
               />
             </label>
             <div className="button-row end">
-              <Button type="button" variant="secondary" onClick={closePermanentDeleteDialog}>Annuler</Button>
+              <Button type="button" variant="secondary" onClick={closePermanentDeleteDialog}>{messages.common.cancel}</Button>
               <Button
                 type="button"
                 variant="danger"
@@ -247,11 +245,11 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                 onClick={async () => {
                   await testSheetApi.permanentDeletePlan(planToPermanentDelete.id);
                   closePermanentDeleteDialog();
-                  setInfo('Le plan a ete supprime definitivement.');
+                  setInfo(messages.testSheet.dialogs.deletePlanDone);
                   await load();
                 }}
               >
-                Supprimer definitivement
+                {messages.testSheet.plans.permanentDelete}
               </Button>
             </div>
           </div>
@@ -261,17 +259,17 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
       {runConflict && (
         <div className="dialog-backdrop" role="presentation">
           <div className="confirm-dialog" role="dialog" aria-modal="true">
-            <h3>Execution deja en cours</h3>
-            <p>Une execution est deja en cours pour ce plan. Voulez-vous la continuer ou l annuler et recommencer ?</p>
+            <h3>{messages.testSheet.dialogs.runConflictTitle}</h3>
+            <p>{messages.testSheet.dialogs.runConflictMessage}</p>
             <div className="button-row end">
-              <Button type="button" variant="secondary" onClick={() => setRunConflict(undefined)}>Fermer</Button>
-              <Button type="button" variant="secondary" onClick={() => { onRun(runConflict.run.id); }}>Continuer</Button>
+              <Button type="button" variant="secondary" onClick={() => setRunConflict(undefined)}>{messages.common.close}</Button>
+              <Button type="button" variant="secondary" onClick={() => { onRun(runConflict.run.id); }}>{messages.testSheet.plans.continue}</Button>
               <Button type="button" onClick={async () => {
                 await testSheetApi.cancelRun(runConflict.run.id);
                 const run = await testSheetApi.createRun(runConflict.plan.id);
                 setRunConflict(undefined);
                 onRun(run.id);
-              }}>Annuler et rejouer</Button>
+              }}>{messages.testSheet.dialogs.cancelAndReplay}</Button>
             </div>
           </div>
         </div>
@@ -282,19 +280,19 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
 
 function PlanRunProgress({ run, compact = false }: { run?: TestRunSummary; compact?: boolean }) {
   if (!run) {
-    return <p className="muted">Aucune execution</p>;
+    return <p className="muted">{messages.testSheet.plans.noRun}</p>;
   }
   const done = run.totalSteps - run.pendingSteps;
   const percent = run.totalSteps === 0 ? 0 : Math.round((done / run.totalSteps) * 100);
   return (
     <div className={compact ? 'plan-run-progress compact' : 'plan-run-progress'}>
-      {!compact && <strong>Execution n°{run.runNumber}</strong>}
-      <strong>{done} / {run.totalSteps} actions traitees</strong>
+      {!compact && <strong>{messages.testSheet.plans.executionNumber}{run.runNumber}</strong>}
+      <strong>{done} / {run.totalSteps} {messages.testSheet.run.actionsProcessed}</strong>
       <div className="progress-track" aria-label={`Progression ${percent}%`}>
         <div className="progress-fill" style={{ width: `${percent}%` }} />
       </div>
       <p className="muted">
-        {run.passedSteps} reussies - {run.failedSteps} echouees - {run.blockedSteps} bloquees - {run.skippedSteps} ignorees - {run.pendingSteps} en attente
+        {run.passedSteps} {messages.testSheet.run.passedPlural} - {run.failedSteps} {messages.testSheet.run.failedPlural} - {run.blockedSteps} {messages.testSheet.run.blockedPlural} - {run.skippedSteps} {messages.testSheet.run.skippedPlural} - {run.pendingSteps} {statusLabel('pending').toLowerCase()}
       </p>
     </div>
   );
@@ -328,3 +326,4 @@ function formatDate(value?: string) {
   const date = new Date(value);
   return `${date.toLocaleDateString('fr-FR')} ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
 }
+

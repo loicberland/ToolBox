@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Evidence, RunSheetInput, RunStepInput, TestRunSheet, TestRunStep, testSheetApi } from '../../api/testSheet';
+import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { MarkdownCollapsibleSection } from '../ui/MarkdownCollapsibleSection';
@@ -106,11 +107,11 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
 
       <TestRunStepProgress steps={sheet.steps ?? []} />
 
-      {readOnly && <p className="readonly-notice">Execution en lecture seule</p>}
+      {readOnly && <p className="readonly-notice">{messages.testSheet.run.readOnly}</p>}
 
       {sheet.documents && sheet.documents.length > 0 && (
         <section className="run-read-details">
-          <h4>Documents de la fiche</h4>
+          <h4>{messages.testSheet.run.sheetDocuments}</h4>
           <DocumentList documents={sheet.documents} />
         </section>
       )}
@@ -130,7 +131,7 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
               >
                 <span className="run-list-order">{step.executionOrder}</span>
                 <div className="run-action-title">
-                  <SmartEllipsisText text={hasMarkdownContent(step.action) ? step.action : 'Action non renseignee'} />
+                  <SmartEllipsisText text={hasMarkdownContent(step.action) ? step.action : messages.testSheet.run.unnamedAction} />
                 </div>
                 <StatusBadge status={getStepDraft(step).status} />
               </div>
@@ -165,7 +166,7 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
           ))}
         </div>
       ) : (
-        <p className="muted">Aucune action dans cette fiche</p>
+        <p className="muted">{messages.testSheet.run.noActions}</p>
       )}
 
       <RunSheetCommentEditor sheet={sheet} readOnly={readOnly} onSave={onSaveSheet} />
@@ -182,10 +183,10 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
 
 function RunSheetReadDetails({ sheet }: { sheet: TestRunSheet }) {
   const details = [
-    ['Prerequis', sheet.prerequisites],
-    ['Configuration', sheet.config],
-    ['Commande', sheet.command],
-    ['Notes', sheet.notes],
+    [messages.testSheet.edit.prerequisites, sheet.prerequisites],
+    [messages.testSheet.edit.configuration, sheet.config],
+    [messages.testSheet.edit.command, sheet.command],
+    [messages.testSheet.edit.notes, sheet.notes],
   ] as const;
 
   return (
@@ -231,20 +232,20 @@ function TestRunStepDetail({
     <div className="run-step-detail">
       <div className="run-step-header">
         <div>
-          <span className="section-kicker">Action {step.executionOrder}</span>
-          {hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} /> : <h4>Etape sans action</h4>}
+          <span className="section-kicker">{messages.testSheet.run.action} {step.executionOrder}</span>
+          {hasMarkdownContent(step.action) ? <MarkdownPreview content={step.action} /> : <h4>{messages.testSheet.run.noAction}</h4>}
         </div>
         <StatusBadge status={draft.status} />
       </div>
       {hasField && (
         <dl className="compact-definition-list">
-          <dt>Specifique</dt>
+          <dt>{messages.testSheet.edit.specificField}</dt>
           <dd><MarkdownPreview content={step.field} compact /></dd>
         </dl>
       )}
       {hasMarkdownContent(step.expectedResult) && (
         <section className="expected-result-block">
-          <h4 className="expected-result-title">Resultat attendu</h4>
+          <h4 className="expected-result-title">{messages.testSheet.run.expectedResult}</h4>
           <div className="expected-result-content">
             <MarkdownPreview content={step.expectedResult} compact />
           </div>
@@ -252,7 +253,7 @@ function TestRunStepDetail({
       )}
       {step.documents && step.documents.length > 0 && (
         <section className="run-read-details">
-          <h4>Documents de l action</h4>
+          <h4>{messages.testSheet.run.actionDocuments}</h4>
           <DocumentList documents={step.documents} />
         </section>
       )}
@@ -261,21 +262,21 @@ function TestRunStepDetail({
       ) : (
         <>
           <label>
-            Resultat obtenu
+            {messages.testSheet.run.actualResult}
             <textarea value={draft.actualResult} onChange={(event) => onDraftChange({ ...draft, actualResult: event.target.value })} />
           </label>
           <label>
-            Commentaire
+            {messages.testSheet.run.comment}
             <textarea value={draft.comment} onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })} />
           </label>
         </>
       )}
       {!readOnly && (
         <div className="status-action-grid" aria-label="Changer le statut de l action">
-          <Button type="button" variant="success" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('passed'); }}>Reussi</Button>
-          <Button type="button" variant="danger" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('failed'); }}>Echoue</Button>
-          <Button type="button" variant="warning" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('blocked'); }}>Bloque</Button>
-          <Button type="button" variant="secondary" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('skipped'); }}>Ignore</Button>
+          <Button type="button" variant="success" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('passed'); }}>{messages.status.passed}</Button>
+          <Button type="button" variant="danger" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('failed'); }}>{messages.status.failed}</Button>
+          <Button type="button" variant="warning" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('blocked'); }}>{messages.status.blocked}</Button>
+          <Button type="button" variant="secondary" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('skipped'); }}>{messages.status.skipped}</Button>
         </div>
       )}
     </div>
@@ -342,15 +343,15 @@ function RunSheetCommentEditor({
 
   const buttonLabel = () => {
     if (saveState === 'saving') {
-      return 'Enregistrement...';
+      return messages.testSheet.run.savingComment;
     }
     if (saveState === 'error') {
-      return 'Erreur, reessayer';
+      return messages.testSheet.run.saveError;
     }
     if (saveState === 'dirty') {
-      return 'Enregistrer le commentaire';
+      return messages.testSheet.run.saveComment;
     }
-    return 'Commentaire enregistre';
+    return messages.testSheet.run.savedComment;
   };
 
   const buttonVariant = (): 'primary' | 'secondary' | 'danger' | 'success' => {
@@ -368,14 +369,14 @@ function RunSheetCommentEditor({
 
   return (
     <div className="run-step-detail">
-      <h4>Commentaire de la fiche</h4>
+      <h4>{messages.testSheet.run.sheetComment}</h4>
       {readOnly ? (
         hasMarkdownContent(sheet.comment)
           ? <MarkdownPreview content={sheet.comment} />
-          : <p className="muted">Aucun commentaire</p>
+          : <p className="muted">{messages.testSheet.run.noComment}</p>
       ) : (
         <label>
-          Commentaire
+          {messages.testSheet.run.comment}
           <textarea value={commentDraft} onChange={(event) => updateComment(event.target.value)} />
         </label>
       )}
@@ -448,7 +449,7 @@ function RunSheetEvidenceList({
 
   return (
     <section className="run-read-details">
-      <h4>Documents ajoutes</h4>
+      <h4>{messages.testSheet.run.documentsAdded}</h4>
       {!readOnly && (
         <div className="document-upload-panel">
           <DocumentFilePicker
@@ -456,16 +457,16 @@ function RunSheetEvidenceList({
             file={file}
             inputRef={inputRef}
             onFileChange={setFile}
-            label="Ajouter un document"
+            label={messages.testSheet.documents.addDocument}
           />
           <Button type="button" disabled={!file || isUploading} onClick={() => { void upload(); }}>
-            {isUploading ? 'Ajout...' : 'Ajouter'}
+            {isUploading ? messages.common.saving : messages.common.add}
           </Button>
         </div>
       )}
       {error && <p className="error">{error}</p>}
       {evidences.length === 0 ? (
-        <p className="muted">Aucun document ajoute</p>
+        <p className="muted">{messages.testSheet.run.noDocumentsAdded}</p>
       ) : (
         <div className="document-list">
           {evidences.map((evidence) => (
@@ -477,8 +478,8 @@ function RunSheetEvidenceList({
                 </div>
               </div>
               <div className="button-row end">
-                <a className="ui-button secondary sm" href={testSheetApi.evidenceDownloadUrl(evidence.id)}>Telecharger</a>
-                {!readOnly && <Button type="button" size="sm" variant="danger" onClick={() => { void remove(evidence); }}>Supprimer</Button>}
+                <a className="ui-button secondary sm" href={testSheetApi.evidenceDownloadUrl(evidence.id)}>{messages.common.download}</a>
+                {!readOnly && <Button type="button" size="sm" variant="danger" onClick={() => { void remove(evidence); }}>{messages.common.delete}</Button>}
               </div>
             </div>
           ))}
@@ -493,20 +494,20 @@ function RunResultReadDetails({ actualResult, comment }: { actualResult: string;
   const hasComment = hasMarkdownContent(comment);
 
   if (!hasActualResult && !hasComment) {
-    return <p className="muted">Aucun resultat renseigne</p>;
+    return <p className="muted">{messages.testSheet.run.noResult}</p>;
   }
 
   return (
     <div className="run-read-details">
       {hasActualResult && (
         <section>
-          <h4>Resultat obtenu</h4>
+          <h4>{messages.testSheet.run.actualResult}</h4>
           <MarkdownPreview content={actualResult} />
         </section>
       )}
       {hasComment && (
         <section>
-          <h4>Commentaire</h4>
+          <h4>{messages.testSheet.run.comment}</h4>
           <MarkdownPreview content={comment} />
         </section>
       )}
