@@ -155,30 +155,26 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                 <h3>{plan.name}</h3>
               </div>
               <div className="plan-actions">
-                <div className="plan-action-group">
-                  {!plan.deletedAt && (
-                    <>
-                      {plan.latestRun?.status === 'running' && <Button type="button" size="sm" variant="primary" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.continue}</Button>}
-                      {plan.latestRun && plan.latestRun.status !== 'running' && <Button type="button" size="sm" variant="primary" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.open}</Button>}
-                      <Button type="button" size="sm" variant="primary" disabled={plan.sheetCount === 0} onClick={() => createRun(plan)}>{messages.testSheet.plans.newRunShort}</Button>
-                    </>
-                  )}
-                  <Button type="button" size="sm" variant="secondary" onClick={() => openHistory(plan)}>{messages.testSheet.plans.history}</Button>
-                </div>
-                <div className="plan-action-group plan-secondary-actions">
-                  {plan.deletedAt ? (
-                    <>
-                      <Button type="button" size="sm" variant="secondary" onClick={async () => { await testSheetApi.restorePlan(plan.id); await load(); }}>{messages.common.restore}</Button>
-                      <Button type="button" size="sm" variant="danger" onClick={() => setPlanToPermanentDelete(plan)}>{messages.testSheet.plans.permanentDelete}</Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => onEdit(plan.id)}>{messages.common.edit}</Button>
-                      <Button type="button" size="sm" variant="secondary" onClick={async () => { await testSheetApi.duplicatePlan(plan.id); await load(); }}>{messages.testSheet.plans.duplicate}</Button>
-                      <Button type="button" size="sm" variant="warning" onClick={() => setPlanToDelete(plan)}>{messages.testSheet.plans.hide}</Button>
-                    </>
-                  )}
-                </div>
+                {!plan.deletedAt && (
+                  <>
+                    {plan.latestRun?.status === 'running' && <Button type="button" size="sm" variant="primary" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.continue}</Button>}
+                    {plan.latestRun && plan.latestRun.status !== 'running' && <Button type="button" size="sm" variant="primary" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.open}</Button>}
+                    <Button type="button" size="sm" variant="primary" disabled={plan.sheetCount === 0} onClick={() => createRun(plan)}>{messages.testSheet.plans.newRunShort}</Button>
+                  </>
+                )}
+                <Button type="button" size="sm" variant="secondary" onClick={() => openHistory(plan)}>{messages.testSheet.plans.history}</Button>
+                {plan.deletedAt ? (
+                  <>
+                    <Button type="button" size="sm" variant="secondary" onClick={async () => { await testSheetApi.restorePlan(plan.id); await load(); }}>{messages.common.restore}</Button>
+                    <Button type="button" size="sm" variant="danger" onClick={() => setPlanToPermanentDelete(plan)}>{messages.testSheet.plans.permanentDelete}</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => onEdit(plan.id)}>{messages.common.edit}</Button>
+                    <Button type="button" size="sm" variant="secondary" onClick={async () => { await testSheetApi.duplicatePlan(plan.id); await load(); }}>{messages.testSheet.plans.duplicate}</Button>
+                    <Button type="button" size="sm" variant="warning" onClick={() => setPlanToDelete(plan)}>{messages.testSheet.plans.hide}</Button>
+                  </>
+                )}
               </div>
             </div>
 

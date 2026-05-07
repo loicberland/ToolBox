@@ -38,6 +38,7 @@
     "underline": "Souligné",
     "strike": "Barré",
     "link": "Lien",
+    "inlineCode": "Code en ligne",
     "codeblock": "Bloc de code",
     "quote": "Citation"
   },

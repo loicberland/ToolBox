@@ -604,24 +604,18 @@ textarea {
 
 .plan-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-  max-width: 470px;
-}
-
-.plan-action-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
   align-items: center;
   justify-content: flex-end;
+  max-width: 100%;
 }
 
 .plan-actions .ui-button {
   min-height: 30px;
-  padding: 5px 9px;
-  font-size: 12px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .plan-run-progress {
@@ -1370,6 +1364,11 @@ textarea {
   .test-run-layout {
     grid-template-columns: 1fr;
   }
+
+  .plan-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1421,8 +1420,7 @@ textarea {
     display: grid;
   }
 
-  .plan-actions,
-  .plan-action-group {
+  .plan-actions {
     justify-content: flex-start;
   }
 }

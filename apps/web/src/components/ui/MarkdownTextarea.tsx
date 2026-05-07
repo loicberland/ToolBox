@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { messages } from '../../i18n';
 
-type MarkdownFormat = 'bold' | 'italic' | 'underline' | 'strike' | 'link' | 'codeblock' | 'quote';
+type MarkdownFormat = 'bold' | 'italic' | 'underline' | 'strike' | 'link' | 'inlineCode' | 'codeblock' | 'quote';
 
 type MarkdownTextareaProps = {
   label?: string;
@@ -20,6 +20,7 @@ const toolbarItems: Array<{ format: MarkdownFormat; label: string; title: string
   { format: 'underline', label: 'U', title: messages.markdownToolbar.underline },
   { format: 'strike', label: 'S', title: messages.markdownToolbar.strike },
   { format: 'link', label: 'Lien', title: messages.markdownToolbar.link },
+  { format: 'inlineCode', label: '`', title: messages.markdownToolbar.inlineCode },
   { format: 'codeblock', label: '</>', title: messages.markdownToolbar.codeblock },
   { format: 'quote', label: '"', title: messages.markdownToolbar.quote },
 ];
@@ -120,14 +121,20 @@ function markdownReplacement(format: MarkdownFormat, selected: string) {
       return wrapSelection(selected, '~~', '~~');
     case 'link':
       if (hasSelection) {
+        if (/^https?:\/\//i.test(selected)) {
+          const text = `[](${selected})`;
+          return { text, selectionStart: 1, selectionEnd: 1 };
+        }
         const text = `[${selected}](url)`;
         return { text, selectionStart: text.length - 4, selectionEnd: text.length - 1 };
       }
       return { text: '[](url)', selectionStart: 1, selectionEnd: 1 };
+    case 'inlineCode':
+      return wrapSelection(selected, '`', '`');
     case 'codeblock': {
       const content = hasSelection ? selected : '';
-      const text = `\`\`\`txt\n${content}\n\`\`\``;
-      const cursor = '```txt\n'.length;
+      const text = `\`\`\`\n${content}\n\`\`\``;
+      const cursor = '```\n'.length;
       return {
         text,
         selectionStart: hasSelection ? cursor : cursor,
