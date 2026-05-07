@@ -149,18 +149,20 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
                     }
                     updateStepDraft(step.id, input);
                     await onSaveStep(step.id, input);
-                    if (input.status !== 'passed' && input.status !== 'skipped') {
-                      return;
-                    }
                     const steps = sheet.steps ?? [];
                     const currentIndex = steps.findIndex((item) => item.id === step.id);
                     const nextStep = currentIndex >= 0 ? steps[currentIndex + 1] : undefined;
-                    if (!nextStep) {
+                    const shouldOpenNext = input.status === 'passed' || input.status === 'skipped';
+                    if (shouldOpenNext && nextStep) {
+                      removeStepDraft(step.id);
+                      updateStepDraft(nextStep.id, getStepDraft(nextStep));
+                      setOpenedStepId(nextStep.id);
                       return;
                     }
-                    removeStepDraft(step.id);
-                    updateStepDraft(nextStep.id, getStepDraft(nextStep));
-                    setOpenedStepId(nextStep.id);
+                    if (!nextStep) {
+                      removeStepDraft(step.id);
+                      setOpenedStepId(undefined);
+                    }
                   }}
                 />
               )}
