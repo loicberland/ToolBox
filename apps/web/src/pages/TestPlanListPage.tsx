@@ -82,18 +82,12 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
   };
 
   const createRun = async (plan: TestPlanSummary) => {
-    const groups = await testSheetApi.listGroups(plan.id);
-    const selectedGroup = groups.length === 1 ? groups[0] : chooseGroup(groups);
-    if (!selectedGroup) {
-      return;
-    }
-    const groupRuns = await testSheetApi.listGroupRuns(selectedGroup.id);
-    const existingRun = findRunningRun(plan, groupRuns);
+    const existingRun = findRunningRun(plan, runsByPlan[plan.id]);
     if (existingRun) {
       setRunConflict({ plan, run: existingRun });
       return;
     }
-    const run = await testSheetApi.createGroupRun(selectedGroup.id);
+    const run = await testSheetApi.createRun(plan.id);
     onRun(run.id);
   };
 
@@ -277,7 +271,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
               <Button type="button" variant="secondary" onClick={() => { onRun(runConflict.run.id); }}>{messages.testSheet.plans.continue}</Button>
               <Button type="button" onClick={async () => {
                 await testSheetApi.cancelRun(runConflict.run.id);
-                const run = await testSheetApi.createGroupRun(runConflict.run.groupId);
+                const run = await testSheetApi.createRun(runConflict.plan.id);
                 setRunConflict(undefined);
                 onRun(run.id);
               }}>{messages.testSheet.dialogs.cancelAndReplay}</Button>
@@ -293,17 +287,23 @@ function PlanRunProgress({ run, compact = false }: { run?: TestRunSummary; compa
   if (!run) {
     return <p className="muted">{messages.testSheet.plans.noRun}</p>;
   }
-  const done = run.totalSteps - run.pendingSteps;
-  const percent = run.totalSteps === 0 ? 0 : Math.round((done / run.totalSteps) * 100);
+  const totalGroups = run.totalGroups || (run.totalSheets > 0 ? 1 : 0);
+  const pendingGroups = run.totalGroups ? run.pendingGroups : (run.pendingSteps > 0 ? 1 : 0);
+  const passedGroups = run.totalGroups ? run.passedGroups : (run.pendingSteps === 0 && run.failedSteps === 0 && run.blockedSteps === 0 && run.skippedSteps !== run.totalSteps ? 1 : 0);
+  const failedGroups = run.totalGroups ? run.failedGroups : (run.failedSteps > 0 ? 1 : 0);
+  const blockedGroups = run.totalGroups ? run.blockedGroups : (run.failedSteps === 0 && run.blockedSteps > 0 ? 1 : 0);
+  const skippedGroups = run.totalGroups ? run.skippedGroups : (run.totalSteps > 0 && run.skippedSteps === run.totalSteps ? 1 : 0);
+  const done = totalGroups - pendingGroups;
+  const percent = totalGroups === 0 ? 0 : Math.round((done / totalGroups) * 100);
   return (
     <div className={compact ? 'plan-run-progress compact' : 'plan-run-progress'}>
       {!compact && <strong>{messages.testSheet.plans.executionNumber}{run.runNumber}</strong>}
-      <strong>{done} / {run.totalSteps} {messages.testSheet.run.actionsProcessed}</strong>
+      <strong>{done} / {totalGroups} {messages.testSheet.run.subPlansProcessed}</strong>
       <div className="progress-track" aria-label={`Progression ${percent}%`}>
         <div className="progress-fill" style={{ width: `${percent}%` }} />
       </div>
       <p className="muted">
-        {run.passedSteps} {messages.testSheet.run.passedPlural} - {run.failedSteps} {messages.testSheet.run.failedPlural} - {run.blockedSteps} {messages.testSheet.run.blockedPlural} - {run.skippedSteps} {messages.testSheet.run.skippedPlural} - {run.pendingSteps} {statusLabel('pending').toLowerCase()}
+        {passedGroups} {messages.testSheet.run.passedPlural} - {failedGroups} {messages.testSheet.run.failedPlural} - {blockedGroups} {messages.testSheet.run.blockedPlural} - {skippedGroups} {messages.testSheet.run.skippedPlural} - {pendingGroups} {statusLabel('pending').toLowerCase()}
       </p>
     </div>
   );
@@ -324,15 +324,6 @@ function comparePlans(a: TestPlanSummary, b: TestPlanSummary, sortKey: SortKey) 
 
 function findRunningRun(plan: TestPlanSummary, runs?: TestRunSummary[]) {
   return (runs ?? (plan.latestRun ? [plan.latestRun] : [])).find((run) => run.status === 'running');
-}
-
-function chooseGroup(groups: Array<{ id: number; name: string }>) {
-  if (groups.length === 0) {
-    return undefined;
-  }
-  const choice = window.prompt(`${messages.testSheet.edit.chooseSubPlanRun}\n\n${groups.map((group, index) => `${index + 1}. ${group.name}`).join('\n')}`, '1');
-  const index = Number(choice) - 1;
-  return Number.isInteger(index) && index >= 0 && index < groups.length ? groups[index] : undefined;
 }
 
 function dateValue(value?: string) {

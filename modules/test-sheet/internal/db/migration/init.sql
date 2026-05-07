@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
 CREATE TABLE IF NOT EXISTS test_run_sheets (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	run_id INTEGER NOT NULL,
+	run_group_id INTEGER,
 	source_sheet_id INTEGER,
 	name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
@@ -129,7 +130,20 @@ CREATE TABLE IF NOT EXISTS test_run_sheets (
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (run_id) REFERENCES test_runs(id) ON DELETE CASCADE,
+	FOREIGN KEY (run_group_id) REFERENCES test_run_groups(id) ON DELETE CASCADE,
 	FOREIGN KEY (source_sheet_id) REFERENCES test_sheets(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS test_run_groups (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_id INTEGER NOT NULL,
+	source_group_id INTEGER,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	execution_order INTEGER NOT NULL DEFAULT 0,
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (run_id) REFERENCES test_runs(id) ON DELETE CASCADE,
+	FOREIGN KEY (source_group_id) REFERENCES test_plan_groups(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS test_run_steps (

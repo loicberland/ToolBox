@@ -1254,7 +1254,7 @@ func (s *Service) markGroupChanged(groupID int64) error {
 	if err := s.repo.TouchGroup(groupID); err != nil {
 		return err
 	}
-	return s.cancelRunningRunsForGroup(groupID)
+	return s.cancelRunningRunsForPlan(group.PlanID)
 }
 
 func (s *Service) cancelRunningRunsForPlan(planID int64) error {

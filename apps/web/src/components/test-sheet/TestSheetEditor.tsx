@@ -157,6 +157,17 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     closeStepEditor();
   };
 
+  const saveStepAndCreateAnother = async (input: StepInput) => {
+    if (!canEditSteps || !activeSheet || editingStep) {
+      return;
+    }
+    await onModelMutation(() => testSheetApi.createStep(activeSheet.id, input));
+    await refreshCurrentSheet();
+    setEditingStep(undefined);
+    setStepEditorMode('create');
+    scrollToStepEditor();
+  };
+
   const duplicateStep = async (step: TestSheetStep) => {
     if (!canEditSteps) {
       return;
@@ -269,6 +280,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
                 ref={stepFormRef}
                 nextOrder={nextStepOrder}
                 onSubmit={saveStep}
+                onSubmitAndCreateAnother={saveStepAndCreateAnother}
                 onCancel={closeStepEditor}
               />
             </div>

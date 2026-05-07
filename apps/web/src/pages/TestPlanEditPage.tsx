@@ -27,6 +27,11 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [documents, setDocuments] = useState<TestDocument[]>([]);
   const [sheetEditorMode, setSheetEditorMode] = useState<SheetEditorMode>('closed');
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
+  const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupToEdit, setGroupToEdit] = useState<TestGroup | undefined>();
+  const [editGroupName, setEditGroupName] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const sheetEditorRef = useRef<TestSheetEditorHandle>(null);
@@ -88,6 +93,56 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
     setSheets(groupId ? await testSheetApi.listGroupSheets(groupId) : []);
   };
 
+  const createGroup = async () => {
+    const name = newGroupName.trim();
+    if (!name || !effectivePlanId) {
+      return;
+    }
+    setCreatingGroup(true);
+    try {
+      const group = await runModelMutation(() => testSheetApi.createGroup(effectivePlanId, {
+        name,
+        description: '',
+        executionOrder: groups.length + 1,
+      }));
+      setCreateGroupDialogOpen(false);
+      setNewGroupName('');
+      await refreshGroups();
+      await selectGroup(group.id);
+      setInfo(messages.testSheet.edit.subPlanCreated);
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
+  const deleteSelectedGroup = async () => {
+    if (!selectedGroup || !window.confirm(messages.testSheet.edit.deleteSubPlanConfirm)) {
+      return;
+    }
+    await runModelMutation(() => testSheetApi.deleteGroup(selectedGroup.id));
+    closeEditor();
+    const loadedGroups = await testSheetApi.listGroups(effectivePlanId);
+    setGroups(loadedGroups);
+    const nextGroupId = loadedGroups[0]?.id;
+    setSelectedGroupId(nextGroupId);
+    setSheets(nextGroupId ? await testSheetApi.listGroupSheets(nextGroupId) : []);
+  };
+
+  const saveEditedGroup = async () => {
+    const name = editGroupName.trim();
+    if (!groupToEdit || !name) {
+      return;
+    }
+    await runModelMutation(() => testSheetApi.updateGroup(groupToEdit.id, {
+      name,
+      description: groupToEdit.description,
+      executionOrder: groupToEdit.executionOrder,
+    }));
+    setGroupToEdit(undefined);
+    setEditGroupName('');
+    await refreshGroups();
+  };
+
   const refreshDocuments = async () => {
     if (!effectivePlanId) {
       return [];
@@ -111,7 +166,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
 
   const runModelMutation = async <T,>(mutation: () => Promise<T>): Promise<T> => {
     setInfo('');
-    const hadRunningRun = selectedGroupId ? await hasRunningGroupRun(selectedGroupId) : await hasRunningRun(effectivePlanId);
+    const hadRunningRun = await hasRunningRun(effectivePlanId);
     const result = await mutation();
     if (hadRunningRun) {
       setInfo(modelChangedRunCanceledMessage);
@@ -172,9 +227,9 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
         actions={!isNew && (
           <Button
             type="button"
-            disabled={!selectedGroupId || sheets.length === 0}
+            disabled={groups.length === 0}
             onClick={async () => {
-              const run = await testSheetApi.createGroupRun(selectedGroupId!);
+              const run = await testSheetApi.createRun(effectivePlanId);
               onRun(run.id);
             }}
           >
@@ -224,15 +279,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
             </div>
             <Button
               type="button"
-              onClick={async () => {
-                const group = await runModelMutation(() => testSheetApi.createGroup(effectivePlanId, {
-                  name: messages.testSheet.edit.newSubPlan,
-                  description: '',
-                  executionOrder: groups.length + 1,
-                }));
-                await refreshGroups();
-                await selectGroup(group.id);
-              }}
+              onClick={() => setCreateGroupDialogOpen(true)}
             >
               + {messages.testSheet.edit.addSubPlan}
             </Button>
@@ -256,17 +303,9 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 type="button"
                 size="sm"
                 variant="secondary"
-                onClick={async () => {
-                  const name = window.prompt(messages.testSheet.edit.editSubPlan, selectedGroup.name);
-                  if (!name) {
-                    return;
-                  }
-                  await runModelMutation(() => testSheetApi.updateGroup(selectedGroup.id, {
-                    name,
-                    description: selectedGroup.description,
-                    executionOrder: selectedGroup.executionOrder,
-                  }));
-                  await refreshGroups();
+                onClick={() => {
+                  setGroupToEdit(selectedGroup);
+                  setEditGroupName(selectedGroup.name);
                 }}
               >
                 {messages.common.edit}
@@ -288,14 +327,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                   type="button"
                   size="sm"
                   variant="danger"
-                  onClick={async () => {
-                    if (!window.confirm(messages.testSheet.edit.deleteSubPlanConfirm)) {
-                      return;
-                    }
-                    await runModelMutation(() => testSheetApi.deleteGroup(selectedGroup.id));
-                    const loadedGroups = await refreshGroups();
-                    await selectGroup(loadedGroups[0]?.id ?? 0);
-                  }}
+                  onClick={deleteSelectedGroup}
                 >
                   {messages.testSheet.edit.deleteSubPlan}
                 </Button>
@@ -393,6 +425,100 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
           </>
         )}
       </section>
+      {createGroupDialogOpen && (
+        <div className="dialog-backdrop" role="presentation">
+          <div
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-sub-plan-title"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setCreateGroupDialogOpen(false);
+                setNewGroupName('');
+              }
+            }}
+          >
+            <h3 id="create-sub-plan-title">{messages.testSheet.edit.createSubPlan}</h3>
+            <label>
+              {messages.testSheet.edit.subPlanName}
+              <input
+                value={newGroupName}
+                onChange={(event) => setNewGroupName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void createGroup();
+                  }
+                }}
+                autoFocus
+              />
+            </label>
+            <div className="button-row end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setCreateGroupDialogOpen(false);
+                  setNewGroupName('');
+                }}
+              >
+                {messages.common.cancel}
+              </Button>
+              <Button type="button" disabled={!newGroupName.trim() || creatingGroup} onClick={createGroup}>
+                {creatingGroup ? messages.common.saving : messages.common.create}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {groupToEdit && (
+        <div className="dialog-backdrop" role="presentation">
+          <div
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-sub-plan-title"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setGroupToEdit(undefined);
+                setEditGroupName('');
+              }
+            }}
+          >
+            <h3 id="edit-sub-plan-title">{messages.testSheet.edit.editSubPlan}</h3>
+            <label>
+              {messages.testSheet.edit.subPlanName}
+              <input
+                value={editGroupName}
+                onChange={(event) => setEditGroupName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void saveEditedGroup();
+                  }
+                }}
+                autoFocus
+              />
+            </label>
+            <div className="button-row end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setGroupToEdit(undefined);
+                  setEditGroupName('');
+                }}
+              >
+                {messages.common.cancel}
+              </Button>
+              <Button type="button" disabled={!editGroupName.trim()} onClick={saveEditedGroup}>
+                {messages.common.save}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -402,14 +528,6 @@ async function hasRunningRun(planId: number) {
     return false;
   }
   const runs = await testSheetApi.listPlanRuns(planId);
-  return runs.some((run) => run.status === 'running');
-}
-
-async function hasRunningGroupRun(groupId: number) {
-  if (!groupId) {
-    return false;
-  }
-  const runs = await testSheetApi.listGroupRuns(groupId);
   return runs.some((run) => run.status === 'running');
 }
 

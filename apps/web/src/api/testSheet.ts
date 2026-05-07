@@ -84,7 +84,19 @@ export type TestRun = {
   status: TestRunStatus | string;
   startedAt: string;
   finishedAt?: string;
+  groups?: RunGroup[];
   sheets: TestRunSheet[];
+};
+
+export type RunGroup = {
+  id: number;
+  runId: number;
+  sourceGroupId?: number;
+  name: string;
+  description: string;
+  executionOrder: number;
+  createdAt: string;
+  sheets?: TestRunSheet[];
 };
 
 export type TestRunStatus = 'pending' | 'running' | 'completed' | 'canceled' | 'archived';
@@ -100,6 +112,12 @@ export type TestRunSummary = {
   startedAt: string;
   finishedAt?: string;
   totalSheets: number;
+  totalGroups: number;
+  pendingGroups: number;
+  passedGroups: number;
+  failedGroups: number;
+  blockedGroups: number;
+  skippedGroups: number;
   totalSteps: number;
   pendingSteps: number;
   passedSteps: number;
@@ -124,6 +142,7 @@ export type TestPlanSummary = {
 export type TestRunSheet = {
   id: number;
   runId: number;
+  runGroupId: number;
   sourceSheetId?: number;
   name: string;
   description: string;

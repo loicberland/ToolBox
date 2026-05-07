@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { testSheetApi, TestRun } from '../api/testSheet';
-import { TestRunProgress } from '../components/test-sheet/TestRunProgress';
+import { RunGroup, testSheetApi, TestRun, TestRunSheet } from '../api/testSheet';
+import { getGroupStatus, TestRunProgress } from '../components/test-sheet/TestRunProgress';
 import { TestRunSheetDetail } from '../components/test-sheet/TestRunSheetDetail';
 import { TestRunSheetList } from '../components/test-sheet/TestRunSheetList';
 import { Button } from '../components/ui/Button';
@@ -20,6 +20,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
   const [run, setRun] = useState<TestRun | undefined>();
   const [error, setError] = useState('');
   const [selectedSheetId, setSelectedSheetId] = useState<number | undefined>();
+  const [selectedGroupId, setSelectedGroupId] = useState<number | undefined>();
   const [confirmFinish, setConfirmFinish] = useState(false);
 
   const load = () => testSheetApi.getRun(runId).then(setRun).catch((err: Error) => setError(err.message));
@@ -29,21 +30,34 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
   }, [runId]);
 
   useEffect(() => {
-    if (!run?.sheets.length) {
+    const groups = getRunGroups(run);
+    if (!groups.length) {
+      setSelectedGroupId(undefined);
       setSelectedSheetId(undefined);
       return;
     }
 
-    const selectedSheetStillExists = run.sheets.some((sheet) => sheet.id === selectedSheetId);
+    const selectedGroupStillExists = groups.some((group) => group.id === selectedGroupId);
+    const nextGroup = selectedGroupStillExists
+      ? groups.find((group) => group.id === selectedGroupId)!
+      : (groups.find((group) => getGroupStatus(group.sheets ?? []) === 'pending') ?? groups[0]);
+    if (nextGroup.id !== selectedGroupId) {
+      setSelectedGroupId(nextGroup.id);
+    }
+    const sheets = nextGroup.sheets ?? [];
+    const selectedSheetStillExists = sheets.some((sheet) => sheet.id === selectedSheetId);
     if (selectedSheetStillExists) {
       return;
     }
 
-    const firstPending = run.sheets.find((sheet) => getRunSheetProgress(sheet).status === 'pending');
-    setSelectedSheetId((firstPending ?? run.sheets[0]).id);
-  }, [run, selectedSheetId]);
+    const firstPending = sheets.find((sheet) => getRunSheetProgress(sheet).status === 'pending');
+    setSelectedSheetId((firstPending ?? sheets[0])?.id);
+  }, [run, selectedGroupId, selectedSheetId]);
 
-  const selectedSheet = run?.sheets.find((sheet) => sheet.id === selectedSheetId);
+  const runGroups = getRunGroups(run);
+  const selectedGroup = runGroups.find((group) => group.id === selectedGroupId);
+  const visibleSheets = selectedGroup?.sheets ?? [];
+  const selectedSheet = visibleSheets.find((sheet) => sheet.id === selectedSheetId);
   const readOnly = run ? isRunReadOnly(run.status) : false;
   const runEditable = run ? isRunEditable(run.status) : false;
   const finish = async () => {
@@ -77,11 +91,22 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
       {run && (
         <div className="test-run-execution">
           <div className="test-run-progress">
-            <TestRunProgress status={run.status} sheets={run.sheets} />
+            <TestRunProgress status={run.status} sheets={run.sheets} groups={runGroups} />
           </div>
           <div className="test-run-layout">
             <div className="test-run-sidebar">
-              <TestRunSheetList sheets={run.sheets} selectedSheetId={selectedSheetId} onSelect={setSelectedSheetId} />
+              <RunGroupList
+                groups={runGroups}
+                selectedGroupId={selectedGroupId}
+                onSelect={(group) => {
+                  setSelectedGroupId(group.id);
+                  const sheets = group.sheets ?? [];
+                  const firstPending = sheets.find((sheet) => getRunSheetProgress(sheet).status === 'pending');
+                  setSelectedSheetId((firstPending ?? sheets[0])?.id);
+                }}
+              />
+              {selectedGroup && <SelectedGroupProgress group={selectedGroup} />}
+              <TestRunSheetList sheets={visibleSheets} selectedSheetId={selectedSheetId} onSelect={setSelectedSheetId} />
             </div>
             <aside className="test-run-detail">
               {selectedSheet && (
@@ -129,6 +154,28 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
   );
 }
 
+function SelectedGroupProgress({ group }: { group: RunGroup }) {
+  const sheets = group.sheets ?? [];
+  const done = sheets.filter((sheet) => getRunSheetProgress(sheet).status !== 'pending').length;
+  const total = sheets.length;
+  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+  return (
+    <div className="run-sheet-list-card ui-card">
+      <div className="ui-card-header">
+        <div>
+          <span className="section-kicker">Progression du sous-plan</span>
+          <h3>{group.name}</h3>
+        </div>
+        <StatusBadge status={getGroupStatus(sheets)} />
+      </div>
+      <strong>{done} / {total} fiches traitées</strong>
+      <div className="progress-track" aria-label={`Progression ${percent}%`}>
+        <div className="progress-fill" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function hasPendingWork(run: TestRun) {
   return run.sheets.some((sheet) => {
     const steps = sheet.steps ?? [];
@@ -137,4 +184,73 @@ function hasPendingWork(run: TestRun) {
     }
     return steps.some((step) => step.status === 'pending');
   });
+}
+
+function getRunGroups(run?: TestRun): RunGroup[] {
+  if (!run) {
+    return [];
+  }
+  if (run.groups && run.groups.length > 0) {
+    return run.groups;
+  }
+  return [{
+    id: 0,
+    runId: run.id,
+    name: run.groupName || run.planName,
+    description: '',
+    executionOrder: 1,
+    createdAt: run.startedAt,
+    sheets: run.sheets,
+  }];
+}
+
+function RunGroupList({
+  groups,
+  selectedGroupId,
+  onSelect,
+}: {
+  groups: RunGroup[];
+  selectedGroupId?: number;
+  onSelect: (group: RunGroup) => void;
+}) {
+  return (
+    <div className="run-sheet-list-card ui-card">
+      <div className="ui-card-header">
+        <div>
+          <span className="section-kicker">Sous-plans</span>
+          <h3>{groups.length} sous-plan{groups.length > 1 ? 's' : ''}</h3>
+        </div>
+      </div>
+      <div className="run-sheet-list">
+        {groups.map((group) => {
+          const sheets = group.sheets ?? [];
+          const done = sheets.filter((sheet) => getRunSheetProgress(sheet).status !== 'pending').length;
+          return (
+            <div
+              key={group.id}
+              className={`run-sheet-list-item ${group.id === selectedGroupId ? 'active' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(group)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelect(group);
+                }
+              }}
+            >
+              <span className="run-list-order">{group.executionOrder}</span>
+              <div className="run-sheet-list-main">
+                <div className="run-sheet-list-title">
+                  <strong className="run-sheet-name">{group.name}</strong>
+                  <StatusBadge status={getGroupStatus(sheets)} />
+                </div>
+                <div className="run-sheet-progress-summary">{done} / {sheets.length} fiches traitées</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

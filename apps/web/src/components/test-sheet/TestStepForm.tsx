@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StepInput, TestSheetStep } from '../../api/testSheet';
 import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
@@ -8,6 +8,7 @@ type Props = {
   step?: TestSheetStep;
   nextOrder: number;
   onSubmit: (input: StepInput) => Promise<void>;
+  onSubmitAndCreateAnother?: (input: StepInput) => Promise<void>;
   onCancel?: () => void;
 };
 
@@ -15,7 +16,8 @@ export type TestStepFormHandle = {
   submit: () => Promise<void>;
 };
 
-export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestStepForm({ step, nextOrder, onSubmit, onCancel }, ref) {
+export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestStepForm({ step, nextOrder, onSubmit, onSubmitAndCreateAnother, onCancel }, ref) {
+  const formRef = useRef<HTMLFormElement | null>(null);
   const [value, setValue] = useState<StepInput>(newStep(nextOrder));
   const [saving, setSaving] = useState(false);
 
@@ -28,9 +30,21 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
     } : newStep(nextOrder));
   }, [step, nextOrder]);
 
-  const submitCurrent = async () => {
+  const focusFirstField = () => {
+    requestAnimationFrame(() => {
+      formRef.current?.querySelector('textarea')?.focus();
+    });
+  };
+
+  const submitCurrent = async (createAnother = false) => {
     setSaving(true);
     try {
+      if (createAnother && !step && onSubmitAndCreateAnother) {
+        await onSubmitAndCreateAnother(value);
+        setValue(newStep(nextOrder + 1));
+        focusFirstField();
+        return;
+      }
       await onSubmit(value);
       if (!step) {
         setValue(newStep(nextOrder + 1));
@@ -46,6 +60,7 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
 
   return (
     <form
+      ref={formRef}
       className="form-grid step-form"
       onSubmit={async (event) => {
         event.preventDefault();
@@ -70,6 +85,16 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
       />
       <div className="button-row">
         <Button type="submit" disabled={saving}>{saving ? messages.common.saving : step ? messages.common.save : messages.testSheet.edit.addStep}</Button>
+        {!step && onSubmitAndCreateAnother && (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={saving}
+            onClick={() => submitCurrent(true)}
+          >
+            {messages.testSheet.edit.addStepAndContinue}
+          </Button>
+        )}
         {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>{messages.common.cancel}</Button>}
       </div>
     </form>
