@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { RunSheetInput, RunStepInput, TestRunSheet, TestRunStep } from '../../api/testSheet';
+import React, { useEffect, useRef, useState } from 'react';
+import { Evidence, RunSheetInput, RunStepInput, TestRunSheet, TestRunStep, testSheetApi } from '../../api/testSheet';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { MarkdownCollapsibleSection } from '../ui/MarkdownCollapsibleSection';
 import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
 import { SmartEllipsisText } from '../ui/SmartEllipsisText';
-import { DocumentList } from './DocumentList';
+import { DocumentFilePicker, DocumentList, formatBytes } from './DocumentList';
 import { StatusBadge } from './StatusBadge';
 import { TestRunStepProgress } from './TestRunStepProgress';
 import { getRunSheetProgress } from './runStatus';
@@ -15,11 +15,12 @@ type Props = {
   readOnly?: boolean;
   onSaveSheet: (sheetId: number, input: RunSheetInput) => Promise<void>;
   onSaveStep: (stepId: number, input: RunStepInput) => Promise<void>;
+  onEvidenceChanged: () => Promise<void>;
 };
 
 const statuses: TestRunStep['status'][] = ['pending', 'passed', 'failed', 'blocked', 'skipped'];
 
-export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSaveStep }: Props) {
+export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSaveStep, onEvidenceChanged }: Props) {
   const [openedStepId, setOpenedStepId] = useState<number | undefined>();
   const [stepDrafts, setStepDrafts] = useState<Record<number, RunStepInput>>({});
   const progress = getRunSheetProgress(sheet);
@@ -147,8 +148,17 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
           ))}
         </div>
       ) : (
-        <RunSheetResultEditor sheet={sheet} readOnly={readOnly} onSave={onSaveSheet} />
+        <p className="muted">Aucune action dans cette fiche</p>
       )}
+
+      <RunSheetCommentEditor sheet={sheet} readOnly={readOnly} onSave={onSaveSheet} />
+      <RunSheetEvidenceList
+        runId={sheet.runId}
+        runSheetId={sheet.id}
+        evidences={sheet.evidences}
+        readOnly={readOnly}
+        onChanged={onEvidenceChanged}
+      />
     </Card>
   );
 }
@@ -258,7 +268,7 @@ function TestRunStepDetail({
   );
 }
 
-function RunSheetResultEditor({
+function RunSheetCommentEditor({
   sheet,
   readOnly,
   onSave,
@@ -267,75 +277,200 @@ function RunSheetResultEditor({
   readOnly: boolean;
   onSave: (sheetId: number, input: RunSheetInput) => Promise<void>;
 }) {
-  const [value, setValue] = useState<RunSheetInput>({
-    status: sheet.status,
-    actualResult: sheet.actualResult,
-    comment: sheet.comment,
-  });
-  const [saving, setSaving] = useState(false);
+  const [commentDraft, setCommentDraft] = useState(sheet.comment);
+  const [savedComment, setSavedComment] = useState(sheet.comment);
+  const [saveState, setSaveState] = useState<'saved' | 'dirty' | 'saving' | 'success' | 'error'>('saved');
+  const [error, setError] = useState('');
+  const progress = getRunSheetProgress(sheet);
+  const isDirty = commentDraft !== savedComment;
 
   useEffect(() => {
-    setValue({
-      status: sheet.status,
-      actualResult: sheet.actualResult,
-      comment: sheet.comment,
-    });
-  }, [sheet]);
+    const nextComment = sheet.comment ?? '';
+    setCommentDraft(nextComment);
+    setSavedComment(nextComment);
+    setSaveState('saved');
+    setError('');
+  }, [sheet.id, sheet.comment]);
 
-  const save = async (input: RunSheetInput = value) => {
-    if (readOnly) {
+  useEffect(() => {
+    if (saveState !== 'success') {
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setSaveState('saved'), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [saveState]);
+
+  const updateComment = (nextComment: string) => {
+    setCommentDraft(nextComment);
+    setError('');
+    setSaveState(nextComment === savedComment ? 'saved' : 'dirty');
+  };
+
+  const save = async () => {
+    if (readOnly || !isDirty || saveState === 'saving') {
       return;
     }
-    setSaving(true);
+    setSaveState('saving');
+    setError('');
     try {
-      await onSave(sheet.id, input);
-    } finally {
-      setSaving(false);
+      await onSave(sheet.id, {
+        status: progress.status,
+        actualResult: sheet.actualResult,
+        comment: commentDraft,
+      });
+      setSavedComment(commentDraft);
+      setSaveState('success');
+    } catch (err) {
+      setError((err as Error).message);
+      setSaveState('error');
     }
+  };
+
+  const buttonLabel = () => {
+    if (saveState === 'saving') {
+      return 'Enregistrement...';
+    }
+    if (saveState === 'error') {
+      return 'Erreur, reessayer';
+    }
+    if (saveState === 'dirty') {
+      return 'Enregistrer le commentaire';
+    }
+    return 'Commentaire enregistre';
+  };
+
+  const buttonVariant = (): 'primary' | 'secondary' | 'danger' | 'success' => {
+    if (saveState === 'success') {
+      return 'success';
+    }
+    if (saveState === 'error') {
+      return 'danger';
+    }
+    if (saveState === 'dirty') {
+      return 'primary';
+    }
+    return 'secondary';
   };
 
   return (
     <div className="run-step-detail">
+      <h4>Commentaire de la fiche</h4>
       {readOnly ? (
-        <>
-          <div className="card-topline">
-            <span className="section-kicker">Statut</span>
-            <StatusBadge status={sheet.status} />
-          </div>
-          <RunResultReadDetails actualResult={sheet.actualResult} comment={sheet.comment} />
-        </>
+        hasMarkdownContent(sheet.comment)
+          ? <MarkdownPreview content={sheet.comment} />
+          : <p className="muted">Aucun commentaire</p>
       ) : (
-        <>
-          <label>
-            Statut
-            <select value={value.status} onChange={(event) => setValue({ ...value, status: event.target.value as TestRunSheet['status'] })}>
-              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-            </select>
-          </label>
-          <label>
-            Resultat obtenu
-            <textarea value={value.actualResult} onChange={(event) => setValue({ ...value, actualResult: event.target.value })} />
-          </label>
-          <label>
-            Commentaire
-            <textarea value={value.comment} onChange={(event) => setValue({ ...value, comment: event.target.value })} />
-          </label>
-        </>
+        <label>
+          Commentaire
+          <textarea value={commentDraft} onChange={(event) => updateComment(event.target.value)} />
+        </label>
       )}
       {!readOnly && (
-        <>
-          <div className="status-action-grid" aria-label="Changer le statut du test">
-            <Button type="button" variant="success" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'passed' })}>Reussi</Button>
-            <Button type="button" variant="danger" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'failed' })}>Echoue</Button>
-            <Button type="button" variant="warning" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'blocked' })}>Bloque</Button>
-            <Button type="button" variant="secondary" size="sm" disabled={saving} onClick={() => save({ ...value, status: 'skipped' })}>Ignore</Button>
-          </div>
-          <Button type="button" disabled={saving} onClick={() => save()}>
-            {saving ? 'Sauvegarde...' : 'Sauvegarder'}
-          </Button>
-        </>
+        <Button
+          type="button"
+          variant={buttonVariant()}
+          className={saveState === 'saved' ? 'soft-save-button' : ''}
+          disabled={saveState === 'saving' || !isDirty}
+          onClick={() => { void save(); }}
+        >
+          {buttonLabel()}
+        </Button>
       )}
+      {error && <p className="error">{error}</p>}
     </div>
+  );
+}
+
+function RunSheetEvidenceList({
+  runId,
+  runSheetId,
+  evidences = [],
+  readOnly,
+  onChanged,
+}: {
+  runId: number;
+  runSheetId: number;
+  evidences?: Evidence[];
+  readOnly: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | undefined>();
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  const upload = async () => {
+    if (!file || readOnly) {
+      return;
+    }
+    setIsUploading(true);
+    setError('');
+    try {
+      await testSheetApi.uploadRunSheetEvidence(runId, runSheetId, file);
+      setFile(undefined);
+      if (inputRef.current) {
+        inputRef.current.value = '';
+      }
+      await onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const remove = async (evidence: Evidence) => {
+    if (readOnly) {
+      return;
+    }
+    setError('');
+    try {
+      await testSheetApi.deleteEvidence(evidence.id);
+      await onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <section className="run-read-details">
+      <h4>Documents ajoutes</h4>
+      {!readOnly && (
+        <div className="document-upload-panel">
+          <DocumentFilePicker
+            id={`run-sheet-evidence-${runSheetId}`}
+            file={file}
+            inputRef={inputRef}
+            onFileChange={setFile}
+            label="Ajouter un document"
+          />
+          <Button type="button" disabled={!file || isUploading} onClick={() => { void upload(); }}>
+            {isUploading ? 'Ajout...' : 'Ajouter'}
+          </Button>
+        </div>
+      )}
+      {error && <p className="error">{error}</p>}
+      {evidences.length === 0 ? (
+        <p className="muted">Aucun document ajoute</p>
+      ) : (
+        <div className="document-list">
+          {evidences.map((evidence) => (
+            <div className="document-list-item" key={evidence.id}>
+              <div className="document-content">
+                <div className="document-title-row">
+                  <span className="document-name" title={evidence.name}>{evidence.name}</span>
+                  <span className="document-size">{formatBytes(evidence.sizeBytes)}</span>
+                </div>
+              </div>
+              <div className="button-row end">
+                <a className="ui-button secondary sm" href={testSheetApi.evidenceDownloadUrl(evidence.id)}>Telecharger</a>
+                {!readOnly && <Button type="button" size="sm" variant="danger" onClick={() => { void remove(evidence); }}>Supprimer</Button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

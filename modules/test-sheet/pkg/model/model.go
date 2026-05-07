@@ -162,8 +162,9 @@ type Evidence struct {
 	ID         int64     `json:"id"`
 	RunSheetID int64     `json:"runSheetId"`
 	Name       string    `json:"name"`
-	Path       string    `json:"path"`
+	Path       string    `json:"-"`
 	MimeType   string    `json:"mimeType"`
+	SizeBytes  int64     `json:"sizeBytes"`
 	Comment    string    `json:"comment"`
 	CreatedAt  time.Time `json:"createdAt"`
 }

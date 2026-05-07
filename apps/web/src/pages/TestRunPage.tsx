@@ -101,6 +101,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
                     await testSheetApi.updateRunStep(runId, stepId, input);
                     await load();
                   }}
+                  onEvidenceChanged={load}
                 />
               )}
             </aside>

@@ -217,6 +217,13 @@ textarea {
   color: var(--text);
 }
 
+.ui-button.soft-save-button:disabled {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  opacity: 1;
+}
+
 .ui-button.ghost {
   background: transparent;
   color: var(--primary);
@@ -230,6 +237,10 @@ textarea {
 .ui-button.success {
   background: var(--success);
   border-color: var(--success);
+}
+
+.ui-button.success:disabled {
+  opacity: 1;
 }
 
 .ui-button.warning {
@@ -476,6 +487,12 @@ textarea {
   grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr) auto;
   gap: 10px;
   align-items: center;
+}
+
+.document-upload-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .document-file-picker {

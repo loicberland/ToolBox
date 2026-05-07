@@ -104,6 +104,9 @@ func (r *SQLiteRepository) Migrate() error {
 	if err := r.ensureNullableDateTimeColumn("test_plans", "deleted_at"); err != nil {
 		return err
 	}
+	if err := r.ensureIntegerColumn("test_run_evidences", "size_bytes"); err != nil {
+		return err
+	}
 	if _, err := r.db.Exec(documentMigrationSQL); err != nil {
 		return err
 	}
@@ -131,6 +134,18 @@ func (r *SQLiteRepository) ensureNullableDateTimeColumn(table, column string) er
 		return nil
 	}
 	_, err = r.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s DATETIME", table, column))
+	return err
+}
+
+func (r *SQLiteRepository) ensureIntegerColumn(table, column string) error {
+	exists, err := r.columnExists(table, column)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = r.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s INTEGER NOT NULL DEFAULT 0", table, column))
 	return err
 }
 
@@ -926,6 +941,11 @@ func (r *SQLiteRepository) ListRunSheets(runID int64) ([]model.RunSheet, error) 
 			return nil, err
 		}
 		sheets[index].Steps = steps
+		evidences, err := r.ListRunSheetEvidences(sheets[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		sheets[index].Evidences = evidences
 		if sheets[index].SourceSheetID != nil {
 			documents, err := r.ListSheetDocuments(*sheets[index].SourceSheetID)
 			if err != nil {
@@ -989,6 +1009,79 @@ func (r *SQLiteRepository) UpdateRunStep(runID, runStepID int64, input model.Run
 	row := r.db.QueryRow(`SELECT id, run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
 		FROM test_run_steps WHERE id = ?`, runStepID)
 	return scanRunStep(row)
+}
+
+func (r *SQLiteRepository) GetRunIDForRunSheet(runSheetID int64) (int64, error) {
+	var runID int64
+	err := r.db.QueryRow(`SELECT run_id FROM test_run_sheets WHERE id = ?`, runSheetID).Scan(&runID)
+	return runID, err
+}
+
+func (r *SQLiteRepository) ListRunSheetEvidences(runSheetID int64) ([]model.Evidence, error) {
+	rows, err := r.db.Query(`SELECT id, run_sheet_id, name, path, mime_type, size_bytes, comment, created_at
+		FROM test_run_evidences WHERE run_sheet_id = ? ORDER BY created_at DESC, id DESC`, runSheetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	evidences := []model.Evidence{}
+	for rows.Next() {
+		evidence, err := scanEvidence(rows)
+		if err != nil {
+			return nil, err
+		}
+		evidences = append(evidences, evidence)
+	}
+	return evidences, rows.Err()
+}
+
+func (r *SQLiteRepository) GetEvidence(evidenceID int64) (model.Evidence, error) {
+	row := r.db.QueryRow(`SELECT id, run_sheet_id, name, path, mime_type, size_bytes, comment, created_at
+		FROM test_run_evidences WHERE id = ?`, evidenceID)
+	return scanEvidence(row)
+}
+
+func (r *SQLiteRepository) CreateEvidence(input model.Evidence) (model.Evidence, error) {
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`INSERT INTO test_run_evidences
+		(run_sheet_id, name, path, mime_type, size_bytes, comment, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		input.RunSheetID, input.Name, input.Path, input.MimeType, input.SizeBytes, input.Comment, now)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	return r.GetEvidence(id)
+}
+
+func (r *SQLiteRepository) UpdateEvidenceFile(evidenceID int64, storagePath, mimeType string, sizeBytes int64) (model.Evidence, error) {
+	res, err := r.db.Exec(`UPDATE test_run_evidences SET path = ?, mime_type = ?, size_bytes = ? WHERE id = ?`,
+		storagePath, mimeType, sizeBytes, evidenceID)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.Evidence{}, sql.ErrNoRows
+	}
+	return r.GetEvidence(evidenceID)
+}
+
+func (r *SQLiteRepository) DeleteEvidence(evidenceID int64) (model.Evidence, error) {
+	evidence, err := r.GetEvidence(evidenceID)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	res, err := r.db.Exec(`DELETE FROM test_run_evidences WHERE id = ?`, evidenceID)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.Evidence{}, sql.ErrNoRows
+	}
+	return evidence, nil
 }
 
 func (r *SQLiteRepository) FinishRun(runID int64) (model.TestRun, error) {
@@ -1133,6 +1226,12 @@ func scanRunSheet(scanner interface{ Scan(...any) error }) (model.RunSheet, erro
 	return sheet, err
 }
 
+func scanEvidence(scanner interface{ Scan(...any) error }) (model.Evidence, error) {
+	var evidence model.Evidence
+	err := scanner.Scan(&evidence.ID, &evidence.RunSheetID, &evidence.Name, &evidence.Path, &evidence.MimeType, &evidence.SizeBytes, &evidence.Comment, &evidence.CreatedAt)
+	return evidence, err
+}
+
 func scanRunStep(scanner interface{ Scan(...any) error }) (model.RunStep, error) {
 	var step model.RunStep
 	var sourceStepID sql.NullInt64
@@ -1262,6 +1361,7 @@ CREATE TABLE IF NOT EXISTS test_run_evidences (
 	name TEXT NOT NULL,
 	path TEXT NOT NULL,
 	mime_type TEXT NOT NULL DEFAULT '',
+	size_bytes INTEGER NOT NULL DEFAULT 0,
 	comment TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL,
 	FOREIGN KEY (run_sheet_id) REFERENCES test_run_sheets(id) ON DELETE CASCADE

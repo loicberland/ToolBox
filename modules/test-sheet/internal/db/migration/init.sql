@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS test_run_evidences (
 	name TEXT NOT NULL,
 	path TEXT NOT NULL,
 	mime_type TEXT NOT NULL DEFAULT '',
+	size_bytes INTEGER NOT NULL DEFAULT 0,
 	comment TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL,
 	FOREIGN KEY (run_sheet_id) REFERENCES test_run_sheets(id) ON DELETE CASCADE

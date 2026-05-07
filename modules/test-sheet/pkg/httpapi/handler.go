@@ -57,9 +57,13 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/runs/{runId}/replay", h.replayRun).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/cancel", h.cancelRun).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/sheets/{runSheetId}", h.updateRunSheet).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/runs/{runId}/sheets/{runSheetId}/evidences", h.listRunSheetEvidences).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/runs/{runId}/sheets/{runSheetId}/evidences", h.uploadRunSheetEvidence).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/steps/{runStepId}", h.updateRunStep).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/finish", h.finishRun).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/runs/{runId}/report", h.report).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/evidences/{evidenceId}/download", h.downloadEvidence).Methods(http.MethodGet)
+	r.HandleFunc("/api/test-sheet/evidences/{evidenceId}", h.deleteEvidence).Methods(http.MethodDelete)
 }
 
 func (h *Handler) listPlans(w http.ResponseWriter, _ *http.Request) {
@@ -443,6 +447,42 @@ func (h *Handler) updateRunSheet(w http.ResponseWriter, r *http.Request) {
 	respond(w, sheet, err)
 }
 
+func (h *Handler) listRunSheetEvidences(w http.ResponseWriter, r *http.Request) {
+	runID, ok := pathID(w, r, "runId")
+	if !ok {
+		return
+	}
+	runSheetID, ok := pathID(w, r, "runSheetId")
+	if !ok {
+		return
+	}
+	evidences, err := h.service.ListRunSheetEvidences(runID, runSheetID)
+	respond(w, evidences, err)
+}
+
+func (h *Handler) uploadRunSheetEvidence(w http.ResponseWriter, r *http.Request) {
+	runID, ok := pathID(w, r, "runId")
+	if !ok {
+		return
+	}
+	runSheetID, ok := pathID(w, r, "runSheetId")
+	if !ok {
+		return
+	}
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart body"})
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "evidence file is required"})
+		return
+	}
+	_ = file.Close()
+	evidence, err := h.service.UploadRunSheetEvidence(runID, runSheetID, header, r.FormValue("comment"))
+	respondCreated(w, evidence, err)
+}
+
 func (h *Handler) updateRunStep(w http.ResponseWriter, r *http.Request) {
 	runID, ok := pathID(w, r, "runId")
 	if !ok {
@@ -482,6 +522,31 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(report))
+}
+
+func (h *Handler) downloadEvidence(w http.ResponseWriter, r *http.Request) {
+	evidenceID, ok := pathID(w, r, "evidenceId")
+	if !ok {
+		return
+	}
+	evidence, err := h.service.GetEvidence(evidenceID)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	if evidence.MimeType != "" {
+		w.Header().Set("Content-Type", evidence.MimeType)
+	}
+	w.Header().Set("Content-Disposition", `attachment; filename="`+url.QueryEscape(evidence.Name)+`"`)
+	http.ServeFile(w, r, evidence.Path)
+}
+
+func (h *Handler) deleteEvidence(w http.ResponseWriter, r *http.Request) {
+	evidenceID, ok := pathID(w, r, "evidenceId")
+	if !ok {
+		return
+	}
+	respondNoContent(w, h.service.DeleteEvidence(evidenceID))
 }
 
 func decode(w http.ResponseWriter, r *http.Request, output any) bool {

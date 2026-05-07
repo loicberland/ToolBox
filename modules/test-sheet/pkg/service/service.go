@@ -64,6 +64,12 @@ type Repository interface {
 	UpdateRunSheet(int64, int64, model.RunSheetResultInput) (model.RunSheet, error)
 	UpdateRunStep(int64, int64, model.RunStepResultInput) (model.RunStep, error)
 	FinishRun(int64) (model.TestRun, error)
+	GetRunIDForRunSheet(int64) (int64, error)
+	ListRunSheetEvidences(int64) ([]model.Evidence, error)
+	GetEvidence(int64) (model.Evidence, error)
+	CreateEvidence(model.Evidence) (model.Evidence, error)
+	UpdateEvidenceFile(int64, string, string, int64) (model.Evidence, error)
+	DeleteEvidence(int64) (model.Evidence, error)
 }
 
 type Service struct {
@@ -590,6 +596,107 @@ func (s *Service) FinishRun(runID int64) (model.TestRun, error) {
 	return s.repo.FinishRun(runID)
 }
 
+func (s *Service) ListRunSheetEvidences(runID, runSheetID int64) ([]model.Evidence, error) {
+	if err := s.ensureRunSheetBelongsToRun(runID, runSheetID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListRunSheetEvidences(runSheetID)
+}
+
+func (s *Service) GetEvidence(evidenceID int64) (model.Evidence, error) {
+	return s.repo.GetEvidence(evidenceID)
+}
+
+func (s *Service) UploadRunSheetEvidence(runID, runSheetID int64, header *multipart.FileHeader, comment string) (model.Evidence, error) {
+	if err := s.ensureRunEditable(runID); err != nil {
+		return model.Evidence{}, err
+	}
+	if err := s.ensureRunSheetBelongsToRun(runID, runSheetID); err != nil {
+		return model.Evidence{}, err
+	}
+	if header == nil {
+		return model.Evidence{}, fmt.Errorf("evidence file is required")
+	}
+	if header.Size > maxDocumentUploadBytes {
+		return model.Evidence{}, fmt.Errorf("evidence is too large")
+	}
+	source, err := header.Open()
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	defer source.Close()
+
+	originalName := filepath.Base(header.Filename)
+	safeName := safeFilename(originalName)
+	evidence, err := s.repo.CreateEvidence(model.Evidence{
+		RunSheetID: runSheetID,
+		Name:       originalName,
+		Comment:    strings.TrimSpace(comment),
+	})
+	if err != nil {
+		return model.Evidence{}, err
+	}
+
+	evidenceDirectory := filepath.Join("data", "test-sheet", "runs", fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("sheet-%d", runSheetID))
+	if err := os.MkdirAll(evidenceDirectory, 0755); err != nil {
+		_, _ = s.repo.DeleteEvidence(evidence.ID)
+		return model.Evidence{}, err
+	}
+	storedName := fmt.Sprintf("evidence-%d-%s", evidence.ID, safeName)
+	storagePath := filepath.Join(evidenceDirectory, storedName)
+	destination, err := os.OpenFile(storagePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		_, _ = s.repo.DeleteEvidence(evidence.ID)
+		return model.Evidence{}, err
+	}
+	defer destination.Close()
+
+	limited := io.LimitReader(source, maxDocumentUploadBytes+1)
+	written, err := io.Copy(destination, limited)
+	if err != nil {
+		_, _ = s.repo.DeleteEvidence(evidence.ID)
+		return model.Evidence{}, err
+	}
+	if written > maxDocumentUploadBytes {
+		_ = os.Remove(storagePath)
+		_, _ = s.repo.DeleteEvidence(evidence.ID)
+		return model.Evidence{}, fmt.Errorf("evidence is too large")
+	}
+
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = detectContentType(storagePath)
+	}
+	evidence, err = s.repo.UpdateEvidenceFile(evidence.ID, storagePath, mimeType, written)
+	if err != nil {
+		_ = os.Remove(storagePath)
+		return model.Evidence{}, err
+	}
+	return evidence, nil
+}
+
+func (s *Service) DeleteEvidence(evidenceID int64) error {
+	evidence, err := s.repo.GetEvidence(evidenceID)
+	if err != nil {
+		return err
+	}
+	runID, err := s.repo.GetRunIDForRunSheet(evidence.RunSheetID)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureRunEditable(runID); err != nil {
+		return err
+	}
+	deleted, err := s.repo.DeleteEvidence(evidenceID)
+	if err != nil {
+		return err
+	}
+	if deleted.Path != "" {
+		_ = os.Remove(deleted.Path)
+	}
+	return nil
+}
+
 func (s *Service) GenerateMarkdownReport(runID int64) (string, error) {
 	run, err := s.repo.GetRun(runID)
 	if err != nil {
@@ -616,7 +723,7 @@ func (s *Service) GenerateMarkdownReport(runID int64) (string, error) {
 	builder.WriteString("\n## Fiches executees\n\n")
 	for _, sheet := range run.Sheets {
 		fmt.Fprintf(&builder, "### %d. %s\n\n", sheet.ExecutionOrder, sheet.Name)
-		fmt.Fprintf(&builder, "- Statut: %s\n", sheet.Status)
+		fmt.Fprintf(&builder, "- Statut: %s\n", computedRunSheetStatus(sheet))
 		writeReportLine(&builder, "Description", sheet.Description)
 		writeReportLine(&builder, "Prerequis", sheet.Prerequisites)
 		writeReportLine(&builder, "Configuration", sheet.Config)
@@ -637,6 +744,14 @@ func (s *Service) GenerateMarkdownReport(runID int64) (string, error) {
 				)
 			}
 		}
+		writeReportLine(&builder, "Commentaire de la fiche", sheet.Comment)
+		if len(sheet.Evidences) > 0 {
+			builder.WriteString("#### Documents ajoutes\n\n")
+			for _, evidence := range sheet.Evidences {
+				fmt.Fprintf(&builder, "- %s\n", evidence.Name)
+			}
+			builder.WriteString("\n")
+		}
 		builder.WriteString("\n")
 	}
 	return builder.String(), nil
@@ -654,6 +769,43 @@ func tableCell(value string) string {
 	value = strings.ReplaceAll(value, "\r\n", "<br>")
 	value = strings.ReplaceAll(value, "\n", "<br>")
 	return value
+}
+
+func computedRunSheetStatus(sheet model.RunSheet) string {
+	if len(sheet.Steps) == 0 {
+		return sheet.Status
+	}
+	hasBlocked := false
+	hasPending := false
+	nonSkippedSteps := 0
+	for _, step := range sheet.Steps {
+		switch step.Status {
+		case model.RunSheetStatusFailed:
+			return model.RunSheetStatusFailed
+		case model.RunSheetStatusBlocked:
+			hasBlocked = true
+			nonSkippedSteps++
+		case model.RunSheetStatusSkipped:
+			continue
+		case model.RunSheetStatusPending:
+			hasPending = true
+			nonSkippedSteps++
+		case model.RunSheetStatusPassed:
+			nonSkippedSteps++
+		default:
+			nonSkippedSteps++
+		}
+	}
+	if hasBlocked {
+		return model.RunSheetStatusBlocked
+	}
+	if hasPending {
+		return model.RunSheetStatusPending
+	}
+	if nonSkippedSteps == 0 {
+		return model.RunSheetStatusSkipped
+	}
+	return model.RunSheetStatusPassed
 }
 
 func isAllowedStatus(status string) bool {
@@ -674,6 +826,17 @@ func (s *Service) ensureRunEditable(runID int64) error {
 		return nil
 	}
 	return ErrRunNotEditable
+}
+
+func (s *Service) ensureRunSheetBelongsToRun(runID, runSheetID int64) error {
+	actualRunID, err := s.repo.GetRunIDForRunSheet(runSheetID)
+	if err != nil {
+		return err
+	}
+	if actualRunID != runID {
+		return fmt.Errorf("run sheet does not belong to this run")
+	}
+	return nil
 }
 
 func (s *Service) markPlanChanged(planID int64) error {
