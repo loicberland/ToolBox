@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'rea
 import { SheetInput, TestSheet } from '../../api/testSheet';
 import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
+import { MarkdownTextarea } from '../ui/MarkdownTextarea';
 
 type Props = {
   sheet?: TestSheet;
@@ -66,22 +67,26 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
         {messages.testSheet.edit.description}
         <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
       </label>
-      <label>
-        {messages.testSheet.edit.prerequisites}
-        <textarea value={value.prerequisites} onChange={(event) => setValue({ ...value, prerequisites: event.target.value })} />
-      </label>
-      <label>
-        {messages.testSheet.edit.configuration}
-        <textarea value={value.config} onChange={(event) => setValue({ ...value, config: event.target.value })} />
-      </label>
-      <label>
-        {messages.testSheet.edit.command}
-        <textarea value={value.command} onChange={(event) => setValue({ ...value, command: event.target.value })} />
-      </label>
-      <label>
-        {messages.testSheet.edit.notes}
-        <textarea value={value.notes} onChange={(event) => setValue({ ...value, notes: event.target.value })} />
-      </label>
+      <MarkdownTextarea
+        label={messages.testSheet.edit.prerequisites}
+        value={value.prerequisites}
+        onChange={(prerequisites) => setValue({ ...value, prerequisites })}
+      />
+      <MarkdownTextarea
+        label={messages.testSheet.edit.configuration}
+        value={value.config}
+        onChange={(config) => setValue({ ...value, config })}
+      />
+      <MarkdownTextarea
+        label={messages.testSheet.edit.command}
+        value={value.command}
+        onChange={(command) => setValue({ ...value, command })}
+      />
+      <MarkdownTextarea
+        label={messages.testSheet.edit.notes}
+        value={value.notes}
+        onChange={(notes) => setValue({ ...value, notes })}
+      />
       {!hideActions && (
         <div className="button-row">
           <Button type="submit" disabled={saving}>{saving ? messages.common.saving : isEditing ? messages.common.save : messages.common.add}</Button>

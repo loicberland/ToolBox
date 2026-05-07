@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'rea
 import { StepInput, TestSheetStep } from '../../api/testSheet';
 import { messages } from '../../i18n';
 import { Button } from '../ui/Button';
+import { MarkdownTextarea } from '../ui/MarkdownTextarea';
 
 type Props = {
   step?: TestSheetStep;
@@ -51,18 +52,22 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
         await submitCurrent();
       }}
     >
-      <label>
-        Action
-        <textarea value={value.action} onChange={(event) => setValue({ ...value, action: event.target.value })} required />
-      </label>
-      <label>
-        {messages.testSheet.edit.specificField}
-        <textarea value={value.field} onChange={(event) => setValue({ ...value, field: event.target.value })} />
-      </label>
-      <label>
-        {messages.testSheet.edit.expectedResult}
-        <textarea value={value.expectedResult} onChange={(event) => setValue({ ...value, expectedResult: event.target.value })} />
-      </label>
+      <MarkdownTextarea
+        label={messages.testSheet.run.action}
+        value={value.action}
+        required
+        onChange={(action) => setValue({ ...value, action })}
+      />
+      <MarkdownTextarea
+        label={messages.testSheet.edit.specificField}
+        value={value.field}
+        onChange={(field) => setValue({ ...value, field })}
+      />
+      <MarkdownTextarea
+        label={messages.testSheet.edit.expectedResult}
+        value={value.expectedResult}
+        onChange={(expectedResult) => setValue({ ...value, expectedResult })}
+      />
       <div className="button-row">
         <Button type="submit" disabled={saving}>{saving ? messages.common.saving : step ? messages.common.save : messages.testSheet.edit.addStep}</Button>
         {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>{messages.common.cancel}</Button>}

@@ -353,6 +353,66 @@ textarea {
   font-weight: 800;
 }
 
+.markdown-textarea {
+  display: grid;
+  min-width: 0;
+}
+
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: var(--surface-soft);
+}
+
+.markdown-toolbar-button {
+  min-width: 28px;
+  min-height: 26px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 3px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.markdown-toolbar-button--italic {
+  font-style: italic;
+}
+
+.markdown-toolbar-button--underline {
+  text-decoration: underline;
+}
+
+.markdown-toolbar-button--strike {
+  text-decoration: line-through;
+}
+
+.markdown-toolbar-button:hover,
+.markdown-toolbar-button:focus {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  outline: none;
+}
+
+.markdown-textarea textarea {
+  border-radius: 0 0 6px 6px;
+}
+
+.markdown-textarea textarea:first-child {
+  border-radius: 6px;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;

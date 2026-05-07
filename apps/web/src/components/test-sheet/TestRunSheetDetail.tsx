@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { MarkdownCollapsibleSection } from '../ui/MarkdownCollapsibleSection';
 import { hasMarkdownContent, MarkdownPreview } from '../ui/MarkdownPreview';
+import { MarkdownTextarea } from '../ui/MarkdownTextarea';
 import { SmartEllipsisText } from '../ui/SmartEllipsisText';
 import { DocumentFilePicker, DocumentList, formatBytes } from './DocumentList';
 import { StatusBadge } from './StatusBadge';
@@ -286,10 +287,11 @@ function TestRunStepDetail({
       {readOnly ? (
         <RunStepCommentReadDetails comment={step.comment} />
       ) : (
-        <label>
-          {messages.testSheet.run.comment}
-          <textarea value={draft.comment} onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })} />
-        </label>
+        <MarkdownTextarea
+          label={messages.testSheet.run.comment}
+          value={draft.comment}
+          onChange={(comment) => onDraftChange({ ...draft, comment })}
+        />
       )}
       {!readOnly && (
         <div className="status-action-grid" aria-label="Changer le statut de l action">
@@ -395,10 +397,11 @@ function RunSheetCommentEditor({
           ? <MarkdownPreview content={sheet.comment} />
           : <p className="muted">{messages.testSheet.run.noComment}</p>
       ) : (
-        <label>
-          {messages.testSheet.run.comment}
-          <textarea value={commentDraft} onChange={(event) => updateComment(event.target.value)} />
-        </label>
+        <MarkdownTextarea
+          label={messages.testSheet.run.comment}
+          value={commentDraft}
+          onChange={updateComment}
+        />
       )}
       {!readOnly && (
         <Button

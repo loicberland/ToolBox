@@ -32,6 +32,15 @@
     "blocked": "Bloqué",
     "skipped": "Ignoré"
   },
+  "markdownToolbar": {
+    "bold": "Gras",
+    "italic": "Italique",
+    "underline": "Souligné",
+    "strike": "Barré",
+    "link": "Lien",
+    "codeblock": "Bloc de code",
+    "quote": "Citation"
+  },
   "testSheet": {
     "plans": {
       "title": "Plans de test",
