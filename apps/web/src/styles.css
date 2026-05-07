@@ -564,10 +564,6 @@ textarea {
   font-size: 12px;
 }
 
-.plan-secondary-actions .ui-button {
-  background: var(--surface);
-}
-
 .plan-run-progress {
   display: grid;
   gap: 8px;
