@@ -19,6 +19,13 @@ export function MarkdownPreview({ content, compact = false }: Props) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          a({ href, children, ...props }) {
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                {children}
+              </a>
+            );
+          },
           pre({ children }) {
             return <CopyableCodeBlock>{children}</CopyableCodeBlock>;
           },
