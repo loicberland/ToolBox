@@ -36,6 +36,7 @@ export function MarkdownTextarea({
   required = false,
 }: MarkdownTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaId = React.useId();
   const isEditable = !disabled && !readOnly;
 
   const applyFormat = (format: MarkdownFormat) => {
@@ -47,8 +48,8 @@ export function MarkdownTextarea({
   };
 
   return (
-    <label className={className}>
-      {label}
+    <div className={`markdown-field ${className}`.trim()}>
+      {label && <label className="markdown-field-label" htmlFor={textareaId}>{label}</label>}
       <div className="markdown-textarea">
         {isEditable && (
           <div className="markdown-toolbar" aria-label="Formatage Markdown">
@@ -59,6 +60,9 @@ export function MarkdownTextarea({
                 className={`markdown-toolbar-button markdown-toolbar-button--${item.format}`}
                 title={item.title}
                 aria-label={item.title}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
                 onClick={(event) => {
                   event.preventDefault();
                   applyFormat(item.format);
@@ -70,6 +74,7 @@ export function MarkdownTextarea({
           </div>
         )}
         <textarea
+          id={textareaId}
           ref={textareaRef}
           value={value}
           rows={rows}
@@ -79,7 +84,7 @@ export function MarkdownTextarea({
           onChange={(event) => onChange(event.target.value)}
         />
       </div>
-    </label>
+    </div>
   );
 }
 

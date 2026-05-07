@@ -345,12 +345,22 @@ textarea {
 }
 
 .form-grid label,
-.run-step-detail label {
+.run-step-detail label,
+.markdown-field {
   display: grid;
   gap: 7px;
   color: #334e68;
   font-size: 13px;
   font-weight: 800;
+}
+
+.sheet-form .markdown-field,
+.step-form .markdown-field {
+  grid-column: 1 / -1;
+}
+
+.markdown-field-label {
+  width: fit-content;
 }
 
 .markdown-textarea {
@@ -398,10 +408,23 @@ textarea {
   text-decoration: line-through;
 }
 
-.markdown-toolbar-button:hover,
-.markdown-toolbar-button:focus {
+.markdown-toolbar-button:hover {
   border-color: var(--border-strong);
   background: var(--surface);
+  outline: none;
+}
+
+.markdown-toolbar-button:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.markdown-toolbar-button:focus:not(:focus-visible) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
   outline: none;
 }
 
