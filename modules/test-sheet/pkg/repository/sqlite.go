@@ -705,7 +705,12 @@ func (r *SQLiteRepository) CreateRunWithSnapshot(planID int64) (model.TestRun, e
 }
 
 func (r *SQLiteRepository) GetRun(runID int64) (model.TestRun, error) {
-	row := r.db.QueryRow(`SELECT id, plan_id, plan_name, status, started_at, finished_at FROM test_runs WHERE id = ?`, runID)
+	row := r.db.QueryRow(`SELECT r.id,
+		(SELECT COUNT(*) FROM test_runs numbered
+			WHERE numbered.plan_id = r.plan_id
+				AND (numbered.started_at < r.started_at OR (numbered.started_at = r.started_at AND numbered.id <= r.id))) AS run_number,
+		r.plan_id, r.plan_name, r.status, r.started_at, r.finished_at
+		FROM test_runs r WHERE r.id = ?`, runID)
 	run, err := scanRun(row)
 	if err != nil {
 		return model.TestRun{}, err
@@ -785,7 +790,11 @@ func (r *SQLiteRepository) listPlans(includeDeleted bool) ([]model.TestPlan, err
 }
 
 func (r *SQLiteRepository) listRunSummaries(where string, arg any) ([]model.TestRunSummary, error) {
-	query := `SELECT r.id, r.plan_id, r.plan_name, r.status, r.started_at, r.finished_at,
+	query := `WITH numbered_runs AS (
+			SELECT id, ROW_NUMBER() OVER (PARTITION BY plan_id ORDER BY started_at ASC, id ASC) AS run_number
+			FROM test_runs
+		)
+		SELECT r.id, nr.run_number, r.plan_id, r.plan_name, r.status, r.started_at, r.finished_at,
 		COUNT(DISTINCT rs.id) AS total_sheets,
 		COUNT(rst.id) AS total_steps,
 		COALESCE(SUM(CASE WHEN rst.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_steps,
@@ -794,6 +803,7 @@ func (r *SQLiteRepository) listRunSummaries(where string, arg any) ([]model.Test
 		COALESCE(SUM(CASE WHEN rst.status = 'blocked' THEN 1 ELSE 0 END), 0) AS blocked_steps,
 		COALESCE(SUM(CASE WHEN rst.status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped_steps
 		FROM test_runs r
+		JOIN numbered_runs nr ON nr.id = r.id
 		LEFT JOIN test_run_sheets rs ON rs.run_id = r.id
 		LEFT JOIN test_run_steps rst ON rst.run_sheet_id = rs.id ` + where + `
 		GROUP BY r.id
@@ -1071,7 +1081,7 @@ func scanDocument(scanner interface{ Scan(...any) error }) (model.TestDocument, 
 func scanRun(scanner interface{ Scan(...any) error }) (model.TestRun, error) {
 	var run model.TestRun
 	var finished sql.NullTime
-	err := scanner.Scan(&run.ID, &run.PlanID, &run.PlanName, &run.Status, &run.StartedAt, &finished)
+	err := scanner.Scan(&run.ID, &run.RunNumber, &run.PlanID, &run.PlanName, &run.Status, &run.StartedAt, &finished)
 	if finished.Valid {
 		run.FinishedAt = &finished.Time
 	}
@@ -1084,6 +1094,7 @@ func scanRunSummary(scanner interface{ Scan(...any) error }) (model.TestRunSumma
 	var finished sql.NullTime
 	err := scanner.Scan(
 		&summary.ID,
+		&summary.RunNumber,
 		&summary.PlanID,
 		&summary.PlanName,
 		&summary.Status,

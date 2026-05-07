@@ -51,6 +51,7 @@ export type TestDocument = {
 
 export type TestRun = {
   id: number;
+  runNumber: number;
   planId: number;
   planName: string;
   status: TestRunStatus | string;
@@ -63,6 +64,7 @@ export type TestRunStatus = 'pending' | 'running' | 'completed' | 'canceled' | '
 
 export type TestRunSummary = {
   id: number;
+  runNumber: number;
   planId: number;
   planName: string;
   status: TestRunStatus;

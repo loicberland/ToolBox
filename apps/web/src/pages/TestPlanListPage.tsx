@@ -189,7 +189,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                     <div>
                       <div className="card-topline">
                         <StatusBadge status={run.status} />
-                        <strong>Execution #{run.id}</strong>
+                        <strong>Execution n°{run.runNumber}</strong>
                       </div>
                       <p className="muted">Debut : {formatDate(run.startedAt)}{run.finishedAt ? ` - Fin : ${formatDate(run.finishedAt)}` : ''}</p>
                       <PlanRunProgress run={run} compact />
@@ -288,6 +288,7 @@ function PlanRunProgress({ run, compact = false }: { run?: TestRunSummary; compa
   const percent = run.totalSteps === 0 ? 0 : Math.round((done / run.totalSteps) * 100);
   return (
     <div className={compact ? 'plan-run-progress compact' : 'plan-run-progress'}>
+      {!compact && <strong>Execution n°{run.runNumber}</strong>}
       <strong>{done} / {run.totalSteps} actions traitees</strong>
       <div className="progress-track" aria-label={`Progression ${percent}%`}>
         <div className="progress-fill" style={{ width: `${percent}%` }} />

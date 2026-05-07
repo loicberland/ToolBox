@@ -232,14 +232,20 @@ function TestRunStepDetail({
           <DocumentList documents={step.documents} />
         </section>
       )}
-      <label>
-        Resultat obtenu
-        <textarea readOnly={readOnly} value={draft.actualResult} onChange={(event) => onDraftChange({ ...draft, actualResult: event.target.value })} />
-      </label>
-      <label>
-        Commentaire
-        <textarea readOnly={readOnly} value={draft.comment} onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })} />
-      </label>
+      {readOnly ? (
+        <RunResultReadDetails actualResult={step.actualResult} comment={step.comment} />
+      ) : (
+        <>
+          <label>
+            Resultat obtenu
+            <textarea value={draft.actualResult} onChange={(event) => onDraftChange({ ...draft, actualResult: event.target.value })} />
+          </label>
+          <label>
+            Commentaire
+            <textarea value={draft.comment} onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })} />
+          </label>
+        </>
+      )}
       {!readOnly && (
         <div className="status-action-grid" aria-label="Changer le statut de l action">
           <Button type="button" variant="success" size="sm" disabled={isSaving} onClick={(event) => { event.stopPropagation(); void setStatusAndSave('passed'); }}>Reussi</Button>
@@ -290,20 +296,32 @@ function RunSheetResultEditor({
 
   return (
     <div className="run-step-detail">
-      <label>
-        Statut
-        <select disabled={readOnly} value={value.status} onChange={(event) => setValue({ ...value, status: event.target.value as TestRunSheet['status'] })}>
-          {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-        </select>
-      </label>
-      <label>
-        Resultat obtenu
-        <textarea readOnly={readOnly} value={value.actualResult} onChange={(event) => setValue({ ...value, actualResult: event.target.value })} />
-      </label>
-      <label>
-        Commentaire
-        <textarea readOnly={readOnly} value={value.comment} onChange={(event) => setValue({ ...value, comment: event.target.value })} />
-      </label>
+      {readOnly ? (
+        <>
+          <div className="card-topline">
+            <span className="section-kicker">Statut</span>
+            <StatusBadge status={sheet.status} />
+          </div>
+          <RunResultReadDetails actualResult={sheet.actualResult} comment={sheet.comment} />
+        </>
+      ) : (
+        <>
+          <label>
+            Statut
+            <select value={value.status} onChange={(event) => setValue({ ...value, status: event.target.value as TestRunSheet['status'] })}>
+              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </label>
+          <label>
+            Resultat obtenu
+            <textarea value={value.actualResult} onChange={(event) => setValue({ ...value, actualResult: event.target.value })} />
+          </label>
+          <label>
+            Commentaire
+            <textarea value={value.comment} onChange={(event) => setValue({ ...value, comment: event.target.value })} />
+          </label>
+        </>
+      )}
       {!readOnly && (
         <>
           <div className="status-action-grid" aria-label="Changer le statut du test">
@@ -316,6 +334,32 @@ function RunSheetResultEditor({
             {saving ? 'Sauvegarde...' : 'Sauvegarder'}
           </Button>
         </>
+      )}
+    </div>
+  );
+}
+
+function RunResultReadDetails({ actualResult, comment }: { actualResult: string; comment: string }) {
+  const hasActualResult = hasMarkdownContent(actualResult);
+  const hasComment = hasMarkdownContent(comment);
+
+  if (!hasActualResult && !hasComment) {
+    return <p className="muted">Aucun resultat renseigne</p>;
+  }
+
+  return (
+    <div className="run-read-details">
+      {hasActualResult && (
+        <section>
+          <h4>Resultat obtenu</h4>
+          <MarkdownPreview content={actualResult} />
+        </section>
+      )}
+      {hasComment && (
+        <section>
+          <h4>Commentaire</h4>
+          <MarkdownPreview content={comment} />
+        </section>
       )}
     </div>
   );

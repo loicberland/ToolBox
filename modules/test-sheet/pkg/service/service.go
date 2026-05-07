@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -19,6 +20,7 @@ import (
 const maxDocumentUploadBytes = 50 << 20
 
 var unsafeFilenameCharacters = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+var ErrRunNotEditable = errors.New("Cette execution est terminee et ne peut plus etre modifiee.")
 
 type Repository interface {
 	CreatePlan(model.PlanInput) (model.TestPlan, error)
@@ -556,7 +558,7 @@ func (s *Service) CancelRun(runID int64) (model.TestRun, error) {
 		return model.TestRun{}, err
 	}
 	if run.Status != model.TestRunStatusRunning {
-		return model.TestRun{}, fmt.Errorf("Cette execution est terminee et ne peut plus etre modifiee.")
+		return model.TestRun{}, ErrRunNotEditable
 	}
 	return s.repo.CancelRun(runID)
 }
@@ -595,7 +597,7 @@ func (s *Service) GenerateMarkdownReport(runID int64) (string, error) {
 	}
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "# Rapport de test - %s\n\n", run.PlanName)
-	fmt.Fprintf(&builder, "- Execution: #%d\n", run.ID)
+	fmt.Fprintf(&builder, "- Execution: #%d\n", run.RunNumber)
 	fmt.Fprintf(&builder, "- Statut: %s\n", run.Status)
 	fmt.Fprintf(&builder, "- Demarree le: %s\n", run.StartedAt.Format("2006-01-02 15:04"))
 	if run.FinishedAt != nil {
@@ -671,7 +673,7 @@ func (s *Service) ensureRunEditable(runID int64) error {
 	if run.Status == model.TestRunStatusRunning {
 		return nil
 	}
-	return fmt.Errorf("Cette execution est terminee et ne peut plus etre modifiee.")
+	return ErrRunNotEditable
 }
 
 func (s *Service) markPlanChanged(planID int64) error {
@@ -768,4 +770,8 @@ func detectContentType(path string) string {
 
 func IsNotFound(err error) bool {
 	return repository.IsNotFound(err)
+}
+
+func IsConflict(err error) bool {
+	return errors.Is(err, ErrRunNotEditable)
 }

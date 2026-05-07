@@ -81,6 +81,7 @@ type TestAttachment struct {
 
 type TestRun struct {
 	ID         int64      `json:"id"`
+	RunNumber  int        `json:"runNumber"`
 	PlanID     int64      `json:"planId"`
 	PlanName   string     `json:"planName"`
 	Status     string     `json:"status"`
@@ -91,6 +92,7 @@ type TestRun struct {
 
 type TestRunSummary struct {
 	ID           int64      `json:"id"`
+	RunNumber    int        `json:"runNumber"`
 	PlanID       int64      `json:"planId"`
 	PlanName     string     `json:"planName"`
 	Status       string     `json:"status"`

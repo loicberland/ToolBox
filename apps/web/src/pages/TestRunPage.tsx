@@ -61,7 +61,7 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
     <section className="workspace">
       <PageHeader
         eyebrow="Execution"
-        title={run ? `#${run.id} - ${run.planName}` : 'Execution'}
+        title={run ? `Execution n°${run.runNumber} - ${run.planName}` : 'Execution'}
         description={selectedSheet ? `Test selectionne : ${selectedSheet.name}` : undefined}
         onBack={onBack}
         actions={(

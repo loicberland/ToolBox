@@ -533,6 +533,10 @@ func respondError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
+	if service.IsConflict(err) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 }
 
