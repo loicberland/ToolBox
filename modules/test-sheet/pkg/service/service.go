@@ -65,11 +65,17 @@ type Repository interface {
 	UpdateRunStep(int64, int64, model.RunStepResultInput) (model.RunStep, error)
 	FinishRun(int64) (model.TestRun, error)
 	GetRunIDForRunSheet(int64) (int64, error)
+	GetRunIDForRunStep(int64) (int64, error)
 	ListRunSheetEvidences(int64) ([]model.Evidence, error)
 	GetEvidence(int64) (model.Evidence, error)
 	CreateEvidence(model.Evidence) (model.Evidence, error)
 	UpdateEvidenceFile(int64, string, string, int64) (model.Evidence, error)
 	DeleteEvidence(int64) (model.Evidence, error)
+	ListRunStepEvidences(int64) ([]model.Evidence, error)
+	GetStepEvidence(int64) (model.Evidence, error)
+	CreateStepEvidence(model.Evidence) (model.Evidence, error)
+	UpdateStepEvidenceFile(int64, string, string, int64) (model.Evidence, error)
+	DeleteStepEvidence(int64) (model.Evidence, error)
 }
 
 type Service struct {
@@ -697,6 +703,106 @@ func (s *Service) DeleteEvidence(evidenceID int64) error {
 	return nil
 }
 
+func (s *Service) ListRunStepEvidences(runID, runStepID int64) ([]model.Evidence, error) {
+	if err := s.ensureRunStepBelongsToRun(runID, runStepID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListRunStepEvidences(runStepID)
+}
+
+func (s *Service) GetStepEvidence(evidenceID int64) (model.Evidence, error) {
+	return s.repo.GetStepEvidence(evidenceID)
+}
+
+func (s *Service) UploadRunStepEvidence(runID, runStepID int64, header *multipart.FileHeader) (model.Evidence, error) {
+	if err := s.ensureRunEditable(runID); err != nil {
+		return model.Evidence{}, err
+	}
+	if err := s.ensureRunStepBelongsToRun(runID, runStepID); err != nil {
+		return model.Evidence{}, err
+	}
+	if header == nil {
+		return model.Evidence{}, fmt.Errorf("evidence file is required")
+	}
+	if header.Size > maxDocumentUploadBytes {
+		return model.Evidence{}, fmt.Errorf("evidence is too large")
+	}
+	source, err := header.Open()
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	defer source.Close()
+
+	originalName := filepath.Base(header.Filename)
+	safeName := safeFilename(originalName)
+	evidence, err := s.repo.CreateStepEvidence(model.Evidence{
+		RunStepID: runStepID,
+		Name:      originalName,
+	})
+	if err != nil {
+		return model.Evidence{}, err
+	}
+
+	evidenceDirectory := filepath.Join("data", "test-sheet", "runs", fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("step-%d", runStepID))
+	if err := os.MkdirAll(evidenceDirectory, 0755); err != nil {
+		_, _ = s.repo.DeleteStepEvidence(evidence.ID)
+		return model.Evidence{}, err
+	}
+	storedName := fmt.Sprintf("evidence-%d-%s", evidence.ID, safeName)
+	storagePath := filepath.Join(evidenceDirectory, storedName)
+	destination, err := os.OpenFile(storagePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		_, _ = s.repo.DeleteStepEvidence(evidence.ID)
+		return model.Evidence{}, err
+	}
+	defer destination.Close()
+
+	limited := io.LimitReader(source, maxDocumentUploadBytes+1)
+	written, err := io.Copy(destination, limited)
+	if err != nil {
+		_, _ = s.repo.DeleteStepEvidence(evidence.ID)
+		return model.Evidence{}, err
+	}
+	if written > maxDocumentUploadBytes {
+		_ = os.Remove(storagePath)
+		_, _ = s.repo.DeleteStepEvidence(evidence.ID)
+		return model.Evidence{}, fmt.Errorf("evidence is too large")
+	}
+
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = detectContentType(storagePath)
+	}
+	evidence, err = s.repo.UpdateStepEvidenceFile(evidence.ID, storagePath, mimeType, written)
+	if err != nil {
+		_ = os.Remove(storagePath)
+		return model.Evidence{}, err
+	}
+	return evidence, nil
+}
+
+func (s *Service) DeleteStepEvidence(evidenceID int64) error {
+	evidence, err := s.repo.GetStepEvidence(evidenceID)
+	if err != nil {
+		return err
+	}
+	runID, err := s.repo.GetRunIDForRunStep(evidence.RunStepID)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureRunEditable(runID); err != nil {
+		return err
+	}
+	deleted, err := s.repo.DeleteStepEvidence(evidenceID)
+	if err != nil {
+		return err
+	}
+	if deleted.Path != "" {
+		_ = os.Remove(deleted.Path)
+	}
+	return nil
+}
+
 func (s *Service) GenerateMarkdownReport(runID int64) (string, error) {
 	run, err := s.repo.GetRun(runID)
 	if err != nil {
@@ -835,6 +941,17 @@ func (s *Service) ensureRunSheetBelongsToRun(runID, runSheetID int64) error {
 	}
 	if actualRunID != runID {
 		return fmt.Errorf("run sheet does not belong to this run")
+	}
+	return nil
+}
+
+func (s *Service) ensureRunStepBelongsToRun(runID, runStepID int64) error {
+	actualRunID, err := s.repo.GetRunIDForRunStep(runStepID)
+	if err != nil {
+		return err
+	}
+	if actualRunID != runID {
+		return fmt.Errorf("run step does not belong to this run")
 	}
 	return nil
 }

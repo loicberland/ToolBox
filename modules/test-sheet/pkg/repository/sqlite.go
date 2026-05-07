@@ -991,6 +991,11 @@ func (r *SQLiteRepository) ListRunSteps(runSheetID int64) ([]model.RunStep, erro
 			}
 			step.Documents = documents
 		}
+		evidences, err := r.ListRunStepEvidences(step.ID)
+		if err != nil {
+			return nil, err
+		}
+		step.Evidences = evidences
 		steps = append(steps, step)
 	}
 	return steps, rows.Err()
@@ -1014,6 +1019,15 @@ func (r *SQLiteRepository) UpdateRunStep(runID, runStepID int64, input model.Run
 func (r *SQLiteRepository) GetRunIDForRunSheet(runSheetID int64) (int64, error) {
 	var runID int64
 	err := r.db.QueryRow(`SELECT run_id FROM test_run_sheets WHERE id = ?`, runSheetID).Scan(&runID)
+	return runID, err
+}
+
+func (r *SQLiteRepository) GetRunIDForRunStep(runStepID int64) (int64, error) {
+	var runID int64
+	err := r.db.QueryRow(`SELECT rs.run_id
+		FROM test_run_steps rst
+		JOIN test_run_sheets rs ON rs.id = rst.run_sheet_id
+		WHERE rst.id = ?`, runStepID).Scan(&runID)
 	return runID, err
 }
 
@@ -1075,6 +1089,73 @@ func (r *SQLiteRepository) DeleteEvidence(evidenceID int64) (model.Evidence, err
 		return model.Evidence{}, err
 	}
 	res, err := r.db.Exec(`DELETE FROM test_run_evidences WHERE id = ?`, evidenceID)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.Evidence{}, sql.ErrNoRows
+	}
+	return evidence, nil
+}
+
+func (r *SQLiteRepository) ListRunStepEvidences(runStepID int64) ([]model.Evidence, error) {
+	rows, err := r.db.Query(`SELECT id, run_step_id, name, path, mime_type, size_bytes, created_at
+		FROM test_run_step_evidences WHERE run_step_id = ? ORDER BY created_at DESC, id DESC`, runStepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	evidences := []model.Evidence{}
+	for rows.Next() {
+		evidence, err := scanStepEvidence(rows)
+		if err != nil {
+			return nil, err
+		}
+		evidences = append(evidences, evidence)
+	}
+	return evidences, rows.Err()
+}
+
+func (r *SQLiteRepository) GetStepEvidence(evidenceID int64) (model.Evidence, error) {
+	row := r.db.QueryRow(`SELECT id, run_step_id, name, path, mime_type, size_bytes, created_at
+		FROM test_run_step_evidences WHERE id = ?`, evidenceID)
+	return scanStepEvidence(row)
+}
+
+func (r *SQLiteRepository) CreateStepEvidence(input model.Evidence) (model.Evidence, error) {
+	now := time.Now().UTC()
+	res, err := r.db.Exec(`INSERT INTO test_run_step_evidences
+		(run_step_id, name, path, mime_type, size_bytes, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		input.RunStepID, input.Name, input.Path, input.MimeType, input.SizeBytes, now)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	return r.GetStepEvidence(id)
+}
+
+func (r *SQLiteRepository) UpdateStepEvidenceFile(evidenceID int64, storagePath, mimeType string, sizeBytes int64) (model.Evidence, error) {
+	res, err := r.db.Exec(`UPDATE test_run_step_evidences SET path = ?, mime_type = ?, size_bytes = ? WHERE id = ?`,
+		storagePath, mimeType, sizeBytes, evidenceID)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	if changed, _ := res.RowsAffected(); changed == 0 {
+		return model.Evidence{}, sql.ErrNoRows
+	}
+	return r.GetStepEvidence(evidenceID)
+}
+
+func (r *SQLiteRepository) DeleteStepEvidence(evidenceID int64) (model.Evidence, error) {
+	evidence, err := r.GetStepEvidence(evidenceID)
+	if err != nil {
+		return model.Evidence{}, err
+	}
+	res, err := r.db.Exec(`DELETE FROM test_run_step_evidences WHERE id = ?`, evidenceID)
 	if err != nil {
 		return model.Evidence{}, err
 	}
@@ -1232,6 +1313,12 @@ func scanEvidence(scanner interface{ Scan(...any) error }) (model.Evidence, erro
 	return evidence, err
 }
 
+func scanStepEvidence(scanner interface{ Scan(...any) error }) (model.Evidence, error) {
+	var evidence model.Evidence
+	err := scanner.Scan(&evidence.ID, &evidence.RunStepID, &evidence.Name, &evidence.Path, &evidence.MimeType, &evidence.SizeBytes, &evidence.CreatedAt)
+	return evidence, err
+}
+
 func scanRunStep(scanner interface{ Scan(...any) error }) (model.RunStep, error) {
 	var step model.RunStep
 	var sourceStepID sql.NullInt64
@@ -1365,6 +1452,17 @@ CREATE TABLE IF NOT EXISTS test_run_evidences (
 	comment TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL,
 	FOREIGN KEY (run_sheet_id) REFERENCES test_run_sheets(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS test_run_step_evidences (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_step_id INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	path TEXT NOT NULL,
+	mime_type TEXT NOT NULL DEFAULT '',
+	size_bytes INTEGER NOT NULL DEFAULT 0,
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (run_step_id) REFERENCES test_run_steps(id) ON DELETE CASCADE
 );
 `
 

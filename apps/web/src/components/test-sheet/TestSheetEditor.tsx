@@ -48,6 +48,7 @@ export type TestSheetEditorHandle = {
 export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation, planDocuments, onDocumentsChanged }, ref) {
   const sheetFormRef = useRef<TestSheetFormHandle>(null);
   const stepFormRef = useRef<TestStepFormHandle>(null);
+  const stepEditorContainerRef = useRef<HTMLDivElement | null>(null);
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
   const [stepEditorMode, setStepEditorMode] = useState<StepEditorMode>('closed');
   const [editingStep, setEditingStep] = useState<TestSheetStep | undefined>();
@@ -77,6 +78,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
   const openCreateStep = () => {
     setEditingStep(undefined);
     setStepEditorMode('create');
+    scrollToStepEditor();
   };
 
   const openEditStep = async (step: TestSheetStep) => {
@@ -89,6 +91,16 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     }
     setEditingStep(step);
     setStepEditorMode('edit');
+    scrollToStepEditor();
+  };
+
+  const scrollToStepEditor = () => {
+    requestAnimationFrame(() => {
+      stepEditorContainerRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
   };
 
   const closeStepEditor = () => {
@@ -218,7 +230,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
             onMove={moveStep}
             editingStepId={stepEditorMode === 'edit' ? editingStep?.id : undefined}
             renderEditor={(step) => (
-              <>
+              <div ref={stepEditorContainerRef}>
                 <TestStepForm
                   ref={stepFormRef}
                   step={step}
@@ -241,7 +253,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
                     await refreshCurrentSheet();
                   }}
                 />
-              </>
+              </div>
             )}
           />
           {stepEditorMode === 'closed' && (
@@ -250,12 +262,14 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
             </div>
           )}
           {stepEditorMode === 'create' && (
-            <TestStepForm
-              ref={stepFormRef}
-              nextOrder={nextStepOrder}
-              onSubmit={saveStep}
-              onCancel={closeStepEditor}
-            />
+            <div ref={stepEditorContainerRef}>
+              <TestStepForm
+                ref={stepFormRef}
+                nextOrder={nextStepOrder}
+                onSubmit={saveStep}
+                onCancel={closeStepEditor}
+              />
+            </div>
           )}
         </div>
       )}

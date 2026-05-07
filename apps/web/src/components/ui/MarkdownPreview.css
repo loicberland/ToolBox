@@ -140,29 +140,32 @@
 
 .copyable-code-block pre {
   margin: 0;
-  padding-right: 2.8rem;
+  padding-right: 2.2rem;
 }
 
 .copy-code-button {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.35rem;
+  right: 0.35rem;
   z-index: 2;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--surface);
   color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 800;
   cursor: pointer;
-  opacity: 0.72;
+  opacity: 0.55;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.copy-code-button svg {
+  width: 14px;
+  height: 14px;
 }
 
 .copy-code-button:hover,

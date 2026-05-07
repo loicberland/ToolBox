@@ -542,6 +542,30 @@ textarea {
   margin: 8px 0 0;
 }
 
+.plan-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+  min-width: min(520px, 100%);
+}
+
+.plan-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.plan-action-group-label {
+  width: 100%;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: right;
+  text-transform: uppercase;
+}
+
 .plan-run-progress {
   display: grid;
   gap: 8px;
@@ -1046,6 +1070,12 @@ textarea {
   background: var(--surface-soft);
 }
 
+.run-sheet-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
 .run-step-progress {
   display: grid;
   gap: 12px;
@@ -1331,5 +1361,15 @@ textarea {
   .plan-summary-header,
   .run-history-item {
     display: grid;
+  }
+
+  .plan-actions,
+  .plan-action-group {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+
+  .plan-action-group-label {
+    text-align: left;
   }
 }

@@ -28,6 +28,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const sheetEditorRef = useRef<TestSheetEditorHandle>(null);
+  const sheetEditorContainerRef = useRef<HTMLDivElement | null>(null);
 
   const isNew = planId === 0 && !plan;
   const effectivePlanId = plan?.id ?? planId;
@@ -99,16 +100,28 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const afterSheetCreated = (sheet: TestSheet) => {
     setEditingSheet(sheet);
     setSheetEditorMode('edit');
+    scrollToSheetEditor();
   };
 
   const openCreateSheet = () => {
     setEditingSheet(undefined);
     setSheetEditorMode('create');
+    scrollToSheetEditor();
   };
 
   const openEditSheet = (sheet: TestSheet) => {
     setEditingSheet(sheet);
     setSheetEditorMode('edit');
+    scrollToSheetEditor();
+  };
+
+  const scrollToSheetEditor = () => {
+    requestAnimationFrame(() => {
+      sheetEditorContainerRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
   };
 
   const toggleEditSheet = async (sheet: TestSheet) => {
@@ -209,11 +222,41 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               }}
               editingSheetId={sheetEditorMode === 'edit' ? editingSheet?.id : undefined}
               renderEditor={(sheet) => (
+                <div ref={sheetEditorContainerRef}>
+                  <TestSheetEditor
+                    ref={sheetEditorRef}
+                    mode="edit"
+                    planId={effectivePlanId}
+                    sheet={sheet}
+                    nextOrder={nextOrder}
+                    onCancel={closeEditor}
+                    onSaved={afterSheetSaved}
+                    onCreated={afterSheetCreated}
+                    onRefresh={refreshSheets}
+                    onModelMutation={runModelMutation}
+                    planDocuments={documents}
+                    onDocumentsChanged={async () => {
+                      await refreshDocuments();
+                      await refreshSheets();
+                    }}
+                  />
+                </div>
+              )}
+            />
+
+            {sheetEditorMode === 'closed' && (
+              <div className="add-sheet-row">
+                <Button type="button" onClick={openCreateSheet}>+ {messages.testSheet.edit.addSheet}</Button>
+              </div>
+            )}
+
+            {sheetEditorMode === 'create' && (
+              <div ref={sheetEditorContainerRef}>
                 <TestSheetEditor
                   ref={sheetEditorRef}
-                  mode="edit"
+                  mode="create"
                   planId={effectivePlanId}
-                  sheet={sheet}
+                  sheet={editingSheet}
                   nextOrder={nextOrder}
                   onCancel={closeEditor}
                   onSaved={afterSheetSaved}
@@ -226,33 +269,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                     await refreshSheets();
                   }}
                 />
-              )}
-            />
-
-            {sheetEditorMode === 'closed' && (
-              <div className="add-sheet-row">
-                <Button type="button" onClick={openCreateSheet}>+ {messages.testSheet.edit.addSheet}</Button>
               </div>
-            )}
-
-            {sheetEditorMode === 'create' && (
-              <TestSheetEditor
-                ref={sheetEditorRef}
-                mode="create"
-                planId={effectivePlanId}
-                sheet={editingSheet}
-                nextOrder={nextOrder}
-                onCancel={closeEditor}
-                onSaved={afterSheetSaved}
-                onCreated={afterSheetCreated}
-                onRefresh={refreshSheets}
-                onModelMutation={runModelMutation}
-                planDocuments={documents}
-                onDocumentsChanged={async () => {
-                  await refreshDocuments();
-                  await refreshSheets();
-                }}
-              />
             )}
           </>
         )}

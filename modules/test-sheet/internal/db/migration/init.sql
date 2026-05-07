@@ -144,3 +144,14 @@ CREATE TABLE IF NOT EXISTS test_run_evidences (
 	created_at DATETIME NOT NULL,
 	FOREIGN KEY (run_sheet_id) REFERENCES test_run_sheets(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS test_run_step_evidences (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_step_id INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	path TEXT NOT NULL,
+	mime_type TEXT NOT NULL DEFAULT '',
+	size_bytes INTEGER NOT NULL DEFAULT 0,
+	created_at DATETIME NOT NULL,
+	FOREIGN KEY (run_step_id) REFERENCES test_run_steps(id) ON DELETE CASCADE
+);

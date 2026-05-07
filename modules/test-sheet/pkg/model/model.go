@@ -156,11 +156,13 @@ type RunStep struct {
 	CreatedAt      time.Time      `json:"createdAt"`
 	UpdatedAt      time.Time      `json:"updatedAt"`
 	Documents      []TestDocument `json:"documents,omitempty"`
+	Evidences      []Evidence     `json:"evidences,omitempty"`
 }
 
 type Evidence struct {
 	ID         int64     `json:"id"`
 	RunSheetID int64     `json:"runSheetId"`
+	RunStepID  int64     `json:"runStepId,omitempty"`
 	Name       string    `json:"name"`
 	Path       string    `json:"-"`
 	MimeType   string    `json:"mimeType"`

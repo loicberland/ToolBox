@@ -138,8 +138,10 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
               {step.id === openedStepId && (
                 <TestRunStepDetail
                   draft={getStepDraft(step)}
+                  runId={sheet.runId}
                   step={step}
                   onDraftChange={(draft) => updateStepDraft(step.id, draft)}
+                  onEvidenceChanged={onEvidenceChanged}
                   readOnly={readOnly}
                   onSave={async (input) => {
                     if (readOnly) {
@@ -169,14 +171,24 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
         <p className="muted">{messages.testSheet.run.noActions}</p>
       )}
 
-      <RunSheetCommentEditor sheet={sheet} readOnly={readOnly} onSave={onSaveSheet} />
-      <RunSheetEvidenceList
-        runId={sheet.runId}
-        runSheetId={sheet.id}
+      <RunEvidenceList
         evidences={sheet.evidences}
         readOnly={readOnly}
+        upload={(file) => testSheetApi.uploadRunSheetEvidence(sheet.runId, sheet.id, file)}
+        remove={(evidence) => testSheetApi.deleteEvidence(evidence.id)}
+        downloadUrl={(evidence) => testSheetApi.evidenceDownloadUrl(evidence.id)}
         onChanged={onEvidenceChanged}
       />
+      <RunSheetCommentEditor sheet={sheet} readOnly={readOnly} onSave={onSaveSheet} />
+      <div className="run-sheet-footer-actions">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        >
+          ↑ {messages.testSheet.run.backToTop}
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -199,15 +211,19 @@ function RunSheetReadDetails({ sheet }: { sheet: TestRunSheet }) {
 }
 
 function TestRunStepDetail({
+  runId,
   step,
   draft,
   onDraftChange,
+  onEvidenceChanged,
   onSave,
   readOnly,
 }: {
+  runId: number;
   step: TestRunStep;
   draft: RunStepInput;
   onDraftChange: (draft: RunStepInput) => void;
+  onEvidenceChanged: () => Promise<void>;
   onSave: (input: RunStepInput) => Promise<void>;
   readOnly: boolean;
 }) {
@@ -257,19 +273,21 @@ function TestRunStepDetail({
           <DocumentList documents={step.documents} />
         </section>
       )}
+      <RunEvidenceList
+        evidences={step.evidences}
+        readOnly={readOnly}
+        upload={(file) => testSheetApi.uploadRunStepEvidence(runId, step.id, file)}
+        remove={(evidence) => testSheetApi.deleteRunStepEvidence(evidence.id)}
+        downloadUrl={(evidence) => testSheetApi.runStepEvidenceDownloadUrl(evidence.id)}
+        onChanged={onEvidenceChanged}
+      />
       {readOnly ? (
-        <RunResultReadDetails actualResult={step.actualResult} comment={step.comment} />
+        <RunStepCommentReadDetails comment={step.comment} />
       ) : (
-        <>
-          <label>
-            {messages.testSheet.run.actualResult}
-            <textarea value={draft.actualResult} onChange={(event) => onDraftChange({ ...draft, actualResult: event.target.value })} />
-          </label>
-          <label>
-            {messages.testSheet.run.comment}
-            <textarea value={draft.comment} onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })} />
-          </label>
-        </>
+        <label>
+          {messages.testSheet.run.comment}
+          <textarea value={draft.comment} onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })} />
+        </label>
       )}
       {!readOnly && (
         <div className="status-action-grid" aria-label="Changer le statut de l action">
@@ -396,20 +414,23 @@ function RunSheetCommentEditor({
   );
 }
 
-function RunSheetEvidenceList({
-  runId,
-  runSheetId,
+function RunEvidenceList({
   evidences = [],
   readOnly,
+  upload: uploadEvidence,
+  remove: removeEvidence,
+  downloadUrl,
   onChanged,
 }: {
-  runId: number;
-  runSheetId: number;
   evidences?: Evidence[];
   readOnly: boolean;
+  upload: (file: File) => Promise<Evidence>;
+  remove: (evidence: Evidence) => Promise<void>;
+  downloadUrl: (evidence: Evidence) => string;
   onChanged: () => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = React.useId();
   const [file, setFile] = useState<File | undefined>();
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
@@ -421,7 +442,7 @@ function RunSheetEvidenceList({
     setIsUploading(true);
     setError('');
     try {
-      await testSheetApi.uploadRunSheetEvidence(runId, runSheetId, file);
+      await uploadEvidence(file);
       setFile(undefined);
       if (inputRef.current) {
         inputRef.current.value = '';
@@ -440,7 +461,7 @@ function RunSheetEvidenceList({
     }
     setError('');
     try {
-      await testSheetApi.deleteEvidence(evidence.id);
+      await removeEvidence(evidence);
       await onChanged();
     } catch (err) {
       setError((err as Error).message);
@@ -453,14 +474,14 @@ function RunSheetEvidenceList({
       {!readOnly && (
         <div className="document-upload-panel">
           <DocumentFilePicker
-            id={`run-sheet-evidence-${runSheetId}`}
+            id={inputId}
             file={file}
             inputRef={inputRef}
             onFileChange={setFile}
-            label={messages.testSheet.documents.addDocument}
+            label={messages.testSheet.documents.chooseFile}
           />
           <Button type="button" disabled={!file || isUploading} onClick={() => { void upload(); }}>
-            {isUploading ? messages.common.saving : messages.common.add}
+            {isUploading ? messages.common.saving : messages.testSheet.documents.addDocument}
           </Button>
         </div>
       )}
@@ -478,7 +499,7 @@ function RunSheetEvidenceList({
                 </div>
               </div>
               <div className="button-row end">
-                <a className="ui-button secondary sm" href={testSheetApi.evidenceDownloadUrl(evidence.id)}>{messages.common.download}</a>
+                <a className="ui-button secondary sm" href={downloadUrl(evidence)}>{messages.common.download}</a>
                 {!readOnly && <Button type="button" size="sm" variant="danger" onClick={() => { void remove(evidence); }}>{messages.common.delete}</Button>}
               </div>
             </div>
@@ -489,28 +510,19 @@ function RunSheetEvidenceList({
   );
 }
 
-function RunResultReadDetails({ actualResult, comment }: { actualResult: string; comment: string }) {
-  const hasActualResult = hasMarkdownContent(actualResult);
+function RunStepCommentReadDetails({ comment }: { comment: string }) {
   const hasComment = hasMarkdownContent(comment);
 
-  if (!hasActualResult && !hasComment) {
-    return <p className="muted">{messages.testSheet.run.noResult}</p>;
+  if (!hasComment) {
+    return <p className="muted">{messages.testSheet.run.noComment}</p>;
   }
 
   return (
     <div className="run-read-details">
-      {hasActualResult && (
-        <section>
-          <h4>{messages.testSheet.run.actualResult}</h4>
-          <MarkdownPreview content={actualResult} />
-        </section>
-      )}
-      {hasComment && (
-        <section>
-          <h4>{messages.testSheet.run.comment}</h4>
-          <MarkdownPreview content={comment} />
-        </section>
-      )}
+      <section>
+        <h4>{messages.testSheet.run.comment}</h4>
+        <MarkdownPreview content={comment} />
+      </section>
     </div>
   );
 }

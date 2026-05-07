@@ -52,12 +52,12 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
       }}
     >
       <label>
-        {messages.testSheet.edit.specificField}
-        <input value={value.field} onChange={(event) => setValue({ ...value, field: event.target.value })} />
-      </label>
-      <label>
         Action
         <textarea value={value.action} onChange={(event) => setValue({ ...value, action: event.target.value })} required />
+      </label>
+      <label>
+        {messages.testSheet.edit.specificField}
+        <textarea value={value.field} onChange={(event) => setValue({ ...value, field: event.target.value })} />
       </label>
       <label>
         {messages.testSheet.edit.expectedResult}

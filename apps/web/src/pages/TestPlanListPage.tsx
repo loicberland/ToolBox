@@ -154,23 +154,33 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                 </div>
                 <h3>{plan.name}</h3>
               </div>
-              <div className="button-row end">
-                <Button type="button" variant="secondary" onClick={() => openHistory(plan)}>{messages.testSheet.plans.history}</Button>
-                {plan.deletedAt ? (
-                  <>
+              <div className="plan-actions">
+                <div className="plan-action-group">
+                  <span className="plan-action-group-label">{messages.testSheet.plans.execution}</span>
+                  {!plan.deletedAt && (
+                    <>
+                      {plan.latestRun?.status === 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.continue}</Button>}
+                      {plan.latestRun && plan.latestRun.status !== 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.open}</Button>}
+                      <Button type="button" variant="secondary" disabled={plan.sheetCount === 0} onClick={() => createRun(plan)}>{messages.testSheet.plans.newRun}</Button>
+                    </>
+                  )}
+                  <Button type="button" variant="secondary" onClick={() => openHistory(plan)}>{messages.testSheet.plans.history}</Button>
+                </div>
+                <div className="plan-action-group">
+                  <span className="plan-action-group-label">{messages.testSheet.plans.editing}</span>
+                  {plan.deletedAt ? (
+                    <>
                     <Button type="button" onClick={async () => { await testSheetApi.restorePlan(plan.id); await load(); }}>{messages.common.restore}</Button>
                     <Button type="button" variant="danger" onClick={() => setPlanToPermanentDelete(plan)}>{messages.testSheet.plans.permanentDelete}</Button>
-                  </>
-                ) : (
-                  <>
-                    {plan.latestRun?.status === 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.continue}</Button>}
-                    {plan.latestRun && plan.latestRun.status !== 'running' && <Button type="button" onClick={() => onRun(plan.latestRun!.id)}>{messages.testSheet.plans.open}</Button>}
-                    <Button type="button" variant="secondary" disabled={plan.sheetCount === 0} onClick={() => createRun(plan)}>{messages.testSheet.plans.newRun}</Button>
+                    </>
+                  ) : (
+                    <>
                     <Button type="button" variant="secondary" onClick={() => onEdit(plan.id)}>{messages.testSheet.plans.editModel}</Button>
                     <Button type="button" variant="secondary" onClick={async () => { await testSheetApi.duplicatePlan(plan.id); await load(); }}>{messages.testSheet.plans.duplicate}</Button>
                     <Button type="button" variant="danger" onClick={() => setPlanToDelete(plan)}>{messages.testSheet.plans.hide}</Button>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 

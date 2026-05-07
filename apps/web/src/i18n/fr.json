@@ -1,5 +1,5 @@
 {
-  "common": {
+    "common": {
     "add": "Ajouter",
     "back": "Retour",
     "cancel": "Annuler",
@@ -47,6 +47,8 @@
       "library": "Bibliothèque",
       "planDocuments": "Documents du plan",
       "executionOrder": "Ordre d’exécution",
+      "execution": "Exécution",
+      "editing": "Édition",
       "search": "Rechercher un plan",
       "latestRun": "Dernière exécution",
       "latestUpdate": "Dernière modification",
@@ -100,7 +102,7 @@
       "testSteps": "Étapes de test",
       "step": "étape",
       "addStep": "Ajouter une étape",
-      "specificField": "Champ spécifique",
+      "specificField": "Spécifique",
       "name": "Nom",
       "description": "Description",
       "prerequisites": "Prérequis",
@@ -130,6 +132,7 @@
       "noResult": "Aucun résultat renseigné",
       "documentsAdded": "Documents ajoutés",
       "noDocumentsAdded": "Aucun document ajouté",
+      "backToTop": "Revenir en haut",
       "sheetDocuments": "Documents de la fiche",
       "actionDocuments": "Documents de l’action",
       "action": "Action",
@@ -151,6 +154,8 @@
       "copyable": "Rapport copiable",
       "copy": "Copier",
       "copied": "Copie effectuée",
+      "copyCode": "Copier le code",
+      "codeCopied": "Code copié",
       "loading": "Chargement du rapport…"
     },
     "documents": {

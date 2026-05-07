@@ -51,7 +51,8 @@ export type TestDocument = {
 
 export type Evidence = {
   id: number;
-  runSheetId: number;
+  runSheetId?: number;
+  runStepId?: number;
   name: string;
   mimeType: string;
   sizeBytes: number;
@@ -134,6 +135,7 @@ export type TestRunStep = {
   actualResult: string;
   comment: string;
   documents?: TestDocument[];
+  evidences?: Evidence[];
 };
 
 export type PlanInput = Pick<TestPlan, 'name' | 'description' | 'mockupSettings'>;
@@ -210,6 +212,12 @@ export const testSheetApi = {
     uploadRunSheetEvidence(runId, runSheetId, file),
   evidenceDownloadUrl: (evidenceId: number) => `${API_BASE_URL}/test-sheet/evidences/${evidenceId}/download`,
   deleteEvidence: (evidenceId: number) => request<void>(`/test-sheet/evidences/${evidenceId}`, { method: 'DELETE' }),
+  listRunStepEvidences: (runId: number, runStepId: number) =>
+    request<Evidence[]>(`/test-sheet/runs/${runId}/steps/${runStepId}/evidences`),
+  uploadRunStepEvidence: (runId: number, runStepId: number, file: File) =>
+    uploadRunStepEvidence(runId, runStepId, file),
+  runStepEvidenceDownloadUrl: (evidenceId: number) => `${API_BASE_URL}/test-sheet/step-evidences/${evidenceId}/download`,
+  deleteRunStepEvidence: (evidenceId: number) => request<void>(`/test-sheet/step-evidences/${evidenceId}`, { method: 'DELETE' }),
   updateRunStep: (runId: number, runStepId: number, input: RunStepInput) =>
     request<TestRunStep>(`/test-sheet/runs/${runId}/steps/${runStepId}`, jsonRequest('PUT', input)),
   finishRun: (runId: number) => request<TestRun>(`/test-sheet/runs/${runId}/finish`, { method: 'PUT' }),
@@ -247,6 +255,26 @@ async function uploadRunSheetEvidence(runId: number, runSheetId: number, file: F
   const formData = new FormData();
   formData.append('file', file);
   const response = await fetch(`${API_BASE_URL}/test-sheet/runs/${runId}/sheets/${runSheetId}/evidences`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    let message = `Erreur HTTP: ${response.status}`;
+    try {
+      const payload = await response.json();
+      message = payload.error ?? message;
+    } catch {
+      // Keep generic message for non-JSON errors.
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+async function uploadRunStepEvidence(runId: number, runStepId: number, file: File): Promise<Evidence> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE_URL}/test-sheet/runs/${runId}/steps/${runStepId}/evidences`, {
     method: 'POST',
     body: formData,
   });
