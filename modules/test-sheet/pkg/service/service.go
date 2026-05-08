@@ -46,12 +46,14 @@ type Repository interface {
 	GetSheet(int64) (model.TestSheet, error)
 	UpdateSheet(int64, model.SheetInput) (model.TestSheet, error)
 	DeleteSheet(int64) error
+	ReindexGroupSheets(int64) error
 	CreateStep(int64, model.StepInput) (model.TestSheetStep, error)
 	ListSteps(int64) ([]model.TestSheetStep, error)
 	GetStep(int64) (model.TestSheetStep, error)
 	UpdateStep(int64, model.StepInput) (model.TestSheetStep, error)
 	DeleteStep(int64) error
 	DuplicateStep(int64) (model.TestSheetStep, error)
+	ReindexSheetSteps(int64) error
 	ReorderSteps(int64, []int64) error
 	ReorderSheets(int64, []int64) error
 	ReorderGroupSheets(int64, []int64) error
@@ -468,6 +470,9 @@ func (s *Service) DuplicateSheet(id int64) (model.TestSheet, error) {
 			return model.TestSheet{}, err
 		}
 	}
+	if err := s.repo.ReindexGroupSheets(sheet.GroupID); err != nil {
+		return model.TestSheet{}, err
+	}
 	if err := s.markGroupChanged(sheet.GroupID); err != nil {
 		return model.TestSheet{}, err
 	}
@@ -549,10 +554,13 @@ func (s *Service) DuplicateStep(id int64) (model.TestSheetStep, error) {
 	if err != nil {
 		return model.TestSheetStep{}, err
 	}
+	if err := s.repo.ReindexSheetSteps(step.SheetID); err != nil {
+		return model.TestSheetStep{}, err
+	}
 	if err := s.markGroupChanged(sheet.GroupID); err != nil {
 		return model.TestSheetStep{}, err
 	}
-	return duplicated, nil
+	return s.repo.GetStep(duplicated.ID)
 }
 
 func (s *Service) ReorderSteps(sheetID int64, stepIDs []int64) error {

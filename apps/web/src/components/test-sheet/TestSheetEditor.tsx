@@ -54,6 +54,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
   const [stepEditorMode, setStepEditorMode] = useState<StepEditorMode>('closed');
   const [editingStep, setEditingStep] = useState<TestSheetStep | undefined>();
+  const [recentlyMovedStepId, setRecentlyMovedStepId] = useState<number | undefined>();
 
   const isCreate = mode === 'create';
   const formId = `test-sheet-form-${sheet?.id ?? 'new'}`;
@@ -191,6 +192,8 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
 
     await onModelMutation(() => testSheetApi.reorderSteps(activeSheet.id, next.map((item) => item.id)));
     await refreshCurrentSheet();
+    setRecentlyMovedStepId(step.id);
+    window.setTimeout(() => setRecentlyMovedStepId(undefined), 800);
     closeStepEditor();
   };
 
@@ -242,6 +245,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
             onDuplicate={duplicateStep}
             onMove={moveStep}
             editingStepId={stepEditorMode === 'edit' ? editingStep?.id : undefined}
+            recentlyMovedStepId={recentlyMovedStepId}
             renderEditor={(step) => (
               <div ref={stepEditorContainerRef}>
                 <TestStepForm

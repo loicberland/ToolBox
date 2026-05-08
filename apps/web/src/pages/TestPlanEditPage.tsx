@@ -27,6 +27,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [documents, setDocuments] = useState<TestDocument[]>([]);
   const [sheetEditorMode, setSheetEditorMode] = useState<SheetEditorMode>('closed');
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
+  const [recentlyMovedSheetId, setRecentlyMovedSheetId] = useState<number | undefined>();
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -363,13 +364,19 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               }}
               onMove={async (sheet, direction) => {
                 const currentIndex = sheets.findIndex((item) => item.id === sheet.id);
-                const next = [...sheets];
                 const targetIndex = currentIndex + direction;
+                if (currentIndex === -1 || targetIndex < 0 || targetIndex >= sheets.length) {
+                  return;
+                }
+                const next = [...sheets];
                 [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
                 await runModelMutation(() => testSheetApi.reorderGroupSheets(selectedGroupId, next.map((item) => item.id)));
                 await refreshSheets();
+                setRecentlyMovedSheetId(sheet.id);
+                window.setTimeout(() => setRecentlyMovedSheetId(undefined), 800);
               }}
               editingSheetId={sheetEditorMode === 'edit' ? editingSheet?.id : undefined}
+              recentlyMovedSheetId={recentlyMovedSheetId}
               renderEditor={(sheet) => (
                 <div ref={sheetEditorContainerRef}>
                   <TestSheetEditor

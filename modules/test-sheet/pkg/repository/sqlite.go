@@ -646,14 +646,26 @@ func (r *SQLiteRepository) UpdateSheet(id int64, input model.SheetInput) (model.
 }
 
 func (r *SQLiteRepository) DeleteSheet(id int64) error {
-	res, err := r.db.Exec(`DELETE FROM test_sheets WHERE id = ?`, id)
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	var groupID int64
+	if err := tx.QueryRow(`SELECT COALESCE(group_id, 0) FROM test_sheets WHERE id = ?`, id).Scan(&groupID); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`DELETE FROM test_sheets WHERE id = ?`, id)
 	if err != nil {
 		return err
 	}
 	if changed, _ := res.RowsAffected(); changed == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	if err := normalizeSheetOrderTx(tx, groupID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *SQLiteRepository) CreateStep(sheetID int64, input model.StepInput) (model.TestSheetStep, error) {
@@ -725,14 +737,26 @@ func (r *SQLiteRepository) UpdateStep(id int64, input model.StepInput) (model.Te
 }
 
 func (r *SQLiteRepository) DeleteStep(id int64) error {
-	res, err := r.db.Exec(`DELETE FROM test_sheet_steps WHERE id = ?`, id)
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	var sheetID int64
+	if err := tx.QueryRow(`SELECT sheet_id FROM test_sheet_steps WHERE id = ?`, id).Scan(&sheetID); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`DELETE FROM test_sheet_steps WHERE id = ?`, id)
 	if err != nil {
 		return err
 	}
 	if changed, _ := res.RowsAffected(); changed == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	if err := normalizeStepOrderTx(tx, sheetID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *SQLiteRepository) DuplicateStep(id int64) (model.TestSheetStep, error) {
@@ -763,6 +787,9 @@ func (r *SQLiteRepository) ReorderSteps(sheetID int64, stepIDs []int64) error {
 			return sql.ErrNoRows
 		}
 	}
+	if err := normalizeStepOrderTx(tx, sheetID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -789,6 +816,33 @@ func (r *SQLiteRepository) ReorderGroupSheets(groupID int64, sheetIDs []int64) e
 		if changed, _ := res.RowsAffected(); changed == 0 {
 			return sql.ErrNoRows
 		}
+	}
+	if err := normalizeSheetOrderTx(tx, groupID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *SQLiteRepository) ReindexGroupSheets(groupID int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	if err := normalizeSheetOrderTx(tx, groupID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *SQLiteRepository) ReindexSheetSteps(sheetID int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	if err := normalizeStepOrderTx(tx, sheetID); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -1605,6 +1659,58 @@ func (r *SQLiteRepository) nextStepOrder(sheetID int64) (int, error) {
 		return 1, nil
 	}
 	return int(next.Int64), nil
+}
+
+func normalizeSheetOrderTx(tx *sql.Tx, groupID int64) error {
+	rows, err := tx.Query(`SELECT id FROM test_sheets WHERE group_id = ? ORDER BY execution_order ASC, id ASC`, groupID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for index, id := range ids {
+		if _, err := tx.Exec(`UPDATE test_sheets SET execution_order = ?, updated_at = ? WHERE id = ?`, index+1, now, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeStepOrderTx(tx *sql.Tx, sheetID int64) error {
+	rows, err := tx.Query(`SELECT id FROM test_sheet_steps WHERE sheet_id = ? ORDER BY execution_order ASC, id ASC`, sheetID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for index, id := range ids {
+		if _, err := tx.Exec(`UPDATE test_sheet_steps SET execution_order = ?, updated_at = ? WHERE id = ?`, index+1, now, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func scanPlan(scanner interface{ Scan(...any) error }) (model.TestPlan, error) {

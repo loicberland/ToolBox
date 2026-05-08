@@ -14,9 +14,10 @@ type Props = {
   onDelete: () => void | Promise<void>;
   onDuplicate: () => void | Promise<void>;
   onMove: (direction: -1 | 1) => void | Promise<void>;
+  recentlyMoved?: boolean;
 };
 
-export function TestSheetCard({ sheet, index, total, onEdit, onDelete, onDuplicate, onMove }: Props) {
+export function TestSheetCard({ sheet, index, total, onEdit, onDelete, onDuplicate, onMove, recentlyMoved = false }: Props) {
   const stepCount = sheet.steps?.length ?? 0;
   const stopAndRun = (event: React.MouseEvent, action: () => void | Promise<void>) => {
     event.stopPropagation();
@@ -24,7 +25,7 @@ export function TestSheetCard({ sheet, index, total, onEdit, onDelete, onDuplica
   };
 
   return (
-    <Card className="test-sheet-card" role="button" tabIndex={0} onClick={() => { void onEdit(); }} onKeyDown={(event) => {
+    <Card className={`test-sheet-card ${recentlyMoved ? 'recently-moved' : ''}`} role="button" tabIndex={0} onClick={() => { void onEdit(); }} onKeyDown={(event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         void onEdit();

@@ -9,10 +9,11 @@ type Props = {
   onDuplicate: (sheet: TestSheet) => void | Promise<void>;
   onMove: (sheet: TestSheet, direction: -1 | 1) => void | Promise<void>;
   editingSheetId?: number;
+  recentlyMovedSheetId?: number;
   renderEditor?: (sheet: TestSheet) => React.ReactNode;
 };
 
-export function TestSheetList({ sheets, onEdit, onDelete, onDuplicate, onMove, editingSheetId, renderEditor }: Props) {
+export function TestSheetList({ sheets, onEdit, onDelete, onDuplicate, onMove, editingSheetId, recentlyMovedSheetId, renderEditor }: Props) {
   if (sheets.length === 0) {
     return null;
   }
@@ -28,6 +29,7 @@ export function TestSheetList({ sheets, onEdit, onDelete, onDuplicate, onMove, e
             onDelete={() => onDelete(sheet)}
             onDuplicate={() => onDuplicate(sheet)}
             onMove={(direction) => onMove(sheet, direction)}
+            recentlyMoved={sheet.id === recentlyMovedSheetId}
           />
           {sheet.id === editingSheetId && renderEditor?.(sheet)}
         </React.Fragment>
