@@ -11,12 +11,12 @@ type Props = {
   onDelete: (step: TestSheetStep) => void | Promise<void>;
   onDuplicate: (step: TestSheetStep) => void | Promise<void>;
   onMove: (step: TestSheetStep, direction: -1 | 1) => void | Promise<void>;
+  registerItem: (stepId: number) => React.RefCallback<HTMLElement>;
   editingStepId?: number;
-  recentlyMovedStepId?: number;
   renderEditor?: (step: TestSheetStep) => React.ReactNode;
 };
 
-export function TestStepList({ steps, onEdit, onDelete, onDuplicate, onMove, editingStepId, recentlyMovedStepId, renderEditor }: Props) {
+export function TestStepList({ steps, onEdit, onDelete, onDuplicate, onMove, registerItem, editingStepId, renderEditor }: Props) {
   if (steps.length === 0) {
     return null;
   }
@@ -25,7 +25,7 @@ export function TestStepList({ steps, onEdit, onDelete, onDuplicate, onMove, edi
     <div className="step-list">
       {steps.map((step, index) => (
         <React.Fragment key={step.id}>
-          <Card className={`step-card ${step.id === recentlyMovedStepId ? 'recently-moved' : ''}`} role="button" tabIndex={0} onClick={() => { void onEdit(step); }} onKeyDown={(event) => {
+          <Card ref={registerItem(step.id)} className="step-card flip-reorder-item" role="button" tabIndex={0} onClick={() => { void onEdit(step); }} onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
               void onEdit(step);

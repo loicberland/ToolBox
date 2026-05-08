@@ -841,22 +841,9 @@ textarea {
   align-items: start;
 }
 
-.recently-moved {
-  animation: moved-highlight 700ms ease-out;
-}
-
-@keyframes moved-highlight {
-  0% {
-    transform: scale(1.015);
-    background: rgba(59, 130, 246, 0.14);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-
-  100% {
-    transform: scale(1);
-    background: transparent;
-    box-shadow: none;
-  }
+.flip-reorder-item {
+  position: relative;
+  will-change: transform;
 }
 
 .sheet-card-order {

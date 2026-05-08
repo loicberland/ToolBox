@@ -7,6 +7,7 @@ import { TestSheetList } from '../components/test-sheet/TestSheetList';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
+import { useFlipReorderAnimation } from '../hooks/useFlipReorderAnimation';
 import { messages } from '../i18n';
 
 type Props = {
@@ -27,7 +28,6 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [documents, setDocuments] = useState<TestDocument[]>([]);
   const [sheetEditorMode, setSheetEditorMode] = useState<SheetEditorMode>('closed');
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
-  const [recentlyMovedSheetId, setRecentlyMovedSheetId] = useState<number | undefined>();
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -37,6 +37,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [info, setInfo] = useState('');
   const sheetEditorRef = useRef<TestSheetEditorHandle>(null);
   const sheetEditorContainerRef = useRef<HTMLDivElement | null>(null);
+  const { registerItem: registerSheetItem, animateReorder: animateSheetReorder } = useFlipReorderAnimation<number>();
 
   const isNew = planId === 0 && !plan;
   const effectivePlanId = plan?.id ?? planId;
@@ -368,15 +369,22 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 if (currentIndex === -1 || targetIndex < 0 || targetIndex >= sheets.length) {
                   return;
                 }
+                const previous = sheets;
                 const next = [...sheets];
                 [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
-                await runModelMutation(() => testSheetApi.reorderGroupSheets(selectedGroupId, next.map((item) => item.id)));
-                await refreshSheets();
-                setRecentlyMovedSheetId(sheet.id);
-                window.setTimeout(() => setRecentlyMovedSheetId(undefined), 800);
+                const ordered = next.map((item, index) => ({ ...item, executionOrder: index + 1 }));
+                animateSheetReorder(() => setSheets(ordered));
+                try {
+                  await runModelMutation(() => testSheetApi.reorderGroupSheets(selectedGroupId, ordered.map((item) => item.id)));
+                  await refreshSheets();
+                } catch (err) {
+                  setError((err as Error).message);
+                  animateSheetReorder(() => setSheets(previous));
+                  await refreshSheets();
+                }
               }}
+              registerItem={registerSheetItem}
               editingSheetId={sheetEditorMode === 'edit' ? editingSheet?.id : undefined}
-              recentlyMovedSheetId={recentlyMovedSheetId}
               renderEditor={(sheet) => (
                 <div ref={sheetEditorContainerRef}>
                   <TestSheetEditor

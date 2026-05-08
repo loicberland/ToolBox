@@ -7,6 +7,7 @@ import { DocumentFilePicker, DocumentList } from './DocumentList';
 import { TestSheetForm, TestSheetFormHandle } from './TestSheetForm';
 import { TestStepForm, TestStepFormHandle } from './TestStepForm';
 import { TestStepList } from './TestStepList';
+import { useFlipReorderAnimation } from '../../hooks/useFlipReorderAnimation';
 
 type Mode = 'create' | 'edit';
 type StepEditorMode = 'closed' | 'create' | 'edit';
@@ -54,7 +55,8 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
   const [stepEditorMode, setStepEditorMode] = useState<StepEditorMode>('closed');
   const [editingStep, setEditingStep] = useState<TestSheetStep | undefined>();
-  const [recentlyMovedStepId, setRecentlyMovedStepId] = useState<number | undefined>();
+  const [stepError, setStepError] = useState('');
+  const { registerItem: registerStepItem, animateReorder: animateStepReorder } = useFlipReorderAnimation<number>();
 
   const isCreate = mode === 'create';
   const formId = `test-sheet-form-${sheet?.id ?? 'new'}`;
@@ -189,12 +191,23 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
     }
     const next = [...steps];
     [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
+    const ordered = next.map((item, index) => ({ ...item, executionOrder: index + 1 }));
+    const previousSheet = activeSheet;
 
-    await onModelMutation(() => testSheetApi.reorderSteps(activeSheet.id, next.map((item) => item.id)));
-    await refreshCurrentSheet();
-    setRecentlyMovedStepId(step.id);
-    window.setTimeout(() => setRecentlyMovedStepId(undefined), 800);
+    setStepError('');
+    animateStepReorder(() => {
+      setCurrentSheet({ ...activeSheet, steps: ordered });
+    });
     closeStepEditor();
+
+    try {
+      await onModelMutation(() => testSheetApi.reorderSteps(activeSheet.id, ordered.map((item) => item.id)));
+      await refreshCurrentSheet();
+    } catch (err) {
+      setStepError((err as Error).message);
+      animateStepReorder(() => setCurrentSheet(previousSheet));
+      await refreshCurrentSheet();
+    }
   };
 
   return (
@@ -232,6 +245,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
       )}
       {canEditSteps && (
         <div className="sheet-steps-panel">
+          {stepError && <p className="error">{stepError}</p>}
           <div className="section-header compact">
             <div>
               <span className="section-kicker">{messages.testSheet.edit.testSteps}</span>
@@ -244,8 +258,8 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
             onDelete={deleteStep}
             onDuplicate={duplicateStep}
             onMove={moveStep}
+            registerItem={registerStepItem}
             editingStepId={stepEditorMode === 'edit' ? editingStep?.id : undefined}
-            recentlyMovedStepId={recentlyMovedStepId}
             renderEditor={(step) => (
               <div ref={stepEditorContainerRef}>
                 <TestStepForm

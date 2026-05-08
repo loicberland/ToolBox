@@ -4,13 +4,13 @@ type Props = React.HTMLAttributes<HTMLElement> & {
   children: React.ReactNode;
 };
 
-export function Card({ className = '', children, ...props }: Props) {
+export const Card = React.forwardRef<HTMLElement, Props>(function Card({ className = '', children, ...props }, ref) {
   return (
-    <section className={`ui-card ${className}`.trim()} {...props}>
+    <section ref={ref} className={`ui-card ${className}`.trim()} {...props}>
       {children}
     </section>
   );
-}
+});
 
 export function CardHeader({ className = '', children, ...props }: Props) {
   return (
