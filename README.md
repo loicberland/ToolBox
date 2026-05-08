@@ -44,7 +44,7 @@ npm run start
 Builder le front :
 
 ```bash
-./scripts/build.sh web
+go run ./tools/build web
 ```
 
 ## Web Server
@@ -52,7 +52,7 @@ Builder le front :
 Le serveur statique embarque le build React dans l'executable Go avec `go:embed`. Le build `web-server` compile donc d'abord le front, copie `apps/web/dist` dans `apps/web-server/cmd/dist`, puis produit un binaire autonome.
 
 ```bash
-./scripts/build.sh web-server
+go run ./tools/build web-server
 ./_build/web-server-toolbox.exe start
 ```
 
@@ -78,15 +78,41 @@ go run ./modules/test-env/cmd/test-env run init-config --json
 
 ## Build
 
-Les binaires sont produits dans `_build/`.
+Les binaires sont produits dans `_build/`. Le build principal est un outil Go cross-platform, utilisable depuis Windows sans Git Bash.
 
-```bash
-./scripts/build.sh api
-./scripts/build.sh web
-./scripts/build.sh web-server
-./scripts/build.sh module test-sheet
-./scripts/build.sh modules
-./scripts/build.sh all
+Commandes Windows :
+
+```bat
+build.bat all
+build.bat api
+build.bat web-server
+build.bat module test-sheet
 ```
 
-Le script racine `./build.sh` delegue a `./scripts/build.sh`.
+Commandes PowerShell :
+
+```powershell
+.\build.ps1 all
+.\build.ps1 api
+.\build.ps1 web-server
+.\build.ps1 module test-sheet
+```
+
+Commandes Go directes :
+
+```bash
+go run ./tools/build api
+go run ./tools/build web
+go run ./tools/build web-server
+go run ./tools/build module test-sheet
+go run ./tools/build modules
+go run ./tools/build all
+```
+
+Depuis un autre dossier, indiquez explicitement la racine :
+
+```powershell
+go run C:\chemin\ToolBox\tools\build\main.go --root C:\chemin\ToolBox all
+```
+
+L'outil resout la racine via `--root`, puis `TOOLBOX_ROOT`, puis en remontant jusqu'a un `go.mod` contenant `module toolBox`. Les scripts `build.sh` et `scripts/build.sh` restent disponibles pour Linux/macOS et deleguent au meme outil Go.

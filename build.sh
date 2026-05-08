@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec ./scripts/build.sh "$@"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+exec go run "$ROOT_DIR/tools/build" --root "$ROOT_DIR" "$@"

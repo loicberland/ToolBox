@@ -13,6 +13,7 @@ _build/
 .tern*
 *.old
 *.bat
+!build.bat
 *.gzip
 *.gz
 *.log
@@ -22,6 +23,9 @@ _build/
 node_modules/
 dist/
 build/
+!tools/
+!tools/build/
+!tools/build/main.go
 data/**/*.db
 data/**/*.sqlite
 *.tmp
