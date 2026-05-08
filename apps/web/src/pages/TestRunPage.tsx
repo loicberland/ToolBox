@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { RunGroup, testSheetApi, TestRun, TestRunSheet } from '../api/testSheet';
-import { getGroupStatus, TestRunProgress } from '../components/test-sheet/TestRunProgress';
+import { TestRunProgress } from '../components/test-sheet/TestRunProgress';
 import { TestRunSheetDetail } from '../components/test-sheet/TestRunSheetDetail';
 import { TestRunSheetList } from '../components/test-sheet/TestRunSheetList';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/test-sheet/StatusBadge';
-import { getRunSheetProgress, isRunEditable, isRunReadOnly } from '../components/test-sheet/runStatus';
+import { getGroupStatus, getRunSheetProgress, isRunEditable, isRunReadOnly } from '../components/test-sheet/runStatus';
 import { messages } from '../i18n';
 
 type Props = {

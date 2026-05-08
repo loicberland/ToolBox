@@ -293,7 +293,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 onClick={() => { void selectGroup(group.id); }}
               >
                 <strong>{group.name}</strong>
-                <span>{group.runCount} {messages.testSheet.plans.runSingular}{group.runCount > 1 ? 's' : ''}</span>
+                <span>{group.sheetCount} {messages.testSheet.plans.sheetSingular}{group.sheetCount > 1 ? 's' : ''}</span>
               </button>
             ))}
           </div>

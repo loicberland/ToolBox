@@ -27,16 +27,17 @@ type TestPlan struct {
 }
 
 type TestGroup struct {
-	ID             int64       `json:"id"`
-	PlanID         int64       `json:"planId"`
-	Name           string      `json:"name"`
-	Description    string      `json:"description"`
-	ExecutionOrder int         `json:"executionOrder"`
-	CreatedAt      time.Time   `json:"createdAt"`
-	UpdatedAt      time.Time   `json:"updatedAt"`
-	Sheets         []TestSheet `json:"sheets,omitempty"`
+	ID             int64           `json:"id"`
+	PlanID         int64           `json:"planId"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	ExecutionOrder int             `json:"executionOrder"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
+	Sheets         []TestSheet     `json:"sheets,omitempty"`
 	LatestRun      *TestRunSummary `json:"latestRun,omitempty"`
-	RunCount       int         `json:"runCount"`
+	RunCount       int             `json:"runCount"`
+	SheetCount     int             `json:"sheetCount"`
 }
 
 type TestSheet struct {
@@ -119,28 +120,28 @@ type RunGroup struct {
 }
 
 type TestRunSummary struct {
-	ID           int64      `json:"id"`
-	RunNumber    int        `json:"runNumber"`
-	PlanID       int64      `json:"planId"`
-	GroupID      int64      `json:"groupId"`
-	PlanName     string     `json:"planName"`
-	GroupName    string     `json:"groupName"`
-	Status       string     `json:"status"`
-	StartedAt    time.Time  `json:"startedAt"`
-	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
-	TotalSheets  int        `json:"totalSheets"`
-	TotalGroups  int        `json:"totalGroups"`
-	PendingGroups int       `json:"pendingGroups"`
-	PassedGroups int        `json:"passedGroups"`
-	FailedGroups int        `json:"failedGroups"`
-	BlockedGroups int       `json:"blockedGroups"`
-	SkippedGroups int       `json:"skippedGroups"`
-	TotalSteps   int        `json:"totalSteps"`
-	PendingSteps int        `json:"pendingSteps"`
-	PassedSteps  int        `json:"passedSteps"`
-	FailedSteps  int        `json:"failedSteps"`
-	BlockedSteps int        `json:"blockedSteps"`
-	SkippedSteps int        `json:"skippedSteps"`
+	ID            int64      `json:"id"`
+	RunNumber     int        `json:"runNumber"`
+	PlanID        int64      `json:"planId"`
+	GroupID       int64      `json:"groupId"`
+	PlanName      string     `json:"planName"`
+	GroupName     string     `json:"groupName"`
+	Status        string     `json:"status"`
+	StartedAt     time.Time  `json:"startedAt"`
+	FinishedAt    *time.Time `json:"finishedAt,omitempty"`
+	TotalSheets   int        `json:"totalSheets"`
+	TotalGroups   int        `json:"totalGroups"`
+	PendingGroups int        `json:"pendingGroups"`
+	PassedGroups  int        `json:"passedGroups"`
+	FailedGroups  int        `json:"failedGroups"`
+	BlockedGroups int        `json:"blockedGroups"`
+	SkippedGroups int        `json:"skippedGroups"`
+	TotalSteps    int        `json:"totalSteps"`
+	PendingSteps  int        `json:"pendingSteps"`
+	PassedSteps   int        `json:"passedSteps"`
+	FailedSteps   int        `json:"failedSteps"`
+	BlockedSteps  int        `json:"blockedSteps"`
+	SkippedSteps  int        `json:"skippedSteps"`
 }
 
 type TestPlanSummary struct {

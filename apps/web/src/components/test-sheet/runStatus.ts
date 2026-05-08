@@ -47,6 +47,26 @@ export function getRunSheetProgress(sheet: TestRunSheet) {
   };
 }
 
+export function getGroupStatus(sheets: TestRunSheet[] = []) {
+  if (sheets.length === 0) {
+    return 'pending' as const;
+  }
+  const statuses = sheets.map((sheet) => getRunSheetProgress(sheet).status);
+  if (statuses.includes('failed')) {
+    return 'failed' as const;
+  }
+  if (statuses.includes('blocked')) {
+    return 'blocked' as const;
+  }
+  if (statuses.includes('pending')) {
+    return 'pending' as const;
+  }
+  if (statuses.every((status) => status === 'skipped')) {
+    return 'skipped' as const;
+  }
+  return 'passed' as const;
+}
+
 export function getRunSheetProgressSummary(sheet: TestRunSheet) {
   const progress = getRunSheetProgress(sheet);
   const parts = [`${progress.total} action${progress.total > 1 ? 's' : ''}`];

@@ -287,23 +287,24 @@ function PlanRunProgress({ run, compact = false }: { run?: TestRunSummary; compa
   if (!run) {
     return <p className="muted">{messages.testSheet.plans.noRun}</p>;
   }
-  const totalGroups = run.totalGroups || (run.totalSheets > 0 ? 1 : 0);
-  const pendingGroups = run.totalGroups ? run.pendingGroups : (run.pendingSteps > 0 ? 1 : 0);
-  const passedGroups = run.totalGroups ? run.passedGroups : (run.pendingSteps === 0 && run.failedSteps === 0 && run.blockedSteps === 0 && run.skippedSteps !== run.totalSteps ? 1 : 0);
-  const failedGroups = run.totalGroups ? run.failedGroups : (run.failedSteps > 0 ? 1 : 0);
-  const blockedGroups = run.totalGroups ? run.blockedGroups : (run.failedSteps === 0 && run.blockedSteps > 0 ? 1 : 0);
-  const skippedGroups = run.totalGroups ? run.skippedGroups : (run.totalSteps > 0 && run.skippedSteps === run.totalSteps ? 1 : 0);
-  const done = totalGroups - pendingGroups;
-  const percent = totalGroups === 0 ? 0 : Math.round((done / totalGroups) * 100);
+  const hasGroupProgress = run.totalGroups !== undefined && run.totalGroups > 0;
+  const total = hasGroupProgress ? (run.totalGroups ?? 0) : (run.totalSheets > 0 ? 1 : 0);
+  const pending = hasGroupProgress ? (run.pendingGroups ?? 0) : (run.pendingSteps > 0 ? 1 : 0);
+  const passed = hasGroupProgress ? (run.passedGroups ?? 0) : (run.pendingSteps === 0 && run.failedSteps === 0 && run.blockedSteps === 0 && run.skippedSteps !== run.totalSteps ? 1 : 0);
+  const failed = hasGroupProgress ? (run.failedGroups ?? 0) : (run.failedSteps > 0 ? 1 : 0);
+  const blocked = hasGroupProgress ? (run.blockedGroups ?? 0) : (run.failedSteps === 0 && run.blockedSteps > 0 ? 1 : 0);
+  const skipped = hasGroupProgress ? (run.skippedGroups ?? 0) : (run.totalSteps > 0 && run.skippedSteps === run.totalSteps ? 1 : 0);
+  const done = Math.max(0, total - pending);
+  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
   return (
     <div className={compact ? 'plan-run-progress compact' : 'plan-run-progress'}>
       {!compact && <strong>{messages.testSheet.plans.executionNumber}{run.runNumber}</strong>}
-      <strong>{done} / {totalGroups} {messages.testSheet.run.subPlansProcessed}</strong>
+      <strong>{done} / {total} {messages.testSheet.run.subPlansProcessed}</strong>
       <div className="progress-track" aria-label={`Progression ${percent}%`}>
         <div className="progress-fill" style={{ width: `${percent}%` }} />
       </div>
       <p className="muted">
-        {passedGroups} {messages.testSheet.run.passedPlural} - {failedGroups} {messages.testSheet.run.failedPlural} - {blockedGroups} {messages.testSheet.run.blockedPlural} - {skippedGroups} {messages.testSheet.run.skippedPlural} - {pendingGroups} {statusLabel('pending').toLowerCase()}
+        {passed} {messages.testSheet.run.passedPlural} - {failed} {messages.testSheet.run.failedPlural} - {blocked} {messages.testSheet.run.blockedPlural} - {skipped} {messages.testSheet.run.skippedPlural} - {pending} {statusLabel('pending').toLowerCase()}
       </p>
     </div>
   );

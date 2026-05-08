@@ -418,15 +418,19 @@ func (r *SQLiteRepository) CreateGroup(planID int64, input model.GroupInput) (mo
 }
 
 func (r *SQLiteRepository) ListGroups(planID int64) ([]model.TestGroup, error) {
-	rows, err := r.db.Query(`SELECT id, plan_id, name, description, execution_order, created_at, updated_at
-		FROM test_plan_groups WHERE plan_id = ? ORDER BY execution_order ASC, id ASC`, planID)
+	rows, err := r.db.Query(`SELECT g.id, g.plan_id, g.name, g.description, g.execution_order, g.created_at, g.updated_at, COUNT(s.id) AS sheet_count
+		FROM test_plan_groups g
+		LEFT JOIN test_sheets s ON s.group_id = g.id
+		WHERE g.plan_id = ?
+		GROUP BY g.id
+		ORDER BY g.execution_order ASC, g.id ASC`, planID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	groups := []model.TestGroup{}
 	for rows.Next() {
-		group, err := scanGroup(rows)
+		group, err := scanGroupWithSheetCount(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -455,6 +459,7 @@ func (r *SQLiteRepository) GetGroup(id int64) (model.TestGroup, error) {
 	if err != nil {
 		return model.TestGroup{}, err
 	}
+	group.SheetCount = len(group.Sheets)
 	runs, err := r.ListGroupRuns(id)
 	if err != nil {
 		return model.TestGroup{}, err
@@ -1164,7 +1169,7 @@ func runGroupStatus(sheets []model.RunSheet) string {
 	}
 	allSkipped := true
 	for _, sheet := range sheets {
-		switch sheet.Status {
+		switch runSheetStatus(sheet) {
 		case model.RunSheetStatusFailed:
 			return model.RunSheetStatusFailed
 		case model.RunSheetStatusBlocked:
@@ -1179,6 +1184,38 @@ func runGroupStatus(sheets []model.RunSheet) string {
 		return model.RunSheetStatusSkipped
 	}
 	return model.RunSheetStatusPassed
+}
+
+func runSheetStatus(sheet model.RunSheet) string {
+	if len(sheet.Steps) == 0 {
+		return sheet.Status
+	}
+	nonSkipped := 0
+	allPassed := true
+	for _, step := range sheet.Steps {
+		if step.Status == model.RunSheetStatusSkipped {
+			continue
+		}
+		nonSkipped++
+		switch step.Status {
+		case model.RunSheetStatusFailed:
+			return model.RunSheetStatusFailed
+		case model.RunSheetStatusBlocked:
+			return model.RunSheetStatusBlocked
+		case model.RunSheetStatusPending:
+			return model.RunSheetStatusPending
+		case model.RunSheetStatusPassed:
+		default:
+			allPassed = false
+		}
+	}
+	if nonSkipped == 0 {
+		return model.RunSheetStatusSkipped
+	}
+	if allPassed {
+		return model.RunSheetStatusPassed
+	}
+	return sheet.Status
 }
 
 func (r *SQLiteRepository) ReplayRun(runID int64) (model.TestRun, error) {
@@ -1583,6 +1620,12 @@ func scanPlan(scanner interface{ Scan(...any) error }) (model.TestPlan, error) {
 func scanGroup(scanner interface{ Scan(...any) error }) (model.TestGroup, error) {
 	var group model.TestGroup
 	err := scanner.Scan(&group.ID, &group.PlanID, &group.Name, &group.Description, &group.ExecutionOrder, &group.CreatedAt, &group.UpdatedAt)
+	return group, err
+}
+
+func scanGroupWithSheetCount(scanner interface{ Scan(...any) error }) (model.TestGroup, error) {
+	var group model.TestGroup
+	err := scanner.Scan(&group.ID, &group.PlanID, &group.Name, &group.Description, &group.ExecutionOrder, &group.CreatedAt, &group.UpdatedAt, &group.SheetCount)
 	return group, err
 }
 

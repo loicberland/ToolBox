@@ -2,7 +2,7 @@ import React from 'react';
 import { RunGroup, TestRunSheet } from '../../api/testSheet';
 import { Card } from '../ui/Card';
 import { StatusBadge } from './StatusBadge';
-import { getRunSheetProgress } from './runStatus';
+import { getGroupStatus, getRunSheetProgress } from './runStatus';
 
 type Props = {
   status: string;
@@ -40,24 +40,4 @@ export function TestRunProgress({ status, sheets, groups }: Props) {
       </div>
     </Card>
   );
-}
-
-export function getGroupStatus(sheets: TestRunSheet[] = []) {
-  if (sheets.length === 0) {
-    return 'pending' as const;
-  }
-  const statuses = sheets.map((sheet) => getRunSheetProgress(sheet).status);
-  if (statuses.includes('failed')) {
-    return 'failed' as const;
-  }
-  if (statuses.includes('blocked')) {
-    return 'blocked' as const;
-  }
-  if (statuses.includes('pending')) {
-    return 'pending' as const;
-  }
-  if (statuses.every((status) => status === 'skipped')) {
-    return 'skipped' as const;
-  }
-  return 'passed' as const;
 }

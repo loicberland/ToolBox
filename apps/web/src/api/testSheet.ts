@@ -39,6 +39,7 @@ export type TestGroup = {
   sheets?: TestSheet[];
   latestRun?: TestRunSummary;
   runCount: number;
+  sheetCount: number;
 };
 
 export type TestSheetStep = {
