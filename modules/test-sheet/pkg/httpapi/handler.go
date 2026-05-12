@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -30,6 +32,9 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/plans/{planId}/permanent", h.permanentDeletePlan).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/restore", h.restorePlan).Methods(http.MethodPut)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/duplicate", h.duplicatePlan).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/plans/{planId}/export", h.exportPlan).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/import/preview", h.previewImport).Methods(http.MethodPost)
+	r.HandleFunc("/api/test-sheet/import", h.importPlan).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/documents", h.listDocuments).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/documents", h.uploadDocument).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/groups", h.listGroups).Methods(http.MethodGet)
@@ -156,6 +161,47 @@ func (h *Handler) duplicatePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	plan, err := h.service.DuplicatePlan(id)
 	respondCreated(w, plan, err)
+}
+
+func (h *Handler) exportPlan(w http.ResponseWriter, r *http.Request) {
+	planID, ok := pathID(w, r, "planId")
+	if !ok {
+		return
+	}
+	options := service.DefaultExportOptions()
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&options); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+	}
+	payload, err := h.service.ExportPlan(planID, options)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="test-sheet-plan-%d.zip"`, planID))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(payload)
+}
+
+func (h *Handler) previewImport(w http.ResponseWriter, r *http.Request) {
+	payload, ok := importPayload(w, r)
+	if !ok {
+		return
+	}
+	preview, err := h.service.PreviewImportZip(payload)
+	respond(w, preview, err)
+}
+
+func (h *Handler) importPlan(w http.ResponseWriter, r *http.Request) {
+	payload, ok := importPayload(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.service.ImportPlanZip(payload)
+	respondCreated(w, result, err)
 }
 
 func (h *Handler) listDocuments(w http.ResponseWriter, r *http.Request) {
@@ -764,6 +810,31 @@ func decode(w http.ResponseWriter, r *http.Request, output any) bool {
 		return false
 	}
 	return true
+}
+
+func importPayload(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	if err := r.ParseMultipartForm(100 << 20); err == nil {
+		file, _, err := r.FormFile("file")
+		if err == nil {
+			defer file.Close()
+			payload, err := io.ReadAll(io.LimitReader(file, 100<<20))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot read uploaded zip"})
+				return nil, false
+			}
+			return payload, true
+		}
+	}
+	if r.Body == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "zip file is required"})
+		return nil, false
+	}
+	payload, err := io.ReadAll(io.LimitReader(r.Body, 100<<20))
+	if err != nil || len(payload) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "zip file is required"})
+		return nil, false
+	}
+	return payload, true
 }
 
 func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {

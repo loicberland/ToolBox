@@ -204,6 +204,7 @@ type Evidence struct {
 	RunStepID  int64     `json:"runStepId,omitempty"`
 	Name       string    `json:"name"`
 	Path       string    `json:"-"`
+	ExportPath string    `json:"exportPath,omitempty"`
 	MimeType   string    `json:"mimeType"`
 	SizeBytes  int64     `json:"sizeBytes"`
 	Comment    string    `json:"comment"`
@@ -263,4 +264,29 @@ type RunStepResultInput struct {
 	Status       string `json:"status"`
 	ActualResult string `json:"actualResult"`
 	Comment      string `json:"comment"`
+}
+
+type ExportOptions struct {
+	IncludeGroups    bool `json:"includeGroups"`
+	IncludeSheets    bool `json:"includeSheets"`
+	IncludeSteps     bool `json:"includeSteps"`
+	IncludeDocuments bool `json:"includeDocuments"`
+	IncludeHistory   bool `json:"includeHistory"`
+	IncludeEvidences bool `json:"includeEvidences"`
+}
+
+type ImportPreview struct {
+	PlanName      string `json:"planName"`
+	SchemaVersion int    `json:"schemaVersion"`
+	Groups        int    `json:"groups"`
+	Sheets        int    `json:"sheets"`
+	Steps         int    `json:"steps"`
+	Documents     int    `json:"documents"`
+	Runs          int    `json:"runs"`
+	Evidences     int    `json:"evidences"`
+}
+
+type ImportResult struct {
+	PlanID int64  `json:"planId"`
+	Name   string `json:"name"`
 }

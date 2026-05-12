@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { testSheetApi, TestDocument, TestGroup, TestPlan, TestSheet } from '../api/testSheet';
+import { ExportOptions, testSheetApi, TestDocument, TestGroup, TestPlan, TestSheet } from '../api/testSheet';
 import { DocumentFilePicker, DocumentList } from '../components/test-sheet/DocumentList';
 import { TestPlanForm } from '../components/test-sheet/TestPlanForm';
 import { TestSheetEditor, TestSheetEditorHandle } from '../components/test-sheet/TestSheetEditor';
@@ -32,6 +32,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [newGroupName, setNewGroupName] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [groupToEdit, setGroupToEdit] = useState<TestGroup | undefined>();
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [editGroupName, setEditGroupName] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -227,16 +228,21 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
         description={isNew ? messages.testSheet.plans.savePlanBeforeSheets : `${groups.length} ${messages.testSheet.plans.groupSingular}${groups.length > 1 ? 's' : ''} · ${sheets.length} ${messages.testSheet.plans.sheetSingular}${sheets.length > 1 ? 's' : ''}`}
         onBack={onBack}
         actions={!isNew && (
-          <Button
-            type="button"
-            disabled={groups.length === 0}
-            onClick={async () => {
-              const run = await testSheetApi.createRun(effectivePlanId);
-              onRun(run.id);
-            }}
-          >
-            {messages.testSheet.plans.startRun}
-          </Button>
+          <div className="button-row end">
+            <Button type="button" variant="secondary" onClick={() => setExportDialogOpen(true)}>
+              Exporter
+            </Button>
+            <Button
+              type="button"
+              disabled={groups.length === 0}
+              onClick={async () => {
+                const run = await testSheetApi.createRun(effectivePlanId);
+                onRun(run.id);
+              }}
+            >
+              {messages.testSheet.plans.startRun}
+            </Button>
+          </div>
         )}
       />
 
@@ -534,8 +540,88 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
           </div>
         </div>
       )}
+      {exportDialogOpen && plan && (
+        <ExportPlanDialog
+          planId={effectivePlanId}
+          planName={plan.name}
+          onClose={() => setExportDialogOpen(false)}
+          onError={setError}
+        />
+      )}
     </section>
   );
+}
+
+function ExportPlanDialog({ planId, planName, onClose, onError }: { planId: number; planName: string; onClose: () => void; onError: (message: string) => void }) {
+  const [options, setOptions] = useState<ExportOptions>({
+    includeGroups: true,
+    includeSheets: true,
+    includeSteps: true,
+    includeDocuments: true,
+    includeHistory: false,
+    includeEvidences: false,
+  });
+  const [exporting, setExporting] = useState(false);
+
+  const setOption = (key: keyof ExportOptions, checked: boolean) => {
+    setOptions((current) => normalizeExportOptions({ ...current, [key]: checked }));
+  };
+
+  const exportPlan = async () => {
+    setExporting(true);
+    try {
+      const blob = await testSheetApi.exportPlan(planId, normalizeExportOptions(options));
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `test-sheet-plan-${planId}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      onClose();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="export-plan-title">
+        <h3 id="export-plan-title">Exporter {planName}</h3>
+        <div className="export-option-list">
+          <label><input type="checkbox" checked readOnly /> Plan</label>
+          <label><input type="checkbox" checked={options.includeGroups} onChange={(event) => setOption('includeGroups', event.target.checked)} /> Sous-plans / groupes</label>
+          <label><input type="checkbox" checked={options.includeSheets} onChange={(event) => setOption('includeSheets', event.target.checked)} /> Fiches</label>
+          <label><input type="checkbox" checked={options.includeSteps} onChange={(event) => setOption('includeSteps', event.target.checked)} /> Actions</label>
+          <label><input type="checkbox" checked={options.includeDocuments} onChange={(event) => setOption('includeDocuments', event.target.checked)} /> Documents</label>
+          <label><input type="checkbox" checked={options.includeHistory} onChange={(event) => setOption('includeHistory', event.target.checked)} /> Historique d'exécution</label>
+          <label><input type="checkbox" checked={options.includeEvidences} onChange={(event) => setOption('includeEvidences', event.target.checked)} /> Preuves / evidences</label>
+        </div>
+        <div className="button-row end">
+          <Button type="button" variant="secondary" onClick={onClose}>{messages.common.cancel}</Button>
+          <Button type="button" disabled={exporting} onClick={exportPlan}>{exporting ? 'Export...' : 'Exporter'}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function normalizeExportOptions(options: ExportOptions): ExportOptions {
+  const next = { ...options };
+  if (next.includeSteps) {
+    next.includeSheets = true;
+    next.includeGroups = true;
+  }
+  if (next.includeSheets) {
+    next.includeGroups = true;
+  }
+  if (next.includeEvidences) {
+    next.includeHistory = true;
+  }
+  return next;
 }
 
 async function hasRunningRun(planId: number) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { testSheetApi, TestPlanSummary, TestRunSummary, TestRunStatus } from '../api/testSheet';
+import { ImportPreview, testSheetApi, TestPlanSummary, TestRunSummary, TestRunStatus } from '../api/testSheet';
 import { PageHeader } from '../components/ui/PageHeader';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Button } from '../components/ui/Button';
@@ -36,6 +36,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
   const [showDeletedPlans, setShowDeletedPlans] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('latestRun');
   const [error, setError] = useState('');
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -102,7 +103,12 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
         eyebrow="Test Sheet"
         title={messages.testSheet.plans.title}
         description={messages.testSheet.plans.description}
-        actions={<Button type="button" onClick={() => onEdit(0)}>{messages.testSheet.plans.newPlan}</Button>}
+        actions={(
+          <div className="button-row end">
+            <Button type="button" variant="secondary" onClick={() => setImportDialogOpen(true)}>Importer</Button>
+            <Button type="button" onClick={() => onEdit(0)}>{messages.testSheet.plans.newPlan}</Button>
+          </div>
+        )}
       />
       {error && <p className="error">{error}</p>}
       {info && <p className="info-message">{info}</p>}
@@ -279,7 +285,92 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
           </div>
         </div>
       )}
+      {importDialogOpen && (
+        <ImportPlanDialog
+          onClose={() => setImportDialogOpen(false)}
+          onImported={(planId) => {
+            setImportDialogOpen(false);
+            onEdit(planId);
+          }}
+          onReload={load}
+          onError={setError}
+        />
+      )}
     </section>
+  );
+}
+
+function ImportPlanDialog({
+  onClose,
+  onImported,
+  onReload,
+  onError,
+}: {
+  onClose: () => void;
+  onImported: (planId: number) => void;
+  onReload: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [file, setFile] = useState<File | undefined>();
+  const [preview, setPreview] = useState<ImportPreview | undefined>();
+  const [busy, setBusy] = useState(false);
+
+  const selectFile = async (selected?: File) => {
+    setFile(selected);
+    setPreview(undefined);
+    if (!selected) {
+      return;
+    }
+    setBusy(true);
+    try {
+      setPreview(await testSheetApi.previewImport(selected));
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importPlan = async () => {
+    if (!file) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await testSheetApi.importPlan(file);
+      await onReload();
+      onImported(result.planId);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="import-plan-title">
+        <h3 id="import-plan-title">Importer un plan</h3>
+        <input type="file" accept=".zip,application/zip" onChange={(event) => void selectFile(event.target.files?.[0])} />
+        {busy && <p className="muted">Lecture du fichier...</p>}
+        {preview && (
+          <div className="import-preview-grid">
+            <strong>{preview.planName}</strong>
+            <span>Schéma {preview.schemaVersion}</span>
+            <span>{preview.groups} sous-plans</span>
+            <span>{preview.sheets} fiches</span>
+            <span>{preview.steps} actions</span>
+            <span>{preview.documents} documents</span>
+            <span>{preview.runs} exécutions</span>
+            <span>{preview.evidences} preuves</span>
+          </div>
+        )}
+        <div className="button-row end">
+          <Button type="button" variant="secondary" onClick={onClose}>{messages.common.cancel}</Button>
+          <Button type="button" disabled={!file || !preview || busy} onClick={importPlan}>Importer</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

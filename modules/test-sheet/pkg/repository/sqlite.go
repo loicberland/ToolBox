@@ -1051,6 +1051,93 @@ func (r *SQLiteRepository) CreateRunWithGroupSnapshot(groupID int64) (model.Test
 	return r.CreateRunWithSnapshot(group.PlanID)
 }
 
+func (r *SQLiteRepository) CreateImportedRun(input model.TestRun) (model.TestRun, error) {
+	startedAt := input.StartedAt
+	if startedAt.IsZero() {
+		startedAt = time.Now().UTC()
+	}
+	res, err := r.db.Exec(`INSERT INTO test_runs (plan_id, group_id, plan_name, group_name, status, started_at, finished_at)
+		VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?)`,
+		input.PlanID, input.GroupID, input.PlanName, input.GroupName, input.Status, startedAt, input.FinishedAt)
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.TestRun{}, err
+	}
+	return r.GetRun(id)
+}
+
+func (r *SQLiteRepository) CreateImportedRunGroup(input model.RunGroup) (model.RunGroup, error) {
+	createdAt := input.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	res, err := r.db.Exec(`INSERT INTO test_run_groups (run_id, source_group_id, name, description, execution_order, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		input.RunID, input.SourceGroupID, input.Name, input.Description, input.ExecutionOrder, createdAt)
+	if err != nil {
+		return model.RunGroup{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.RunGroup{}, err
+	}
+	row := r.db.QueryRow(`SELECT id, run_id, source_group_id, name, description, execution_order, created_at FROM test_run_groups WHERE id = ?`, id)
+	return scanRunGroup(row)
+}
+
+func (r *SQLiteRepository) CreateImportedRunSheet(input model.RunSheet) (model.RunSheet, error) {
+	createdAt := input.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	updatedAt := input.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = createdAt
+	}
+	res, err := r.db.Exec(`INSERT INTO test_run_sheets
+		(run_id, run_group_id, source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at)
+		VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.RunID, input.RunGroupID, input.SourceSheetID, input.Name, input.Description, input.Prerequisites, input.Config, input.Command, input.Notes, input.Action, input.ExpectedResult, input.ExecutionOrder, input.Status, input.ActualResult, input.Comment, createdAt, updatedAt)
+	if err != nil {
+		return model.RunSheet{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.RunSheet{}, err
+	}
+	row := r.db.QueryRow(`SELECT id, run_id, COALESCE(run_group_id, 0), source_sheet_id, name, description, prerequisites, config, command, notes, action, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
+		FROM test_run_sheets WHERE id = ?`, id)
+	return scanRunSheet(row)
+}
+
+func (r *SQLiteRepository) CreateImportedRunStep(input model.RunStep) (model.RunStep, error) {
+	createdAt := input.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	updatedAt := input.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = createdAt
+	}
+	res, err := r.db.Exec(`INSERT INTO test_run_steps
+		(run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, actual_result, comment, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.RunSheetID, input.SourceStepID, input.Action, input.Field, input.ExpectedResult, input.ExecutionOrder, input.Status, input.ActualResult, input.Comment, createdAt, updatedAt)
+	if err != nil {
+		return model.RunStep{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return model.RunStep{}, err
+	}
+	row := r.db.QueryRow(`SELECT id, run_sheet_id, source_step_id, action, field, expected_result, execution_order, status, actual_result, comment, created_at, updated_at
+		FROM test_run_steps WHERE id = ?`, id)
+	return scanRunStep(row)
+}
+
 func (r *SQLiteRepository) GetRun(runID int64) (model.TestRun, error) {
 	row := r.db.QueryRow(`SELECT r.id,
 		(SELECT COUNT(*) FROM test_runs numbered

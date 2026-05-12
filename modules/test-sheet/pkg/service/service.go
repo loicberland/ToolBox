@@ -68,6 +68,10 @@ type Repository interface {
 	UnlinkStepDocument(int64, int64) error
 	CreateRunWithSnapshot(int64) (model.TestRun, error)
 	CreateRunWithGroupSnapshot(int64) (model.TestRun, error)
+	CreateImportedRun(model.TestRun) (model.TestRun, error)
+	CreateImportedRunGroup(model.RunGroup) (model.RunGroup, error)
+	CreateImportedRunSheet(model.RunSheet) (model.RunSheet, error)
+	CreateImportedRunStep(model.RunStep) (model.RunStep, error)
 	GetRun(int64) (model.TestRun, error)
 	ListPlanRuns(int64) ([]model.TestRunSummary, error)
 	ListGroupRuns(int64) ([]model.TestRunSummary, error)

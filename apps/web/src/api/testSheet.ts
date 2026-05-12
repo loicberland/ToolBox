@@ -184,6 +184,31 @@ export type RunSheetInput = Pick<TestRunSheet, 'status' | 'actualResult' | 'comm
 export type StepInput = Omit<TestSheetStep, 'id' | 'sheetId'>;
 export type RunStepInput = Pick<TestRunStep, 'status' | 'actualResult' | 'comment'>;
 
+export type ExportOptions = {
+  includeGroups: boolean;
+  includeSheets: boolean;
+  includeSteps: boolean;
+  includeDocuments: boolean;
+  includeHistory: boolean;
+  includeEvidences: boolean;
+};
+
+export type ImportPreview = {
+  planName: string;
+  schemaVersion: number;
+  groups: number;
+  sheets: number;
+  steps: number;
+  documents: number;
+  runs: number;
+  evidences: number;
+};
+
+export type ImportResult = {
+  planId: number;
+  name: string;
+};
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -218,6 +243,9 @@ export const testSheetApi = {
   permanentDeletePlan: (planId: number) => request<void>(`/test-sheet/plans/${planId}/permanent`, { method: 'DELETE' }),
   restorePlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}/restore`, { method: 'PUT' }),
   duplicatePlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}/duplicate`, { method: 'POST' }),
+  exportPlan: (planId: number, options: ExportOptions) => exportPlan(planId, options),
+  previewImport: (file: File) => importZip<ImportPreview>('/test-sheet/import/preview', file),
+  importPlan: (file: File) => importZip<ImportResult>('/test-sheet/import', file),
   listGroups: (planId: number) => request<TestGroup[]>(`/test-sheet/plans/${planId}/groups`),
   createGroup: (planId: number, input: GroupInput) => request<TestGroup>(`/test-sheet/plans/${planId}/groups`, jsonRequest('POST', input)),
   getGroup: (groupId: number) => request<TestGroup>(`/test-sheet/groups/${groupId}`),
@@ -282,6 +310,31 @@ export const testSheetApi = {
     return response.text();
   },
 };
+
+async function exportPlan(planId: number, options: ExportOptions): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/test-sheet/plans/${planId}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
+  });
+  if (!response.ok) {
+    await throwResponseError(response);
+  }
+  return response.blob();
+}
+
+async function importZip<T>(path: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    await throwResponseError(response);
+  }
+  return response.json();
+}
 
 async function uploadDocument(planId: number, file: File, description: string): Promise<TestDocument> {
   const formData = new FormData();
@@ -349,4 +402,15 @@ function jsonRequest(method: string, body: unknown): RequestInit {
     method,
     body: JSON.stringify(body),
   };
+}
+
+async function throwResponseError(response: Response): Promise<never> {
+  let message = `Erreur HTTP: ${response.status}`;
+  try {
+    const payload = await response.json();
+    message = payload.error ?? message;
+  } catch {
+    // Keep generic message for non-JSON errors.
+  }
+  throw new Error(message);
 }
