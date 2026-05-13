@@ -9,9 +9,7 @@ ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go,
 - `apps/web-server` : serveur Go statique pour servir le build du front.
 - `modules/test-sheet` : module Cobra pour les fiches de test, avec SQLite dans `BDD/test-sheet.db` a cote de l'executable lance.
 - `modules/test-env` : module Cobra pour les maquettes de test, avec configuration dans `config/test-env.json` a cote de l'executable lance.
-- `modules/legacy-lmba` et `modules/legacy-perso` : anciens modules conserves temporairement.
 - `pkg/modulecontract` : contrat JSON partage entre API, front et modules.
-- `pkg/logger`, `pkg/paths` : utilitaires partages simples.
 - `BDD` : bases SQLite runtime creees a cote des executables lances.
 - `_build` : binaires generes.
 
@@ -87,15 +85,7 @@ build.bat all
 build.bat api
 build.bat web-server
 build.bat module test-sheet
-```
-
-Commandes PowerShell :
-
-```powershell
-.\build.ps1 all
-.\build.ps1 api
-.\build.ps1 web-server
-.\build.ps1 module test-sheet
+build.bat module test-env
 ```
 
 Commandes Go directes :
@@ -105,6 +95,7 @@ go run ./tools/build api
 go run ./tools/build web
 go run ./tools/build web-server
 go run ./tools/build module test-sheet
+go run ./tools/build module test-env
 go run ./tools/build modules
 go run ./tools/build all
 ```
@@ -115,4 +106,4 @@ Depuis un autre dossier, indiquez explicitement la racine :
 go run C:\chemin\ToolBox\tools\build\main.go --root C:\chemin\ToolBox all
 ```
 
-L'outil resout la racine via `--root`, puis `TOOLBOX_ROOT`, puis en remontant jusqu'a un `go.mod` contenant `module toolBox`. Les scripts `build.sh` et `scripts/build.sh` restent disponibles pour Linux/macOS et deleguent au meme outil Go.
+L'outil resout la racine via `--root`, puis `TOOLBOX_ROOT`, puis en remontant jusqu'a un `go.mod` contenant `module toolBox`.
