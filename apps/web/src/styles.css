@@ -604,24 +604,38 @@ textarea {
   font-size: 0.9rem;
 }
 
-.export-option-list {
-  display: grid;
-  gap: 10px;
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
   margin: 14px 0 18px;
 }
 
-.export-option-list label {
+.export-option {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  line-height: 1.35;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
   color: var(--text);
   font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
 }
 
-.export-option-list input[type='checkbox'] {
+.export-option input[type='checkbox'] {
   flex: 0 0 auto;
-  margin: 0;
+  margin: 2px 0 0;
+}
+
+.export-option span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .confirm-dialog .dialog-help {
