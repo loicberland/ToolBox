@@ -56,18 +56,18 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
   const filteredPlans = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return [...plans]
-      .filter((plan) => statusFilters.length === 0 || statusFilters.includes(plan.status as TestRunStatus | 'pending'))
+      .filter((plan) => statusFilters.length === 0 || statusFilters.indexOf(plan.status as TestRunStatus | 'pending') !== -1)
       .filter((plan) => {
         if (!needle) {
           return true;
         }
-        return [plan.name, plan.description, plan.latestRun?.planName ?? ''].some((value) => value.toLowerCase().includes(needle));
+        return [plan.name, plan.description, plan.latestRun?.planName ?? ''].some((value) => value.toLowerCase().indexOf(needle) !== -1);
       })
       .sort((a, b) => comparePlans(a, b, sortKey));
   }, [plans, query, statusFilters, sortKey]);
 
   const toggleStatusFilter = (status: TestRunStatus | 'pending') => {
-    setStatusFilters((current) => current.includes(status)
+    setStatusFilters((current) => current.indexOf(status) !== -1
       ? current.filter((item) => item !== status)
       : [...current, status]);
   };
@@ -133,7 +133,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
             <label key={option.status} className="checkbox-filter">
               <input
                 type="checkbox"
-                checked={statusFilters.includes(option.status)}
+                checked={statusFilters.indexOf(option.status) !== -1}
                 onChange={() => toggleStatusFilter(option.status)}
               />
               {option.label}
