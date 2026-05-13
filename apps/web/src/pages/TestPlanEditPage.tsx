@@ -32,9 +32,11 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [createGroupError, setCreateGroupError] = useState('');
   const [groupToEdit, setGroupToEdit] = useState<TestGroup | undefined>();
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupError, setEditGroupError] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const sheetEditorRef = useRef<TestSheetEditorHandle>(null);
@@ -103,6 +105,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       return;
     }
     setCreatingGroup(true);
+    setCreateGroupError('');
     try {
       const group = await runModelMutation(() => testSheetApi.createGroup(effectivePlanId, {
         name,
@@ -114,6 +117,8 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       await refreshGroups();
       await selectGroup(group.id);
       setInfo(messages.testSheet.edit.subPlanCreated);
+    } catch (err) {
+      setCreateGroupError((err as Error).message);
     } finally {
       setCreatingGroup(false);
     }
@@ -137,14 +142,19 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
     if (!groupToEdit || !name) {
       return;
     }
-    await runModelMutation(() => testSheetApi.updateGroup(groupToEdit.id, {
-      name,
-      description: groupToEdit.description,
-      executionOrder: groupToEdit.executionOrder,
-    }));
-    setGroupToEdit(undefined);
-    setEditGroupName('');
-    await refreshGroups();
+    setEditGroupError('');
+    try {
+      await runModelMutation(() => testSheetApi.updateGroup(groupToEdit.id, {
+        name,
+        description: groupToEdit.description,
+        executionOrder: groupToEdit.executionOrder,
+      }));
+      setGroupToEdit(undefined);
+      setEditGroupName('');
+      await refreshGroups();
+    } catch (err) {
+      setEditGroupError((err as Error).message);
+    }
   };
 
   const refreshDocuments = async () => {
@@ -288,7 +298,10 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
             </div>
             <Button
               type="button"
-              onClick={() => setCreateGroupDialogOpen(true)}
+              onClick={() => {
+                setCreateGroupError('');
+                setCreateGroupDialogOpen(true);
+              }}
             >
               + {messages.testSheet.edit.addSubPlan}
             </Button>
@@ -313,6 +326,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 size="sm"
                 variant="secondary"
                 onClick={() => {
+                  setEditGroupError('');
                   setGroupToEdit(selectedGroup);
                   setEditGroupName(selectedGroup.name);
                 }}
@@ -458,6 +472,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               if (event.key === 'Escape') {
                 setCreateGroupDialogOpen(false);
                 setNewGroupName('');
+                setCreateGroupError('');
               }
             }}
           >
@@ -466,7 +481,10 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               {messages.testSheet.edit.subPlanName}
               <input
                 value={newGroupName}
-                onChange={(event) => setNewGroupName(event.target.value)}
+                onChange={(event) => {
+                  setNewGroupName(event.target.value);
+                  setCreateGroupError('');
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
@@ -476,6 +494,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 autoFocus
               />
             </label>
+            {createGroupError && <p className="form-error">{createGroupError}</p>}
             <div className="button-row end">
               <Button
                 type="button"
@@ -483,6 +502,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 onClick={() => {
                   setCreateGroupDialogOpen(false);
                   setNewGroupName('');
+                  setCreateGroupError('');
                 }}
               >
                 {messages.common.cancel}
@@ -505,6 +525,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               if (event.key === 'Escape') {
                 setGroupToEdit(undefined);
                 setEditGroupName('');
+                setEditGroupError('');
               }
             }}
           >
@@ -513,7 +534,10 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               {messages.testSheet.edit.subPlanName}
               <input
                 value={editGroupName}
-                onChange={(event) => setEditGroupName(event.target.value)}
+                onChange={(event) => {
+                  setEditGroupName(event.target.value);
+                  setEditGroupError('');
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
@@ -523,6 +547,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 autoFocus
               />
             </label>
+            {editGroupError && <p className="form-error">{editGroupError}</p>}
             <div className="button-row end">
               <Button
                 type="button"
@@ -530,6 +555,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                 onClick={() => {
                   setGroupToEdit(undefined);
                   setEditGroupName('');
+                  setEditGroupError('');
                 }}
               >
                 {messages.common.cancel}

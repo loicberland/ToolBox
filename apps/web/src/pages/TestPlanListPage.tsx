@@ -297,7 +297,6 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
             onEdit(planId);
           }}
           onReload={load}
-          onError={setError}
         />
       )}
       {planToExport && (
@@ -316,17 +315,16 @@ function ImportPlanDialog({
   onClose,
   onImported,
   onReload,
-  onError,
 }: {
   onClose: () => void;
   onImported: (planId: number) => void;
   onReload: () => Promise<void>;
-  onError: (message: string) => void;
 }) {
   const [file, setFile] = useState<File | undefined>();
   const [preview, setPreview] = useState<ImportPreview | undefined>();
   const [importPlanName, setImportPlanName] = useState('');
   const [importPreviewError, setImportPreviewError] = useState('');
+  const [importError, setImportError] = useState('');
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileInputId = React.useId();
@@ -336,6 +334,7 @@ function ImportPlanDialog({
     setPreview(undefined);
     setImportPlanName('');
     setImportPreviewError('');
+    setImportError('');
     if (!selected) {
       return;
     }
@@ -356,13 +355,14 @@ function ImportPlanDialog({
     if (!file || !preview || importPreviewError || !name) {
       return;
     }
+    setImportError('');
     setBusy(true);
     try {
       const result = await testSheetApi.importPlan(file, name);
       await onReload();
       onImported(result.planId);
     } catch (err) {
-      onError((err as Error).message);
+      setImportError(formatImportError((err as Error).message));
     } finally {
       setBusy(false);
     }
@@ -387,7 +387,13 @@ function ImportPlanDialog({
           <>
           <label className="import-plan-name-field">
             Nom
-            <input value={importPlanName} onChange={(event) => setImportPlanName(event.target.value)} />
+            <input
+              value={importPlanName}
+              onChange={(event) => {
+                setImportPlanName(event.target.value);
+                setImportError('');
+              }}
+            />
           </label>
           <div className="import-preview-grid">
             <strong>{preview.planName}</strong>
@@ -401,6 +407,7 @@ function ImportPlanDialog({
           </div>
           </>
         )}
+        {importError && <p className="error import-preview-error">{importError}</p>}
         <div className="button-row end">
           <Button type="button" variant="secondary" onClick={onClose}>{messages.common.cancel}</Button>
           <Button type="button" disabled={!file || !preview || Boolean(importPreviewError) || !importPlanName.trim() || busy} onClick={importPlan}>Importer</Button>
@@ -408,6 +415,13 @@ function ImportPlanDialog({
       </div>
     </div>
   );
+}
+
+function formatImportError(message: string) {
+  if (message.startsWith('Un plan ') || message.startsWith('Un plan masqué ')) {
+    return `Import impossible : ${message.charAt(0).toLowerCase()}${message.slice(1)}`;
+  }
+  return message;
 }
 
 function PlanRunProgress({ run, compact = false }: { run?: TestRunSummary; compact?: boolean }) {

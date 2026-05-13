@@ -205,6 +205,9 @@ func (s *Service) importExportData(data exportData, files map[string]*zip.File, 
 	if planName == "" {
 		return model.TestPlan{}, fmt.Errorf("le nom du plan importé est obligatoire")
 	}
+	if err := validateExportNameUniqueness(data); err != nil {
+		return model.TestPlan{}, err
+	}
 	createdPlan, err := s.CreatePlan(model.PlanInput{
 		Name:           planName,
 		Description:    data.Plan.Description,
@@ -463,6 +466,48 @@ func previewFromExport(manifest exportManifest, data exportData) model.ImportPre
 		}
 	}
 	return preview
+}
+
+func validateExportNameUniqueness(data exportData) error {
+	groupNames := map[string]struct{}{}
+	for _, group := range data.Groups {
+		normalized := normalizeNameForCompare(group.Name)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := groupNames[normalized]; exists {
+			return NameConflictError{
+				Message:      "Un sous-plan utilise déjà ce nom dans ce plan.",
+				ConflictType: "group",
+			}
+		}
+		groupNames[normalized] = struct{}{}
+	}
+
+	sheetNamesByGroup := map[int64]map[string]struct{}{}
+	for _, sheet := range data.Sheets {
+		normalized := normalizeNameForCompare(sheet.Name)
+		if normalized == "" {
+			continue
+		}
+		groupKey := sheet.GroupID
+		if len(data.Groups) == 0 {
+			groupKey = 0
+		}
+		names := sheetNamesByGroup[groupKey]
+		if names == nil {
+			names = map[string]struct{}{}
+			sheetNamesByGroup[groupKey] = names
+		}
+		if _, exists := names[normalized]; exists {
+			return NameConflictError{
+				Message:      "Une fiche utilise déjà ce nom dans ce sous-plan.",
+				ConflictType: "sheet",
+			}
+		}
+		names[normalized] = struct{}{}
+	}
+	return nil
 }
 
 func writeZipJSON(archive *zip.Writer, name string, payload any) error {

@@ -20,6 +20,7 @@ export type TestSheetFormHandle = {
 export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hideActions = false }, ref) {
   const [value, setValue] = useState<SheetInput>(newSheet(nextOrder));
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const isEditing = Boolean(sheet?.id);
 
   useEffect(() => {
@@ -35,12 +36,16 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
       executionOrder: sheet.executionOrder,
       mockupSettings: sheet.mockupSettings,
     } : newSheet(nextOrder));
+    setError('');
   }, [sheet, nextOrder]);
 
   const submitCurrent = async () => {
     setSaving(true);
+    setError('');
     try {
       await onSubmit(value);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -87,6 +92,7 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
         value={value.notes}
         onChange={(notes) => setValue({ ...value, notes })}
       />
+      {error && <p className="form-error">{error}</p>}
       {!hideActions && (
         <div className="button-row">
           <Button type="submit" disabled={saving}>{saving ? messages.common.saving : isEditing ? messages.common.save : messages.common.add}</Button>

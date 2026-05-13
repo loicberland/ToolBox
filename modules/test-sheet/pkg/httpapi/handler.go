@@ -876,6 +876,10 @@ func respondError(w http.ResponseWriter, err error) {
 		return
 	}
 	if service.IsConflict(err) {
+		if payload, ok := service.ConflictPayload(err); ok {
+			writeJSON(w, http.StatusConflict, payload)
+			return
+		}
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}

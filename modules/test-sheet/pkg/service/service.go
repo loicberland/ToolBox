@@ -22,6 +22,16 @@ const maxDocumentUploadBytes = 50 << 20
 var unsafeFilenameCharacters = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 var ErrRunNotEditable = errors.New("Cette execution est terminee et ne peut plus etre modifiee.")
 
+type NameConflictError struct {
+	Message      string
+	ConflictType string
+	Hidden       bool
+}
+
+func (err NameConflictError) Error() string {
+	return err.Message
+}
+
 type Repository interface {
 	CreatePlan(model.PlanInput) (model.TestPlan, error)
 	ListPlans() ([]model.TestPlan, error)
@@ -110,6 +120,9 @@ func (s *Service) CreatePlan(input model.PlanInput) (model.TestPlan, error) {
 	if input.Name == "" {
 		return model.TestPlan{}, fmt.Errorf("plan name is required")
 	}
+	if err := s.ensurePlanNameUnique(input.Name, 0); err != nil {
+		return model.TestPlan{}, err
+	}
 	return s.repo.CreatePlan(input)
 }
 
@@ -125,6 +138,12 @@ func (s *Service) UpdatePlan(id int64, input model.PlanInput) (model.TestPlan, e
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" {
 		return model.TestPlan{}, fmt.Errorf("plan name is required")
+	}
+	if _, err := s.repo.GetPlan(id); err != nil {
+		return model.TestPlan{}, err
+	}
+	if err := s.ensurePlanNameUnique(input.Name, id); err != nil {
+		return model.TestPlan{}, err
 	}
 	plan, err := s.repo.UpdatePlan(id, input)
 	if err != nil {
@@ -160,6 +179,13 @@ func (s *Service) PermanentDeletePlan(id int64) error {
 }
 
 func (s *Service) RestorePlan(id int64) (model.TestPlan, error) {
+	plan, err := s.repo.GetPlan(id)
+	if err != nil {
+		return model.TestPlan{}, err
+	}
+	if err := s.ensurePlanNameCanBeRestored(plan.Name, id); err != nil {
+		return model.TestPlan{}, err
+	}
 	return s.repo.RestorePlan(id)
 }
 
@@ -169,6 +195,9 @@ func (s *Service) CreateGroup(planID int64, input model.GroupInput) (model.TestG
 		return model.TestGroup{}, fmt.Errorf("group name is required")
 	}
 	if _, err := s.repo.GetPlan(planID); err != nil {
+		return model.TestGroup{}, err
+	}
+	if err := s.ensureGroupNameUnique(planID, input.Name, 0); err != nil {
 		return model.TestGroup{}, err
 	}
 	group, err := s.repo.CreateGroup(planID, input)
@@ -199,6 +228,9 @@ func (s *Service) UpdateGroup(groupID int64, input model.GroupInput) (model.Test
 	}
 	group, err := s.repo.GetGroup(groupID)
 	if err != nil {
+		return model.TestGroup{}, err
+	}
+	if err := s.ensureGroupNameUnique(group.PlanID, input.Name, groupID); err != nil {
 		return model.TestGroup{}, err
 	}
 	updated, err := s.repo.UpdateGroup(groupID, input)
@@ -253,7 +285,14 @@ func (s *Service) DuplicateGroup(groupID int64, input model.DuplicateGroupInput)
 	}
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
-		name = source.Name + " - Copie"
+		name, err = nextCopyName(source.Name, func(candidate string) (bool, error) {
+			return s.groupNameExists(targetPlanID, candidate, 0)
+		})
+		if err != nil {
+			return model.TestGroup{}, err
+		}
+	} else if err := s.ensureGroupNameUnique(targetPlanID, name, 0); err != nil {
+		return model.TestGroup{}, err
 	}
 	copyGroup, err := s.repo.CreateGroup(targetPlanID, model.GroupInput{
 		Name:        name,
@@ -324,17 +363,38 @@ func (s *Service) DuplicatePlan(id int64) (model.TestPlan, error) {
 	if err != nil {
 		return model.TestPlan{}, err
 	}
+	name, err := nextCopyName(plan.Name, func(candidate string) (bool, error) {
+		return s.planNameExists(candidate, 0)
+	})
+	if err != nil {
+		return model.TestPlan{}, err
+	}
 	copyPlan, err := s.repo.CreatePlan(model.PlanInput{
-		Name:           plan.Name + " (copie)",
+		Name:           name,
 		Description:    plan.Description,
 		MockupSettings: plan.MockupSettings,
 	})
 	if err != nil {
 		return model.TestPlan{}, err
 	}
+	targetGroupID, err := s.repo.DefaultGroupID(copyPlan.ID)
+	if err != nil {
+		return model.TestPlan{}, err
+	}
 	for _, sheet := range sheets {
+		sheetName, err := nextCopyName(sheet.Name, func(candidate string) (bool, error) {
+			return s.sheetNameExists(targetGroupID, candidate, 0)
+		})
+		if err != nil {
+			return model.TestPlan{}, err
+		}
+		if exists, err := s.sheetNameExists(targetGroupID, sheet.Name, 0); err != nil {
+			return model.TestPlan{}, err
+		} else if !exists {
+			sheetName = sheet.Name
+		}
 		copySheet, err := s.repo.CreateSheet(copyPlan.ID, model.SheetInput{
-			Name:           sheet.Name,
+			Name:           sheetName,
 			Description:    sheet.Description,
 			Prerequisites:  sheet.Prerequisites,
 			Config:         sheet.Config,
@@ -371,7 +431,14 @@ func (s *Service) CreateSheet(planID int64, input model.SheetInput) (model.TestS
 	if _, err := s.repo.GetPlan(planID); err != nil {
 		return model.TestSheet{}, err
 	}
-	sheet, err := s.repo.CreateSheet(planID, input)
+	groupID, err := s.repo.DefaultGroupID(planID)
+	if err != nil {
+		return model.TestSheet{}, err
+	}
+	if err := s.ensureSheetNameUnique(groupID, input.Name, 0); err != nil {
+		return model.TestSheet{}, err
+	}
+	sheet, err := s.repo.CreateSheetInGroup(groupID, input)
 	if err != nil {
 		return model.TestSheet{}, err
 	}
@@ -388,6 +455,9 @@ func (s *Service) CreateSheetInGroup(groupID int64, input model.SheetInput) (mod
 	}
 	group, err := s.repo.GetGroup(groupID)
 	if err != nil {
+		return model.TestSheet{}, err
+	}
+	if err := s.ensureSheetNameUnique(groupID, input.Name, 0); err != nil {
 		return model.TestSheet{}, err
 	}
 	sheet, err := s.repo.CreateSheetInGroup(groupID, input)
@@ -423,6 +493,9 @@ func (s *Service) UpdateSheet(id int64, input model.SheetInput) (model.TestSheet
 	if err != nil {
 		return model.TestSheet{}, err
 	}
+	if err := s.ensureSheetNameUnique(sheet.GroupID, input.Name, id); err != nil {
+		return model.TestSheet{}, err
+	}
 	updated, err := s.repo.UpdateSheet(id, input)
 	if err != nil {
 		return model.TestSheet{}, err
@@ -449,8 +522,14 @@ func (s *Service) DuplicateSheet(id int64) (model.TestSheet, error) {
 	if err != nil {
 		return model.TestSheet{}, err
 	}
+	name, err := nextCopyName(sheet.Name, func(candidate string) (bool, error) {
+		return s.sheetNameExists(sheet.GroupID, candidate, 0)
+	})
+	if err != nil {
+		return model.TestSheet{}, err
+	}
 	copySheet, err := s.repo.CreateSheetInGroup(sheet.GroupID, model.SheetInput{
-		Name:           sheet.Name + " (copie)",
+		Name:           name,
 		Description:    sheet.Description,
 		Prerequisites:  sheet.Prerequisites,
 		Config:         sheet.Config,
@@ -1299,6 +1378,141 @@ func (s *Service) cancelRunningRunsForGroup(groupID int64) error {
 	return nil
 }
 
+func (s *Service) ensurePlanNameUnique(name string, excludeID int64) error {
+	exists, hidden, err := s.planNameConflict(name, excludeID)
+	if err != nil || !exists {
+		return err
+	}
+	if hidden {
+		return NameConflictError{
+			Message:      "Un plan masqué utilise déjà ce nom. Restaurez-le ou choisissez un autre nom.",
+			ConflictType: "plan",
+			Hidden:       true,
+		}
+	}
+	return NameConflictError{Message: "Un plan utilise déjà ce nom.", ConflictType: "plan"}
+}
+
+func (s *Service) ensurePlanNameCanBeRestored(name string, excludeID int64) error {
+	summaries, err := s.repo.ListPlanSummaries(true)
+	if err != nil {
+		return err
+	}
+	normalized := normalizeNameForCompare(name)
+	for _, plan := range summaries {
+		if plan.ID == excludeID || normalizeNameForCompare(plan.Name) != normalized {
+			continue
+		}
+		if plan.DeletedAt == nil {
+			return NameConflictError{
+				Message:      "Impossible de restaurer ce plan : un plan actif utilise déjà ce nom.",
+				ConflictType: "plan",
+			}
+		}
+		return NameConflictError{
+			Message:      "Un plan masqué utilise déjà ce nom. Restaurez-le ou choisissez un autre nom.",
+			ConflictType: "plan",
+			Hidden:       true,
+		}
+	}
+	return nil
+}
+
+func (s *Service) planNameExists(name string, excludeID int64) (bool, error) {
+	exists, _, err := s.planNameConflict(name, excludeID)
+	return exists, err
+}
+
+func (s *Service) planNameConflict(name string, excludeID int64) (bool, bool, error) {
+	summaries, err := s.repo.ListPlanSummaries(true)
+	if err != nil {
+		return false, false, err
+	}
+	normalized := normalizeNameForCompare(name)
+	for _, plan := range summaries {
+		if plan.ID != excludeID && normalizeNameForCompare(plan.Name) == normalized {
+			return true, plan.DeletedAt != nil, nil
+		}
+	}
+	return false, false, nil
+}
+
+func (s *Service) ensureGroupNameUnique(planID int64, name string, excludeID int64) error {
+	exists, err := s.groupNameExists(planID, name, excludeID)
+	if err != nil || !exists {
+		return err
+	}
+	return NameConflictError{
+		Message:      "Un sous-plan utilise déjà ce nom dans ce plan.",
+		ConflictType: "group",
+	}
+}
+
+func (s *Service) groupNameExists(planID int64, name string, excludeID int64) (bool, error) {
+	groups, err := s.repo.ListGroups(planID)
+	if err != nil {
+		return false, err
+	}
+	normalized := normalizeNameForCompare(name)
+	for _, group := range groups {
+		if group.ID != excludeID && normalizeNameForCompare(group.Name) == normalized {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *Service) ensureSheetNameUnique(groupID int64, name string, excludeID int64) error {
+	exists, err := s.sheetNameExists(groupID, name, excludeID)
+	if err != nil || !exists {
+		return err
+	}
+	return NameConflictError{
+		Message:      "Une fiche utilise déjà ce nom dans ce sous-plan.",
+		ConflictType: "sheet",
+	}
+}
+
+func (s *Service) sheetNameExists(groupID int64, name string, excludeID int64) (bool, error) {
+	sheets, err := s.repo.ListSheetsByGroup(groupID)
+	if err != nil {
+		return false, err
+	}
+	normalized := normalizeNameForCompare(name)
+	for _, sheet := range sheets {
+		if sheet.ID != excludeID && normalizeNameForCompare(sheet.Name) == normalized {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func normalizeNameForCompare(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.Join(strings.Fields(value), " ")
+	return strings.ToLower(value)
+}
+
+func nextCopyName(baseName string, exists func(name string) (bool, error)) (string, error) {
+	baseName = strings.TrimSpace(baseName)
+	if baseName == "" {
+		baseName = "Copie"
+	}
+	for index := 1; ; index++ {
+		name := fmt.Sprintf("%s (copie)", baseName)
+		if index > 1 {
+			name = fmt.Sprintf("%s (copie %d)", baseName, index)
+		}
+		found, err := exists(name)
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			return name, nil
+		}
+	}
+}
+
 func (s *Service) sheetAndDocument(sheetID, documentID int64) (model.TestSheet, model.TestDocument, error) {
 	sheet, err := s.repo.GetSheet(sheetID)
 	if err != nil {
@@ -1374,5 +1588,22 @@ func IsNotFound(err error) bool {
 }
 
 func IsConflict(err error) bool {
-	return errors.Is(err, ErrRunNotEditable)
+	var nameConflict NameConflictError
+	return errors.Is(err, ErrRunNotEditable) || errors.As(err, &nameConflict)
+}
+
+func ConflictPayload(err error) (map[string]any, bool) {
+	var nameConflict NameConflictError
+	if !errors.As(err, &nameConflict) {
+		return nil, false
+	}
+	payload := map[string]any{
+		"error":        nameConflict.Message,
+		"code":         "name_conflict",
+		"conflictType": nameConflict.ConflictType,
+	}
+	if nameConflict.Hidden {
+		payload["hidden"] = true
+	}
+	return payload, true
 }

@@ -48,7 +48,7 @@ func TestExportImportPlanWithDocumentsCreatesNewIDsAndKeepsRelations(t *testing.
 	if preview.PlanName != plan.Name || preview.Groups != 1 || preview.Sheets != 1 || preview.Steps != 1 || preview.Documents != 1 {
 		t.Fatalf("unexpected preview: %+v", preview)
 	}
-	result, err := svc.ImportPlanZip(payload, "")
+	result, err := svc.ImportPlanZip(payload, "Plan importe")
 	if err != nil {
 		t.Fatal(err)
 	}
