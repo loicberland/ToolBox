@@ -258,7 +258,7 @@ func (s *Service) DeleteGroup(groupID int64) error {
 	if err := s.repo.DeleteGroup(groupID); err != nil {
 		return err
 	}
-	return s.markGroupChanged(group.ID)
+	return s.markPlanChanged(group.PlanID)
 }
 
 func (s *Service) ReorderGroups(planID int64, groupIDs []int64) error {

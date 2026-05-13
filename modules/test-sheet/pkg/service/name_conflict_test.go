@@ -90,6 +90,30 @@ func TestGroupNameMustBeUniqueInsidePlanOnly(t *testing.T) {
 	}
 }
 
+func TestDeleteGroupMarksPlanChangedWithoutUsingDeletedGroup(t *testing.T) {
+	svc := newTestService(t)
+	plan, err := svc.CreatePlan(model.PlanInput{Name: "Plan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := svc.CreateGroup(plan.ID, model.GroupInput{Name: "A supprimer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteGroup(group.ID); err != nil {
+		t.Fatalf("delete group returned an error after deletion: %v", err)
+	}
+	groups, err := svc.ListGroups(plan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range groups {
+		if item.ID == group.ID {
+			t.Fatalf("deleted group is still listed: %+v", groups)
+		}
+	}
+}
+
 func TestSheetNameMustBeUniqueInsideGroupOnly(t *testing.T) {
 	svc := newTestService(t)
 	plan, err := svc.CreatePlan(model.PlanInput{Name: "Plan"})
