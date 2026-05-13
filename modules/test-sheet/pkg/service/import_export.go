@@ -121,12 +121,12 @@ func (s *Service) PreviewImportZip(payload []byte) (model.ImportPreview, error) 
 	return previewFromExport(manifest, data), nil
 }
 
-func (s *Service) ImportPlanZip(payload []byte) (model.ImportResult, error) {
+func (s *Service) ImportPlanZip(payload []byte, name string) (model.ImportResult, error) {
 	_, data, files, err := readExportZip(payload)
 	if err != nil {
 		return model.ImportResult{}, err
 	}
-	imported, err := s.importExportData(data, files)
+	imported, err := s.importExportData(data, files, name)
 	if err != nil {
 		return model.ImportResult{}, err
 	}
@@ -197,9 +197,16 @@ func (s *Service) buildExportData(planID int64, options model.ExportOptions) (ex
 	return data, nil
 }
 
-func (s *Service) importExportData(data exportData, files map[string]*zip.File) (model.TestPlan, error) {
+func (s *Service) importExportData(data exportData, files map[string]*zip.File, name string) (model.TestPlan, error) {
+	planName := strings.TrimSpace(name)
+	if planName == "" {
+		planName = strings.TrimSpace(data.Plan.Name)
+	}
+	if planName == "" {
+		return model.TestPlan{}, fmt.Errorf("le nom du plan importé est obligatoire")
+	}
 	createdPlan, err := s.CreatePlan(model.PlanInput{
-		Name:           data.Plan.Name,
+		Name:           planName,
 		Description:    data.Plan.Description,
 		MockupSettings: data.Plan.MockupSettings,
 	})
@@ -403,39 +410,39 @@ func (s *Service) importStepEvidence(runID, runStepID int64, evidence model.Evid
 func readExportZip(payload []byte) (exportManifest, exportData, map[string]*zip.File, error) {
 	reader, err := zip.NewReader(bytes.NewReader(payload), int64(len(payload)))
 	if err != nil {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("invalid zip file")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : format ZIP illisible")
 	}
 	files := map[string]*zip.File{}
 	for _, file := range reader.File {
 		if !isSafeZipPath(file.Name) {
-			return exportManifest{}, exportData{}, nil, fmt.Errorf("zip contains an unsafe path: %s", file.Name)
+			return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : chemin non autorisé dans le ZIP")
 		}
 		files[file.Name] = file
 	}
 	manifestFile := files["manifest.json"]
 	if manifestFile == nil {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("manifest.json is missing")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : manifest.json est absent")
 	}
 	dataFile := files["data.json"]
 	if dataFile == nil {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("data.json is missing")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : data.json est absent")
 	}
 	var manifest exportManifest
 	if err := readZipJSON(manifestFile, &manifest); err != nil {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("invalid manifest.json")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : manifest.json est illisible")
 	}
 	if manifest.Format != exportFormat {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("unsupported export format")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : format non reconnu")
 	}
 	if manifest.SchemaVersion != exportSchemaVersion {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("unsupported schema version")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné utilise une version d'export non supportée")
 	}
 	var data exportData
 	if err := readZipJSON(dataFile, &data); err != nil {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("invalid data.json")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : data.json est illisible")
 	}
 	if strings.TrimSpace(data.Plan.Name) == "" {
-		return exportManifest{}, exportData{}, nil, fmt.Errorf("export data does not contain a valid plan")
+		return exportManifest{}, exportData{}, nil, fmt.Errorf("le fichier sélectionné n'est pas un export de plan valide : nom du plan absent")
 	}
 	return manifest, data, files, nil
 }

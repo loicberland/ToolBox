@@ -48,7 +48,7 @@ func TestExportImportPlanWithDocumentsCreatesNewIDsAndKeepsRelations(t *testing.
 	if preview.PlanName != plan.Name || preview.Groups != 1 || preview.Sheets != 1 || preview.Steps != 1 || preview.Documents != 1 {
 		t.Fatalf("unexpected preview: %+v", preview)
 	}
-	result, err := svc.ImportPlanZip(payload)
+	result, err := svc.ImportPlanZip(payload, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +80,29 @@ func TestExportImportPlanWithDocumentsCreatesNewIDsAndKeepsRelations(t *testing.
 	}
 	if _, err := os.Stat(importedSheets[0].Documents[0].StoragePath); err != nil {
 		t.Fatalf("imported physical document missing: %v", err)
+	}
+}
+
+func TestImportPlanCanOverrideName(t *testing.T) {
+	svc := newTestService(t)
+	plan, err := svc.CreatePlan(model.PlanInput{Name: "Plan recette V1", Description: "Description"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := svc.ExportPlan(plan.ID, DefaultExportOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.ImportPlanZip(payload, " Plan recette client A ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported, err := svc.GetPlan(result.PlanID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imported.Name != "Plan recette client A" {
+		t.Fatalf("unexpected imported plan name: %q", imported.Name)
 	}
 }
 

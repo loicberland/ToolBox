@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ImportPreview, testSheetApi, TestPlanSummary, TestRunSummary, TestRunStatus } from '../api/testSheet';
 import { PageHeader } from '../components/ui/PageHeader';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { MarkdownPreview, hasMarkdownContent } from '../components/ui/MarkdownPreview';
+import { DocumentFilePicker } from '../components/test-sheet/DocumentList';
+import { TestPlanExportDialog } from '../components/test-sheet/TestPlanExportDialog';
 import { StatusBadge } from '../components/test-sheet/StatusBadge';
 import { messages, statusLabel } from '../i18n';
 
@@ -37,6 +39,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('latestRun');
   const [error, setError] = useState('');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [planToExport, setPlanToExport] = useState<TestPlanSummary | undefined>();
 
   const load = async () => {
     try {
@@ -180,6 +183,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
                     <Button type="button" size="sm" variant="secondary" onClick={() => onEdit(plan.id)}>{messages.common.edit}</Button>
                     <Button type="button" size="sm" variant="secondary" onClick={async () => { await testSheetApi.duplicatePlan(plan.id); await load(); }}>{messages.testSheet.plans.duplicate}</Button>
                     <Button type="button" size="sm" variant="warning" onClick={() => setPlanToDelete(plan)}>{messages.testSheet.plans.hide}</Button>
+                    <Button type="button" size="sm" variant="success" onClick={() => setPlanToExport(plan)}>Exporter</Button>
                   </>
                 )}
               </div>
@@ -296,6 +300,14 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
           onError={setError}
         />
       )}
+      {planToExport && (
+        <TestPlanExportDialog
+          planId={planToExport.id}
+          planName={planToExport.name}
+          onClose={() => setPlanToExport(undefined)}
+          onError={setError}
+        />
+      )}
     </section>
   );
 }
@@ -313,31 +325,40 @@ function ImportPlanDialog({
 }) {
   const [file, setFile] = useState<File | undefined>();
   const [preview, setPreview] = useState<ImportPreview | undefined>();
+  const [importPlanName, setImportPlanName] = useState('');
+  const [importPreviewError, setImportPreviewError] = useState('');
   const [busy, setBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputId = React.useId();
 
   const selectFile = async (selected?: File) => {
     setFile(selected);
     setPreview(undefined);
+    setImportPlanName('');
+    setImportPreviewError('');
     if (!selected) {
       return;
     }
     setBusy(true);
     try {
-      setPreview(await testSheetApi.previewImport(selected));
+      const nextPreview = await testSheetApi.previewImport(selected);
+      setPreview(nextPreview);
+      setImportPlanName(nextPreview.planName);
     } catch (err) {
-      onError((err as Error).message);
+      setImportPreviewError((err as Error).message);
     } finally {
       setBusy(false);
     }
   };
 
   const importPlan = async () => {
-    if (!file) {
+    const name = importPlanName.trim();
+    if (!file || !preview || importPreviewError || !name) {
       return;
     }
     setBusy(true);
     try {
-      const result = await testSheetApi.importPlan(file);
+      const result = await testSheetApi.importPlan(file, name);
       await onReload();
       onImported(result.planId);
     } catch (err) {
@@ -351,9 +372,23 @@ function ImportPlanDialog({
     <div className="dialog-backdrop" role="presentation">
       <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="import-plan-title">
         <h3 id="import-plan-title">Importer un plan</h3>
-        <input type="file" accept=".zip,application/zip" onChange={(event) => void selectFile(event.target.files?.[0])} />
+        <p className="dialog-help">Sélectionnez le fichier ZIP généré par l'export d'un plan de test.</p>
+        <DocumentFilePicker
+          id={fileInputId}
+          file={file}
+          inputRef={fileInputRef}
+          onFileChange={(selected) => void selectFile(selected)}
+          label="Choisir un fichier"
+          accept=".zip,application/zip,application/x-zip-compressed"
+        />
         {busy && <p className="muted">Lecture du fichier...</p>}
+        {importPreviewError && <p className="error import-preview-error">{importPreviewError}</p>}
         {preview && (
+          <>
+          <label className="import-plan-name-field">
+            Nom
+            <input value={importPlanName} onChange={(event) => setImportPlanName(event.target.value)} />
+          </label>
           <div className="import-preview-grid">
             <strong>{preview.planName}</strong>
             <span>Schéma {preview.schemaVersion}</span>
@@ -364,10 +399,11 @@ function ImportPlanDialog({
             <span>{preview.runs} exécutions</span>
             <span>{preview.evidences} preuves</span>
           </div>
+          </>
         )}
         <div className="button-row end">
           <Button type="button" variant="secondary" onClick={onClose}>{messages.common.cancel}</Button>
-          <Button type="button" disabled={!file || !preview || busy} onClick={importPlan}>Importer</Button>
+          <Button type="button" disabled={!file || !preview || Boolean(importPreviewError) || !importPlanName.trim() || busy} onClick={importPlan}>Importer</Button>
         </div>
       </div>
     </div>

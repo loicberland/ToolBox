@@ -45,9 +45,10 @@ type DocumentFilePickerProps = {
   inputRef: React.RefObject<HTMLInputElement>;
   onFileChange: (file?: File) => void;
   label?: string;
+  accept?: string;
 };
 
-export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = messages.testSheet.documents.chooseFile }: DocumentFilePickerProps) {
+export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = messages.testSheet.documents.chooseFile, accept }: DocumentFilePickerProps) {
   return (
     <div className="document-file-picker">
       <input
@@ -55,6 +56,7 @@ export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = m
         id={id}
         className="document-file-input"
         type="file"
+        accept={accept}
         onChange={(event) => onFileChange(event.target.files?.[0])}
       />
       <label className="ui-button secondary document-file-button" htmlFor={id}>

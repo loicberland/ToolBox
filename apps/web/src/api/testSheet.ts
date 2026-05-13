@@ -245,7 +245,7 @@ export const testSheetApi = {
   duplicatePlan: (planId: number) => request<TestPlan>(`/test-sheet/plans/${planId}/duplicate`, { method: 'POST' }),
   exportPlan: (planId: number, options: ExportOptions) => exportPlan(planId, options),
   previewImport: (file: File) => importZip<ImportPreview>('/test-sheet/import/preview', file),
-  importPlan: (file: File) => importZip<ImportResult>('/test-sheet/import', file),
+  importPlan: (file: File, name?: string) => importZip<ImportResult>('/test-sheet/import', file, name),
   listGroups: (planId: number) => request<TestGroup[]>(`/test-sheet/plans/${planId}/groups`),
   createGroup: (planId: number, input: GroupInput) => request<TestGroup>(`/test-sheet/plans/${planId}/groups`, jsonRequest('POST', input)),
   getGroup: (groupId: number) => request<TestGroup>(`/test-sheet/groups/${groupId}`),
@@ -323,9 +323,12 @@ async function exportPlan(planId: number, options: ExportOptions): Promise<Blob>
   return response.blob();
 }
 
-async function importZip<T>(path: string, file: File): Promise<T> {
+async function importZip<T>(path: string, file: File, name?: string): Promise<T> {
   const formData = new FormData();
   formData.append('file', file);
+  if (name !== undefined) {
+    formData.append('name', name);
+  }
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
     body: formData,

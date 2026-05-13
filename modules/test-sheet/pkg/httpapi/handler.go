@@ -200,7 +200,7 @@ func (h *Handler) importPlan(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	result, err := h.service.ImportPlanZip(payload)
+	result, err := h.service.ImportPlanZip(payload, r.FormValue("name"))
 	respondCreated(w, result, err)
 }
 
