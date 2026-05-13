@@ -45,7 +45,9 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
     try {
       await onSubmit(value);
     } catch (err) {
-      setError((err as Error).message);
+      if (!hideActions) {
+        setError((err as Error).message);
+      }
     } finally {
       setSaving(false);
     }
@@ -92,7 +94,7 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
         value={value.notes}
         onChange={(notes) => setValue({ ...value, notes })}
       />
-      {error && <p className="form-error">{error}</p>}
+      {!hideActions && error && <p className="form-error">{error}</p>}
       {!hideActions && (
         <div className="button-row">
           <Button type="submit" disabled={saving}>{saving ? messages.common.saving : isEditing ? messages.common.save : messages.common.add}</Button>

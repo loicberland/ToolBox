@@ -17,6 +17,7 @@ export function TestPlanForm({ plan, onSubmit }: Props) {
 
   useEffect(() => {
     setValue(plan ? { name: plan.name, description: plan.description, mockupSettings: plan.mockupSettings } : emptyPlan);
+    setError('');
   }, [plan]);
 
   return (
@@ -43,7 +44,7 @@ export function TestPlanForm({ plan, onSubmit }: Props) {
         {messages.testSheet.edit.description}
         <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
       </label>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="form-error">{error}</p>}
       <div className="form-actions">
         <Button type="submit" disabled={saving}>{saving ? messages.common.saving : messages.common.save}</Button>
       </div>

@@ -382,7 +382,7 @@ function ImportPlanDialog({
           accept=".zip,application/zip,application/x-zip-compressed"
         />
         {busy && <p className="muted">Lecture du fichier...</p>}
-        {importPreviewError && <p className="error import-preview-error">{importPreviewError}</p>}
+        {importPreviewError && <p className="form-error import-preview-error">{importPreviewError}</p>}
         {preview && (
           <>
           <label className="import-plan-name-field">
@@ -407,7 +407,7 @@ function ImportPlanDialog({
           </div>
           </>
         )}
-        {importError && <p className="error import-preview-error">{importError}</p>}
+        {importError && <p className="form-error import-preview-error">{importError}</p>}
         <div className="button-row end">
           <Button type="button" variant="secondary" onClick={onClose}>{messages.common.cancel}</Button>
           <Button type="button" disabled={!file || !preview || Boolean(importPreviewError) || !importPlanName.trim() || busy} onClick={importPlan}>Importer</Button>

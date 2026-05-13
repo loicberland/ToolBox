@@ -55,6 +55,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
   const [currentSheet, setCurrentSheet] = useState<TestSheet | undefined>(sheet);
   const [stepEditorMode, setStepEditorMode] = useState<StepEditorMode>('closed');
   const [editingStep, setEditingStep] = useState<TestSheetStep | undefined>();
+  const [sheetError, setSheetError] = useState('');
   const [stepError, setStepError] = useState('');
   const { registerItem: registerStepItem, animateReorder: animateStepReorder } = useFlipReorderAnimation<number>();
 
@@ -67,11 +68,13 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
 
   useEffect(() => {
     setCurrentSheet(sheet);
+    setSheetError('');
     closeStepEditor();
   }, [mode, sheet?.id]);
 
   useEffect(() => {
     setCurrentSheet(sheet);
+    setSheetError('');
   }, [sheet]);
 
   useImperativeHandle(ref, () => ({
@@ -121,21 +124,27 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
   };
 
   const saveSheet = async (input: SheetInput) => {
-    const normalizedInput = {
-      ...input,
-      mockupSettings: sheet?.mockupSettings ?? input.mockupSettings ?? '',
-    };
-    if (isCreate) {
-      const created = await onModelMutation(() => groupId ? testSheetApi.createGroupSheet(groupId, normalizedInput) : testSheetApi.createSheet(planId, normalizedInput));
-      const loadedSheets = await onRefresh();
-      const createdSheet = loadedSheets.find((item) => item.id === created.id) ?? created;
-      closeStepEditor();
-      onCreated(createdSheet);
-      return;
-    } else if (sheet) {
-      await onModelMutation(() => testSheetApi.updateSheet(sheet.id, normalizedInput));
+    setSheetError('');
+    try {
+      const normalizedInput = {
+        ...input,
+        mockupSettings: sheet?.mockupSettings ?? input.mockupSettings ?? '',
+      };
+      if (isCreate) {
+        const created = await onModelMutation(() => groupId ? testSheetApi.createGroupSheet(groupId, normalizedInput) : testSheetApi.createSheet(planId, normalizedInput));
+        const loadedSheets = await onRefresh();
+        const createdSheet = loadedSheets.find((item) => item.id === created.id) ?? created;
+        closeStepEditor();
+        onCreated(createdSheet);
+        return;
+      } else if (sheet) {
+        await onModelMutation(() => testSheetApi.updateSheet(sheet.id, normalizedInput));
+      }
+      await onSaved();
+    } catch (err) {
+      setSheetError((err as Error).message);
+      throw err;
     }
-    await onSaved();
   };
 
   const saveStep = async (input: StepInput) => {
@@ -305,6 +314,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
           )}
         </div>
       )}
+      {sheetError && <p className="form-error">{sheetError}</p>}
       <div className="button-row end editor-footer">
         <Button type="submit" form={formId}>{isCreate ? messages.testSheet.edit.createSheet : messages.common.save}</Button>
         <Button type="button" variant="secondary" onClick={onCancel}>{messages.common.cancel}</Button>
