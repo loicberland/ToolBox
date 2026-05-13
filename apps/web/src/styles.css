@@ -1432,7 +1432,8 @@ textarea {
   font-weight: 800;
 }
 
-.form-error {
+.form-error,
+.confirm-dialog .form-error {
   margin: 8px 0 12px;
   color: #b42318;
   font-weight: 700;
