@@ -32,7 +32,7 @@ export function TestPlanExportDialog({ planId, planName, onClose, onError }: Pro
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `test-sheet-plan-${planId}.zip`;
+      link.download = `test-sheet-plan-${toSafeFileName(planName)}.zip`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -101,4 +101,14 @@ function normalizeExportOptions(options: ExportOptions): ExportOptions {
     next.includeHistory = true;
   }
   return next;
+}
+
+function toSafeFileName(value: string): string {
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'plan';
 }
