@@ -18,7 +18,7 @@ ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go,
 Lancer l'API en developpement :
 
 ```bash
-go run ./apps/api/cmd/api
+go run ./apps/api/cmd/api server
 ```
 
 Routes disponibles :
@@ -39,15 +39,29 @@ npm install
 npm run start
 ```
 
+En mode dev, Webpack reste expose sur `http://localhost:3000`. Le fichier
+`apps/web/public/toolbox.config.js` est servi par le dev server et configure le
+front pour appeler directement `http://localhost:20250/api`. Les CORS de l'API
+autorisent `http://localhost:3000` par defaut.
+
 Builder le front :
 
 ```bash
 go run ./tools/build web
 ```
 
-## Web Server
+## Web Server et reseau
 
-Le serveur statique embarque le build React dans l'executable Go avec `go:embed`. Le build `web-server` compile donc d'abord le front, copie `apps/web/dist` dans `apps/web-server/cmd/dist`, puis produit un binaire autonome.
+Le navigateur charge le front depuis `web-server-toolbox`. Le front lit au
+demarrage une config runtime servie par `/toolbox.config.js`, puis appelle une
+URL relative `/api`. Le web-server reverse-proxy ensuite `/api/*` vers l'API
+interne. En usage serveur, les CORS ne sont donc pas necessaires pour le front :
+un seul service, le web-server, doit etre expose sur le reseau.
+
+Le serveur statique embarque le build React dans l'executable Go avec
+`go:embed`. Le build `web-server` compile donc d'abord le front, copie
+`apps/web/dist` dans `apps/web-server/cmd/dist`, puis produit un binaire
+autonome.
 
 ```bash
 go run ./tools/build web-server
@@ -59,6 +73,89 @@ En developpement, il est aussi possible de servir un dossier `dist` depuis le di
 ```bash
 go run ./apps/web-server/cmd/web-server start --dist ./apps/web/dist
 ```
+
+La config runtime retournee par le web-server est :
+
+```js
+window.TOOLBOX = {
+  services: {
+    api: {
+      url: "/api"
+    }
+  }
+};
+```
+
+### Configuration
+
+ToolBox charge les valeurs dans cet ordre : valeurs par defaut, fichier
+`toolbox.cfg` s'il existe, variables d'environnement, puis flags Cobra.
+
+Valeurs disponibles :
+
+- `TOOLBOX_FQDN` ou `[platform] fqdn`, defaut `localhost`
+- `TOOLBOX_PORT` ou `[platform] port`, defaut `20251`
+- `TOOLBOX_TLS` ou `[platform] tls`, defaut `false`
+- `TOOLBOX_BIND` ou `[platform] bind`, defaut vide
+- `TOOLBOX_API_HOST` ou `[services.api] host`, defaut `127.0.0.1:20250`
+- `TOOLBOX_CORS_ORIGINS` ou `[cors] origins`, defaut `http://localhost:3000,http://localhost:20251`
+
+Les valeurs runtime sont deduites :
+
+- `WebAddr` vaut `:<port>` si `bind` est vide, sinon `<bind>:<port>`
+- `PublicURL` vaut `http(s)://<fqdn>:<port>`
+- `APIAddr` vaut `services.api.host`
+- `APITarget` vaut `http://<services.api.host>`
+
+Les anciens champs `[web].addr`, `[web].public_url`, `[api].addr` et
+`[api].target` restent acceptes comme legacy, mais le fichier recommande ne les
+utilise plus.
+
+Commandes Windows possibles :
+
+```bat
+set TOOLBOX_BIND=0.0.0.0
+set TOOLBOX_PORT=20251
+set TOOLBOX_API_HOST=127.0.0.1:20250
+```
+
+Flags utiles :
+
+```bash
+api-toolbox.exe server --config toolbox.cfg
+web-server-toolbox.exe start --config toolbox.cfg --addr 0.0.0.0:20251 --api-target http://127.0.0.1:20250
+```
+
+### Mode serveur LAN
+
+Exemple `toolbox.cfg` :
+
+```toml
+[platform]
+fqdn = "192.168.1.50"
+port = 20251
+tls = false
+bind = "0.0.0.0"
+
+[services.api]
+host = "127.0.0.1:20250"
+
+[cors]
+origins = [
+  "http://localhost:3000"
+]
+```
+
+Lancement :
+
+```bat
+api-toolbox.exe server --config toolbox.cfg
+web-server-toolbox.exe start --config toolbox.cfg
+```
+
+Depuis un autre poste, ouvrir `http://192.168.1.50:20251`. Le navigateur ne voit
+pas `localhost:20250` : il appelle `/api`, et le web-server proxy vers l'API
+locale.
 
 ## Modules CLI
 

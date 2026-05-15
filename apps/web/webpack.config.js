@@ -45,6 +45,8 @@ module.exports = (env, argv) => {
     plugins: [
       new HtmlWebpackPlugin({
         template: './src/index.html', // Modèle HTML pour générer votre page
+        inject: 'body',
+        scriptLoading: 'blocking',
       }),
       new MiniCssExtractPlugin({
         filename: 'styles.css',
@@ -59,6 +61,9 @@ module.exports = (env, argv) => {
       port: 3000, // Changer le port ici
       open: true, // Ouvrir le navigateur automatiquement
       hot: true, // Active le Hot Module Replacement
+      static: {
+        directory: path.join(__dirname, 'public'),
+      },
     },
   };
 };

@@ -7,9 +7,13 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"toolBox/pkg/toolboxconfig"
 
 	"github.com/spf13/cobra"
 )
@@ -19,6 +23,9 @@ var embeddedDist embed.FS
 
 var version = "1.0.0"
 var distDirFlag string
+var configPathFlag string
+var addrFlag string
+var apiTargetFlag string
 
 var rootCmd = &cobra.Command{
 	Use:     "web-server",
@@ -30,8 +37,14 @@ var serverCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the web server",
 	Run: func(cmd *cobra.Command, args []string) {
-		listenURL := "http://localhost:20251"
-		listenSocket := ":20251"
+		cfg, err := toolboxconfig.Load(configPathFlag, toolboxconfig.Overrides{
+			WebAddr:   addrFlag,
+			APITarget: apiTargetFlag,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		var handler http.Handler
 
 		if distDirFlag != "" {
@@ -50,9 +63,19 @@ var serverCmd = &cobra.Command{
 			fmt.Println("Serving embedded web dist")
 		}
 
-		http.Handle("/", handler)
-		fmt.Printf("Starting web server at %s\n", listenURL)
-		if err := http.ListenAndServe(listenSocket, nil); err != nil {
+		apiProxy, err := newAPIProxy(cfg.API.Target)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/toolbox.config.js", toolboxConfigHandler)
+		mux.Handle("/api/", apiProxy)
+		mux.Handle("/", handler)
+
+		fmt.Printf("Proxying /api/ to %s\n", cfg.API.Target)
+		fmt.Printf("Starting web server at %s\n", cfg.Web.PublicURL)
+		if err := http.ListenAndServe(cfg.Web.Addr, mux); err != nil {
 			log.Fatalf("failed to start web server: %s", err)
 		}
 	},
@@ -90,6 +113,32 @@ func init() {
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(buildCmd)
 	serverCmd.Flags().StringVar(&distDirFlag, "dist", "", "serve a dist directory from disk instead of the embedded build")
+	serverCmd.Flags().StringVar(&configPathFlag, "config", "", "path to toolbox.cfg")
+	serverCmd.Flags().StringVar(&addrFlag, "addr", "", "web server listen address")
+	serverCmd.Flags().StringVar(&apiTargetFlag, "api-target", "", "API target URL used by the /api reverse proxy")
+}
+
+func toolboxConfigHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	_, _ = w.Write([]byte(`window.TOOLBOX = {
+  services: {
+    api: {
+      url: "/api"
+    }
+  }
+};
+`))
+}
+
+func newAPIProxy(apiTarget string) (http.Handler, error) {
+	target, err := url.Parse(apiTarget)
+	if err != nil {
+		return nil, fmt.Errorf("parse API target %q: %w", apiTarget, err)
+	}
+	if target.Scheme == "" || target.Host == "" {
+		return nil, fmt.Errorf("API target must include scheme and host: %q", apiTarget)
+	}
+	return httputil.NewSingleHostReverseProxy(target), nil
 }
 
 func syncDist(sourceDir, targetDir string) error {

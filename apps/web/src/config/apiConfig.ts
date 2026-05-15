@@ -1,3 +1,13 @@
-const port = 20250;
+declare global {
+  interface Window {
+    TOOLBOX?: {
+      services?: {
+        api?: {
+          url?: string;
+        };
+      };
+    };
+  }
+}
 
-export const API_BASE_URL = `http://localhost:${port}/api`;
+export const API_BASE_URL = window.TOOLBOX?.services?.api?.url ?? '/api';

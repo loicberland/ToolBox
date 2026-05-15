@@ -35,8 +35,11 @@ func NewServer() (*Server, error) {
 	}, nil
 }
 
-func ListenAndServe() error {
-	cfg := config.Load()
+func ListenAndServe(configPath string) error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
 	server, err := NewServer()
 	if err != nil {
 		return err

@@ -1,13 +1,20 @@
 package config
 
+import "toolBox/pkg/toolboxconfig"
+
 type Config struct {
 	Addr       string
 	WebOrigins []string
 }
 
-func Load() Config {
-	return Config{
-		Addr:       ":20250",
-		WebOrigins: []string{"http://localhost:20251", "http://localhost:3000"},
+func Load(configPath string) (Config, error) {
+	cfg, err := toolboxconfig.Load(configPath, toolboxconfig.Overrides{})
+	if err != nil {
+		return Config{}, err
 	}
+
+	return Config{
+		Addr:       cfg.API.Addr,
+		WebOrigins: cfg.CORS.Origins,
+	}, nil
 }
