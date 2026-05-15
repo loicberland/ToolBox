@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"toolBox/modules/test-sheet/pkg/model"
+	"toolBox/pkg/toolboxruntime"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	defaultDatabaseDirectory = "BDD"
-	defaultDatabaseFile      = "test-sheet.db"
+	defaultDatabaseFile = "test-sheet.db"
 )
 
 type SQLiteRepository struct {
@@ -57,15 +57,11 @@ func Open(path string) (*SQLiteRepository, error) {
 }
 
 func DefaultPath() string {
-	return filepath.Join(executableDirectory(), defaultDatabaseDirectory, defaultDatabaseFile)
-}
-
-func executableDirectory() string {
-	executable, err := os.Executable()
+	layout, err := toolboxruntime.ForModule("test-sheet")
 	if err != nil {
-		return "."
+		return defaultDatabaseFile
 	}
-	return filepath.Dir(executable)
+	return filepath.Join(layout.DataDir, defaultDatabaseFile)
 }
 
 func databaseFileExists(path string) (bool, error) {

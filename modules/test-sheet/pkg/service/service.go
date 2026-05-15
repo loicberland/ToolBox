@@ -15,6 +15,7 @@ import (
 
 	"toolBox/modules/test-sheet/pkg/model"
 	"toolBox/modules/test-sheet/pkg/repository"
+	"toolBox/pkg/toolboxruntime"
 )
 
 const maxDocumentUploadBytes = 50 << 20
@@ -172,7 +173,7 @@ func (s *Service) PermanentDeletePlan(id int64) error {
 	}
 	for _, document := range documents {
 		if document.StoragePath != "" {
-			_ = os.Remove(document.StoragePath)
+			_ = os.Remove(storageAbsolutePath(document.StoragePath))
 		}
 	}
 	return nil
@@ -689,6 +690,10 @@ func (s *Service) GetDocument(documentID int64) (model.TestDocument, error) {
 	return s.repo.GetDocument(documentID)
 }
 
+func (s *Service) DocumentFilePath(document model.TestDocument) string {
+	return storageAbsolutePath(document.StoragePath)
+}
+
 func (s *Service) UploadDocument(planID int64, header *multipart.FileHeader, description string) (model.TestDocument, error) {
 	if _, err := s.repo.GetPlan(planID); err != nil {
 		return model.TestDocument{}, err
@@ -716,7 +721,7 @@ func (s *Service) UploadDocument(planID int64, header *multipart.FileHeader, des
 		return model.TestDocument{}, err
 	}
 
-	planDirectory := filepath.Join("data", "test-sheet", "documents", fmt.Sprintf("plan-%d", planID))
+	planDirectory := filepath.Join(documentsRootDir(), fmt.Sprintf("plan-%d", planID))
 	if err := os.MkdirAll(planDirectory, 0755); err != nil {
 		_, _ = s.repo.DeleteDocument(document.ID)
 		return model.TestDocument{}, err
@@ -747,7 +752,7 @@ func (s *Service) UploadDocument(planID int64, header *multipart.FileHeader, des
 	if mimeType == "" {
 		mimeType = detectContentType(storagePath)
 	}
-	document, err = s.repo.UpdateDocumentFile(document.ID, storedName, storagePath, mimeType, written, hex.EncodeToString(hash.Sum(nil)))
+	document, err = s.repo.UpdateDocumentFile(document.ID, storedName, storageRelativePath(storagePath), mimeType, written, hex.EncodeToString(hash.Sum(nil)))
 	if err != nil {
 		_ = os.Remove(storagePath)
 		return model.TestDocument{}, err
@@ -764,7 +769,7 @@ func (s *Service) DeleteDocument(documentID int64) error {
 		return err
 	}
 	if document.StoragePath != "" {
-		_ = os.Remove(document.StoragePath)
+		_ = os.Remove(storageAbsolutePath(document.StoragePath))
 	}
 	return s.markPlanChanged(document.PlanID)
 }
@@ -794,18 +799,18 @@ func (s *Service) copyOrReuseDocument(source model.TestDocument, targetPlanID in
 	if err != nil {
 		return 0, err
 	}
-	planDirectory := filepath.Join("data", "test-sheet", "documents", fmt.Sprintf("plan-%d", targetPlanID))
+	planDirectory := filepath.Join(documentsRootDir(), fmt.Sprintf("plan-%d", targetPlanID))
 	if err := os.MkdirAll(planDirectory, 0755); err != nil {
 		_, _ = s.repo.DeleteDocument(created.ID)
 		return 0, err
 	}
 	storedName := fmt.Sprintf("doc-%d-%s", created.ID, safeFilename(source.OriginalName))
 	storagePath := filepath.Join(planDirectory, storedName)
-	if err := copyFile(source.StoragePath, storagePath); err != nil {
+	if err := copyFile(storageAbsolutePath(source.StoragePath), storagePath); err != nil {
 		_, _ = s.repo.DeleteDocument(created.ID)
 		return 0, err
 	}
-	updated, err := s.repo.UpdateDocumentFile(created.ID, storedName, storagePath, source.MimeType, source.SizeBytes, source.SHA256)
+	updated, err := s.repo.UpdateDocumentFile(created.ID, storedName, storageRelativePath(storagePath), source.MimeType, source.SizeBytes, source.SHA256)
 	if err != nil {
 		_ = os.Remove(storagePath)
 		return 0, err
@@ -984,6 +989,10 @@ func (s *Service) GetEvidence(evidenceID int64) (model.Evidence, error) {
 	return s.repo.GetEvidence(evidenceID)
 }
 
+func (s *Service) EvidenceFilePath(evidence model.Evidence) string {
+	return storageAbsolutePath(evidence.Path)
+}
+
 func (s *Service) UploadRunSheetEvidence(runID, runSheetID int64, header *multipart.FileHeader, comment string) (model.Evidence, error) {
 	if err := s.ensureRunEditable(runID); err != nil {
 		return model.Evidence{}, err
@@ -1014,7 +1023,7 @@ func (s *Service) UploadRunSheetEvidence(runID, runSheetID int64, header *multip
 		return model.Evidence{}, err
 	}
 
-	evidenceDirectory := filepath.Join("data", "test-sheet", "runs", fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("sheet-%d", runSheetID))
+	evidenceDirectory := filepath.Join(runsRootDir(), fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("sheet-%d", runSheetID))
 	if err := os.MkdirAll(evidenceDirectory, 0755); err != nil {
 		_, _ = s.repo.DeleteEvidence(evidence.ID)
 		return model.Evidence{}, err
@@ -1044,7 +1053,7 @@ func (s *Service) UploadRunSheetEvidence(runID, runSheetID int64, header *multip
 	if mimeType == "" {
 		mimeType = detectContentType(storagePath)
 	}
-	evidence, err = s.repo.UpdateEvidenceFile(evidence.ID, storagePath, mimeType, written)
+	evidence, err = s.repo.UpdateEvidenceFile(evidence.ID, storageRelativePath(storagePath), mimeType, written)
 	if err != nil {
 		_ = os.Remove(storagePath)
 		return model.Evidence{}, err
@@ -1069,7 +1078,7 @@ func (s *Service) DeleteEvidence(evidenceID int64) error {
 		return err
 	}
 	if deleted.Path != "" {
-		_ = os.Remove(deleted.Path)
+		_ = os.Remove(storageAbsolutePath(deleted.Path))
 	}
 	return nil
 }
@@ -1114,7 +1123,7 @@ func (s *Service) UploadRunStepEvidence(runID, runStepID int64, header *multipar
 		return model.Evidence{}, err
 	}
 
-	evidenceDirectory := filepath.Join("data", "test-sheet", "runs", fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("step-%d", runStepID))
+	evidenceDirectory := filepath.Join(runsRootDir(), fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("step-%d", runStepID))
 	if err := os.MkdirAll(evidenceDirectory, 0755); err != nil {
 		_, _ = s.repo.DeleteStepEvidence(evidence.ID)
 		return model.Evidence{}, err
@@ -1144,7 +1153,7 @@ func (s *Service) UploadRunStepEvidence(runID, runStepID int64, header *multipar
 	if mimeType == "" {
 		mimeType = detectContentType(storagePath)
 	}
-	evidence, err = s.repo.UpdateStepEvidenceFile(evidence.ID, storagePath, mimeType, written)
+	evidence, err = s.repo.UpdateStepEvidenceFile(evidence.ID, storageRelativePath(storagePath), mimeType, written)
 	if err != nil {
 		_ = os.Remove(storagePath)
 		return model.Evidence{}, err
@@ -1169,7 +1178,7 @@ func (s *Service) DeleteStepEvidence(evidenceID int64) error {
 		return err
 	}
 	if deleted.Path != "" {
-		_ = os.Remove(deleted.Path)
+		_ = os.Remove(storageAbsolutePath(deleted.Path))
 	}
 	return nil
 }
@@ -1581,6 +1590,43 @@ func detectContentType(path string) string {
 		return ""
 	}
 	return http.DetectContentType(buffer[:n])
+}
+
+func documentsRootDir() string {
+	return filepath.Join(testSheetFilesDir(), "documents")
+}
+
+func runsRootDir() string {
+	return filepath.Join(testSheetFilesDir(), "runs")
+}
+
+func testSheetFilesDir() string {
+	layout, err := toolboxruntime.ForModule("test-sheet")
+	if err != nil {
+		return "files"
+	}
+	return layout.FilesDir
+}
+
+func storageAbsolutePath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	return filepath.Join(testSheetFilesDir(), path)
+}
+
+func storageRelativePath(path string) string {
+	if path == "" || !filepath.IsAbs(path) {
+		return path
+	}
+	rel, err := filepath.Rel(testSheetFilesDir(), path)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return rel
 }
 
 func IsNotFound(err error) bool {

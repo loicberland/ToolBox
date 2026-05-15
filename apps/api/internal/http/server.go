@@ -1,9 +1,13 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 
 	"toolBox/apps/api/internal/config"
 	"toolBox/apps/api/internal/jobs"
@@ -12,6 +16,7 @@ import (
 	"toolBox/modules/test-sheet/pkg/repository"
 	"toolBox/modules/test-sheet/pkg/service"
 	"toolBox/pkg/modulecontract"
+	"toolBox/pkg/toolboxruntime"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -21,10 +26,22 @@ type Server struct {
 	registry      *modules.Registry
 	jobs          *jobs.Store
 	testSheetRepo *repository.SQLiteRepository
+	runtime       toolboxruntime.Layout
 }
 
-func NewServer() (*Server, error) {
-	testSheetRepo, err := repository.Open("")
+func NewServer(runtimeLayout toolboxruntime.Layout) (*Server, error) {
+	_ = os.Setenv(toolboxruntime.EnvRoot, runtimeLayout.RootDir)
+	testSheetLayout := runtimeLayout.Module("test-sheet")
+	if err := testSheetLayout.EnsureBaseDirs(); err != nil {
+		return nil, fmt.Errorf("init test-sheet runtime dirs: %w", err)
+	}
+	if err := os.MkdirAll(testSheetFilesDocumentsDir(testSheetLayout), 0755); err != nil {
+		return nil, fmt.Errorf("init test-sheet document dir: %w", err)
+	}
+	if err := os.MkdirAll(testSheetFilesRunsDir(testSheetLayout), 0755); err != nil {
+		return nil, fmt.Errorf("init test-sheet runs dir: %w", err)
+	}
+	testSheetRepo, err := repository.Open(filepath.Join(testSheetLayout.DataDir, "test-sheet.db"))
 	if err != nil {
 		return nil, fmt.Errorf("init test-sheet database: %w", err)
 	}
@@ -32,6 +49,7 @@ func NewServer() (*Server, error) {
 		registry:      modules.NewRegistry(),
 		jobs:          jobs.NewStore(),
 		testSheetRepo: testSheetRepo,
+		runtime:       runtimeLayout,
 	}, nil
 }
 
@@ -40,7 +58,11 @@ func ListenAndServe(configPath string) error {
 	if err != nil {
 		return err
 	}
-	server, err := NewServer()
+	runtimeLayout, err := toolboxruntime.ForApp(configPath)
+	if err != nil {
+		return err
+	}
+	server, err := NewServer(runtimeLayout)
 	if err != nil {
 		return err
 	}
@@ -97,16 +119,8 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := modulecontract.ActionResponse{
-		ModuleID: moduleID,
-		ActionID: actionID,
-		Status:   "accepted",
-		Output: map[string]any{
-			"message": "action mock accepted",
-			"args":    request.Args,
-		},
-	}
-	writeJSON(w, http.StatusAccepted, response)
+	response, err := s.runModuleAction(moduleID, actionID, request.Args)
+	respondModuleAction(w, response, err)
 }
 
 func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
@@ -123,4 +137,42 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (s *Server) runModuleAction(moduleID, actionID string, args []string) (modulecontract.ActionResponse, error) {
+	moduleLayout := s.runtime.Module(moduleID)
+	commandArgs := append([]string{"run", actionID, "--json"}, args...)
+	cmd := exec.Command(moduleLayout.Exe, commandArgs...)
+	cmd.Dir = moduleLayout.Dir
+	cmd.Env = append(os.Environ(), moduleLayout.Env()...)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return modulecontract.ActionResponse{}, fmt.Errorf("run module %s action %s: %w: %s", moduleID, actionID, err, stderr.String())
+	}
+
+	var response modulecontract.ActionResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		return modulecontract.ActionResponse{}, fmt.Errorf("decode module response: %w", err)
+	}
+	return response, nil
+}
+
+func respondModuleAction(w http.ResponseWriter, response modulecontract.ActionResponse, err error) {
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, response)
+}
+
+func testSheetFilesDocumentsDir(layout toolboxruntime.ModuleLayout) string {
+	return filepath.Join(layout.FilesDir, "documents")
+}
+
+func testSheetFilesRunsDir(layout toolboxruntime.ModuleLayout) string {
+	return filepath.Join(layout.FilesDir, "runs")
 }

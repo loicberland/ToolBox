@@ -533,7 +533,7 @@ func (h *Handler) downloadDocument(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", document.MimeType)
 	}
 	w.Header().Set("Content-Disposition", `attachment; filename="`+url.QueryEscape(document.OriginalName)+`"`)
-	http.ServeFile(w, r, document.StoragePath)
+	http.ServeFile(w, r, h.service.DocumentFilePath(document))
 }
 
 func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
@@ -765,7 +765,7 @@ func (h *Handler) downloadEvidence(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", evidence.MimeType)
 	}
 	w.Header().Set("Content-Disposition", `attachment; filename="`+url.QueryEscape(evidence.Name)+`"`)
-	http.ServeFile(w, r, evidence.Path)
+	http.ServeFile(w, r, h.service.EvidenceFilePath(evidence))
 }
 
 func (h *Handler) deleteEvidence(w http.ResponseWriter, r *http.Request) {
@@ -790,7 +790,7 @@ func (h *Handler) downloadStepEvidence(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", evidence.MimeType)
 	}
 	w.Header().Set("Content-Disposition", `attachment; filename="`+url.QueryEscape(evidence.Name)+`"`)
-	http.ServeFile(w, r, evidence.Path)
+	http.ServeFile(w, r, h.service.EvidenceFilePath(evidence))
 }
 
 func (h *Handler) deleteStepEvidence(w http.ResponseWriter, r *http.Request) {

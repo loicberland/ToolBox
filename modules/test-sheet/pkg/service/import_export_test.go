@@ -78,7 +78,7 @@ func TestExportImportPlanWithDocumentsCreatesNewIDsAndKeepsRelations(t *testing.
 	if len(importedSheets[0].Steps[0].Documents) != 1 || importedSheets[0].Steps[0].Documents[0].ID != importedSheets[0].Documents[0].ID {
 		t.Fatalf("step document relation not preserved: %+v", importedSheets[0].Steps[0].Documents)
 	}
-	if _, err := os.Stat(importedSheets[0].Documents[0].StoragePath); err != nil {
+	if _, err := os.Stat(svc.DocumentFilePath(importedSheets[0].Documents[0])); err != nil {
 		t.Fatalf("imported physical document missing: %v", err)
 	}
 }

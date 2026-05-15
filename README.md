@@ -1,17 +1,66 @@
 # ToolBox
 
-ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go, des modules Go/Cobra executables seuls, et des donnees locales par module.
+ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go, des modules Go/Cobra executables seuls, et une installation runtime autonome.
 
 ## Structure
 
 - `apps/api` : back HTTP/API Go. Les routes modulaires sont exposees dans `apps/api/internal/http`.
 - `apps/web` : front React/TypeScript.
 - `apps/web-server` : serveur Go statique pour servir le build du front.
-- `modules/test-sheet` : module Cobra pour les fiches de test, avec SQLite dans `BDD/test-sheet.db` a cote de l'executable lance.
-- `modules/test-env` : module Cobra pour les maquettes de test, avec configuration dans `config/test-env.json` a cote de l'executable lance.
+- `modules/test-sheet` : module Cobra pour les fiches de test.
+- `modules/test-env` : module Cobra pour les maquettes de test.
 - `pkg/modulecontract` : contrat JSON partage entre API, front et modules.
-- `BDD` : bases SQLite runtime creees a cote des executables lances.
+- `pkg/toolboxruntime` : resolution des chemins runtime installes.
 - `_build` : binaires generes.
+
+## Installation Runtime
+
+Le build final produit un installeur autonome :
+
+```bat
+build.bat installer
+```
+
+ou :
+
+```bash
+go run ./tools/build installer
+```
+
+Le resultat final visible est `_build/toolbox-setup.exe`. Lancer cet exe installe ToolBox dans `.\ToolBox` par defaut :
+
+```bat
+_build\toolbox-setup.exe
+```
+
+Pour choisir le dossier parent :
+
+```bat
+_build\toolbox-setup.exe --dir C:\Apps
+```
+
+L'installation cree cette architecture :
+
+```text
+ToolBox/
+├─ api-toolbox.exe
+├─ web-server-toolbox.exe
+├─ toolbox.cfg
+└─ modules/
+   ├─ test-sheet/
+   │  ├─ test-sheet.exe
+   │  ├─ data/
+   │  │  └─ test-sheet.db
+   │  └─ files/
+   │     ├─ documents/
+   │     └─ runs/
+   └─ test-env/
+      ├─ test-env.exe
+      ├─ data/
+      └─ files/
+```
+
+Lors d'une mise a jour, l'installeur remplace les exe et conserve `toolbox.cfg`, `data/` et `files/`. `toolbox.cfg` est cree uniquement s'il n'existe pas, sauf avec `--force-config`. Les donnees utilisateur sont dans `modules/*/data` et `modules/*/files`.
 
 ## API
 
@@ -19,6 +68,13 @@ Lancer l'API en developpement :
 
 ```bash
 go run ./apps/api/cmd/api server
+```
+
+En mode installe :
+
+```bat
+cd ToolBox
+api-toolbox.exe server
 ```
 
 Routes disponibles :
@@ -72,6 +128,20 @@ En developpement, il est aussi possible de servir un dossier `dist` depuis le di
 
 ```bash
 go run ./apps/web-server/cmd/web-server start --dist ./apps/web/dist
+```
+
+En mode installe :
+
+```bat
+cd ToolBox
+web-server-toolbox.exe start
+```
+
+Acces :
+
+```text
+http://localhost:20251
+http://NOM_SERVEUR:20251
 ```
 
 La config runtime retournee par le web-server est :
@@ -132,18 +202,21 @@ Exemple `toolbox.cfg` :
 
 ```toml
 [platform]
-fqdn = "192.168.1.50"
+fqdn = "localhost"
 port = 20251
 tls = false
 bind = "0.0.0.0"
 
 [services.api]
 host = "127.0.0.1:20250"
+```
 
-[cors]
-origins = [
-  "http://localhost:3000"
-]
+La section `[cors]` reste supportee pour le dev Webpack, mais elle n'est pas generee par defaut et n'est pas necessaire en mode serveur same-origin.
+
+Regenerer la config par defaut :
+
+```bat
+web-server-toolbox.exe config init --output toolbox.cfg --force
 ```
 
 Lancement :
@@ -173,7 +246,7 @@ go run ./modules/test-env/cmd/test-env run init-config --json
 
 ## Build
 
-Les binaires sont produits dans `_build/`. Le build principal est un outil Go cross-platform, utilisable depuis Windows sans Git Bash.
+Le build principal est un outil Go cross-platform, utilisable depuis Windows sans Git Bash. Pour distribuer ToolBox, utilisez `installer` ou `package`, qui produisent uniquement `_build/toolbox-setup.exe`.
 
 Commandes Windows :
 
@@ -183,6 +256,8 @@ build.bat api
 build.bat web-server
 build.bat module test-sheet
 build.bat module test-env
+build.bat installer
+build.bat package
 ```
 
 Commandes Go directes :
@@ -194,6 +269,8 @@ go run ./tools/build web-server
 go run ./tools/build module test-sheet
 go run ./tools/build module test-env
 go run ./tools/build modules
+go run ./tools/build installer
+go run ./tools/build package
 go run ./tools/build all
 ```
 

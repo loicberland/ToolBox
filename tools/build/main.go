@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"errors"
 	"fmt"
 	"io"
@@ -49,6 +50,8 @@ func main() {
 		err = b.buildModule(args[1])
 	case "modules":
 		err = b.buildModules()
+	case "installer", "package":
+		err = b.buildInstaller()
 	case "all":
 		err = b.buildAll()
 	case "help", "-h", "--help":
@@ -87,7 +90,7 @@ func parseArgs(args []string) ([]string, string, error) {
 }
 
 func printHelp() {
-	fmt.Println("Usage: go run ./tools/build [--root <path>] [api|web|web-server|module <name>|modules|all|help]")
+	fmt.Println("Usage: go run ./tools/build [--root <path>] [api|web|web-server|module <name>|modules|installer|package|all|help]")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  go run ./tools/build all")
@@ -96,6 +99,7 @@ func printHelp() {
 	fmt.Println("  go run ./tools/build web-server")
 	fmt.Println("  go run ./tools/build module test-sheet")
 	fmt.Println("  go run ./tools/build modules")
+	fmt.Println("  go run ./tools/build installer")
 }
 
 func resolveRoot(rootFlag string) (string, error) {
@@ -169,6 +173,61 @@ func (b builder) buildAll() error {
 		return err
 	}
 	return b.buildModules()
+}
+
+func (b builder) buildInstaller() error {
+	if err := b.buildWebServer(); err != nil {
+		return err
+	}
+	if err := b.buildAPI(); err != nil {
+		return err
+	}
+	if err := b.buildModules(); err != nil {
+		return err
+	}
+
+	payloadDir := filepath.Join(b.root, "apps", "installer", "cmd", "toolbox-setup", "payload")
+	payloadRoot := filepath.Join(payloadDir, "ToolBox")
+	payloadZip := filepath.Join(payloadDir, "payload.zip")
+	if err := resetInstallerPayload(payloadDir); err != nil {
+		return err
+	}
+	if err := copyFile(filepath.Join(b.root, "_build", executableName("api-toolbox")), filepath.Join(payloadRoot, executableName("api-toolbox"))); err != nil {
+		return err
+	}
+	if err := copyFile(filepath.Join(b.root, "_build", executableName("web-server-toolbox")), filepath.Join(payloadRoot, executableName("web-server-toolbox"))); err != nil {
+		return err
+	}
+	for _, name := range []string{"test-sheet", "test-env"} {
+		if err := copyFile(
+			filepath.Join(b.root, "_build", executableName(name)),
+			filepath.Join(payloadRoot, "modules", name, executableName(name)),
+		); err != nil {
+			return err
+		}
+	}
+
+	if err := verifyInstallerPayload(payloadRoot); err != nil {
+		return err
+	}
+	if err := zipDir(payloadRoot, payloadZip); err != nil {
+		return err
+	}
+	if err := b.goBuildInstaller(); err != nil {
+		return err
+	}
+	if err := appendInstallerPayload(filepath.Join(b.root, "_build", executableName("toolbox-setup")), payloadZip); err != nil {
+		return err
+	}
+	if err := resetInstallerPayload(payloadDir); err != nil {
+		return err
+	}
+	for _, name := range []string{"api-toolbox", "web-server-toolbox", "test-sheet", "test-env"} {
+		if err := os.Remove(filepath.Join(b.root, "_build", executableName(name))); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return cleanBuildDirForInstaller(filepath.Join(b.root, "_build"), executableName("toolbox-setup"))
 }
 
 func (b builder) buildAPI() error {
@@ -258,6 +317,18 @@ func (b builder) goBuild(label, outputName, packageRel string, cgo bool) error {
 	return nil
 }
 
+func (b builder) goBuildInstaller() error {
+	if err := os.MkdirAll(filepath.Join(b.root, "_build"), 0755); err != nil {
+		return fmt.Errorf("create _build failed: %w", err)
+	}
+	output := filepath.Join(b.root, "_build", executableName("toolbox-setup"))
+	args := []string{"build", "-a", "-o", output, "./" + filepath.ToSlash(filepath.Join("apps", "installer", "cmd", "toolbox-setup"))}
+	if err := runCommand(b.root, []string{"CGO_ENABLED=0"}, "go", args...); err != nil {
+		return fmt.Errorf("installer build failed: %w", err)
+	}
+	return nil
+}
+
 func executableName(name string) string {
 	if runtime.GOOS == "windows" {
 		return name + ".exe"
@@ -323,6 +394,129 @@ func copyFile(source, target string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func resetInstallerPayload(payloadDir string) error {
+	if err := os.RemoveAll(filepath.Join(payloadDir, "ToolBox")); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(payloadDir, 0755); err != nil {
+		return err
+	}
+	return createEmptyZip(filepath.Join(payloadDir, "payload.zip"))
+}
+
+func verifyInstallerPayload(payloadRoot string) error {
+	for _, rel := range []string{
+		executableName("api-toolbox"),
+		executableName("web-server-toolbox"),
+		filepath.Join("modules", "test-sheet", executableName("test-sheet")),
+		filepath.Join("modules", "test-env", executableName("test-env")),
+	} {
+		path := filepath.Join(payloadRoot, rel)
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("installer payload missing %s: %w", rel, err)
+		}
+		if info.Size() == 0 {
+			return fmt.Errorf("installer payload file is empty: %s", rel)
+		}
+	}
+	return nil
+}
+
+func zipDir(sourceDir, targetZip string) error {
+	if err := os.MkdirAll(filepath.Dir(targetZip), 0755); err != nil {
+		return err
+	}
+	out, err := os.Create(targetZip)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	archive := zip.NewWriter(out)
+	defer archive.Close()
+
+	return filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(rel)
+		header.Method = zip.Store
+		writer, err := archive.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		_, err = io.Copy(writer, in)
+		return err
+	})
+}
+
+func createEmptyZip(path string) error {
+	out, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	archive := zip.NewWriter(out)
+	if err := archive.Close(); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+func appendInstallerPayload(installerPath, payloadZip string) error {
+	payload, err := os.ReadFile(payloadZip)
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(installerPath, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := out.Write([]byte("TOOLBOX_SETUP_PAYLOAD_V1")); err != nil {
+		return err
+	}
+	_, err = out.Write(payload)
+	return err
+}
+
+func cleanBuildDirForInstaller(buildDir, installerName string) error {
+	entries, err := os.ReadDir(buildDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Name() == installerName {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(buildDir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func exitErr(err error) {

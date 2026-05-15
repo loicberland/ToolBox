@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 
 	"toolBox/pkg/toolboxconfig"
+	"toolBox/pkg/toolboxruntime"
 
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,8 @@ var distDirFlag string
 var configPathFlag string
 var addrFlag string
 var apiTargetFlag string
+var configOutputFlag string
+var configForceFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:     "web-server",
@@ -37,7 +40,11 @@ var serverCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the web server",
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := toolboxconfig.Load(configPathFlag, toolboxconfig.Overrides{
+		configPath, err := resolveConfigPath(configPathFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg, err := toolboxconfig.Load(configPath, toolboxconfig.Overrides{
 			WebAddr:   addrFlag,
 			APITarget: apiTargetFlag,
 		})
@@ -81,6 +88,30 @@ var serverCmd = &cobra.Command{
 	},
 }
 
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Manage ToolBox configuration",
+}
+
+var configInitCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Create a default toolbox.cfg",
+	Run: func(cmd *cobra.Command, args []string) {
+		output := configOutputFlag
+		if output == "" {
+			layout, err := toolboxruntime.ForApp("")
+			if err != nil {
+				log.Fatal(err)
+			}
+			output = layout.ConfigPath()
+		}
+		if err := writeDefaultConfig(output, configForceFlag); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Wrote %s\n", output)
+	},
+}
+
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build the React web app",
@@ -112,10 +143,45 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(buildCmd)
+	configCmd.AddCommand(configInitCmd)
+	rootCmd.AddCommand(configCmd)
 	serverCmd.Flags().StringVar(&distDirFlag, "dist", "", "serve a dist directory from disk instead of the embedded build")
 	serverCmd.Flags().StringVar(&configPathFlag, "config", "", "path to toolbox.cfg")
 	serverCmd.Flags().StringVar(&addrFlag, "addr", "", "web server listen address")
 	serverCmd.Flags().StringVar(&apiTargetFlag, "api-target", "", "API target URL used by the /api reverse proxy")
+	configInitCmd.Flags().StringVar(&configOutputFlag, "output", "", "output path for toolbox.cfg")
+	configInitCmd.Flags().BoolVar(&configForceFlag, "force", false, "overwrite an existing toolbox.cfg")
+}
+
+func resolveConfigPath(configPath string) (string, error) {
+	if configPath != "" {
+		return configPath, nil
+	}
+	layout, err := toolboxruntime.ForApp("")
+	if err != nil {
+		return "", err
+	}
+	defaultConfigPath := layout.ConfigPath()
+	if _, err := os.Stat(defaultConfigPath); err == nil {
+		return defaultConfigPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	return "", nil
+}
+
+func writeDefaultConfig(path string, force bool) error {
+	if !force {
+		if _, err := os.Stat(path); err == nil {
+			return fmt.Errorf("config already exists: %s", path)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(toolboxconfig.DefaultConfigFile), 0644)
 }
 
 func toolboxConfigHandler(w http.ResponseWriter, _ *http.Request) {

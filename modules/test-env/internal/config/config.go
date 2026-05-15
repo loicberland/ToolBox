@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"toolBox/pkg/toolboxruntime"
 )
 
 const (
-	defaultConfigDirectory = "config"
-	defaultConfigFile      = "test-env.json"
+	defaultConfigFile = "test-env.json"
 )
 
 type Config struct {
@@ -43,9 +44,9 @@ func Ensure(path string) error {
 }
 
 func DefaultPath() string {
-	executable, err := os.Executable()
+	layout, err := toolboxruntime.ForModule("test-env")
 	if err != nil {
-		return filepath.Join(defaultConfigDirectory, defaultConfigFile)
+		return filepath.Join("data", defaultConfigFile)
 	}
-	return filepath.Join(filepath.Dir(executable), defaultConfigDirectory, defaultConfigFile)
+	return filepath.Join(layout.DataDir, defaultConfigFile)
 }

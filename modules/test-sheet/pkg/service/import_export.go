@@ -95,7 +95,7 @@ func (s *Service) ExportPlan(planID int64, options model.ExportOptions) ([]byte,
 			if document.ExportPath == "" || document.StoragePath == "" {
 				continue
 			}
-			if err := addFileToZip(archive, document.ExportPath, document.StoragePath); err != nil {
+			if err := addFileToZip(archive, document.ExportPath, storageAbsolutePath(document.StoragePath)); err != nil {
 				_ = archive.Close()
 				return nil, err
 			}
@@ -366,14 +366,14 @@ func (s *Service) importDocument(planID int64, document exportDocument, files ma
 		_, _ = s.repo.DeleteDocument(created.ID)
 		return model.TestDocument{}, fmt.Errorf("document file missing in zip: %s", document.ExportPath)
 	}
-	planDirectory := filepath.Join("data", "test-sheet", "documents", fmt.Sprintf("plan-%d", planID))
+	planDirectory := filepath.Join(documentsRootDir(), fmt.Sprintf("plan-%d", planID))
 	storedName := fmt.Sprintf("doc-%d-%s", created.ID, safeFilename(document.OriginalName))
 	storagePath := filepath.Join(planDirectory, storedName)
 	if err := extractZipFile(zipFile, storagePath, maxDocumentUploadBytes); err != nil {
 		_, _ = s.repo.DeleteDocument(created.ID)
 		return model.TestDocument{}, err
 	}
-	return s.repo.UpdateDocumentFile(created.ID, storedName, storagePath, document.MimeType, document.SizeBytes, document.SHA256)
+	return s.repo.UpdateDocumentFile(created.ID, storedName, storageRelativePath(storagePath), document.MimeType, document.SizeBytes, document.SHA256)
 }
 
 func (s *Service) importSheetEvidence(runID, runSheetID int64, evidence model.Evidence, files map[string]*zip.File) (model.Evidence, error) {
@@ -385,12 +385,12 @@ func (s *Service) importSheetEvidence(runID, runSheetID int64, evidence model.Ev
 	if exportPath == "" {
 		return created, nil
 	}
-	storagePath := filepath.Join("data", "test-sheet", "runs", fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("sheet-%d", runSheetID), fmt.Sprintf("evidence-%d-%s", created.ID, safeFilename(evidence.Name)))
+	storagePath := filepath.Join(runsRootDir(), fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("sheet-%d", runSheetID), fmt.Sprintf("evidence-%d-%s", created.ID, safeFilename(evidence.Name)))
 	if err := extractZipFile(files[exportPath], storagePath, maxDocumentUploadBytes); err != nil {
 		_, _ = s.repo.DeleteEvidence(created.ID)
 		return model.Evidence{}, err
 	}
-	return s.repo.UpdateEvidenceFile(created.ID, storagePath, evidence.MimeType, evidence.SizeBytes)
+	return s.repo.UpdateEvidenceFile(created.ID, storageRelativePath(storagePath), evidence.MimeType, evidence.SizeBytes)
 }
 
 func (s *Service) importStepEvidence(runID, runStepID int64, evidence model.Evidence, files map[string]*zip.File) (model.Evidence, error) {
@@ -402,12 +402,12 @@ func (s *Service) importStepEvidence(runID, runStepID int64, evidence model.Evid
 	if exportPath == "" {
 		return created, nil
 	}
-	storagePath := filepath.Join("data", "test-sheet", "runs", fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("step-%d", runStepID), fmt.Sprintf("evidence-%d-%s", created.ID, safeFilename(evidence.Name)))
+	storagePath := filepath.Join(runsRootDir(), fmt.Sprintf("run-%d", runID), "evidences", fmt.Sprintf("step-%d", runStepID), fmt.Sprintf("evidence-%d-%s", created.ID, safeFilename(evidence.Name)))
 	if err := extractZipFile(files[exportPath], storagePath, maxDocumentUploadBytes); err != nil {
 		_, _ = s.repo.DeleteStepEvidence(created.ID)
 		return model.Evidence{}, err
 	}
-	return s.repo.UpdateStepEvidenceFile(created.ID, storagePath, evidence.MimeType, evidence.SizeBytes)
+	return s.repo.UpdateStepEvidenceFile(created.ID, storageRelativePath(storagePath), evidence.MimeType, evidence.SizeBytes)
 }
 
 func readExportZip(payload []byte) (exportManifest, exportData, map[string]*zip.File, error) {
@@ -566,7 +566,7 @@ func setEvidenceExportPaths(runs []model.TestRun) map[string]string {
 					evidence := &sheet.Evidences[evidenceIndex]
 					if evidence.Path != "" {
 						evidence.ExportPath = path.Join("evidences", fmt.Sprintf("run-%d", run.ID), fmt.Sprintf("sheet-%d", sheet.ID), fmt.Sprintf("evidence-%d-%s", evidence.ID, safeFilename(evidence.Name)))
-						files[evidence.ExportPath] = evidence.Path
+						files[evidence.ExportPath] = storageAbsolutePath(evidence.Path)
 					}
 				}
 				for stepIndex := range sheet.Steps {
@@ -575,7 +575,7 @@ func setEvidenceExportPaths(runs []model.TestRun) map[string]string {
 						evidence := &step.Evidences[evidenceIndex]
 						if evidence.Path != "" {
 							evidence.ExportPath = path.Join("evidences", fmt.Sprintf("run-%d", run.ID), fmt.Sprintf("step-%d", step.ID), fmt.Sprintf("evidence-%d-%s", evidence.ID, safeFilename(evidence.Name)))
-							files[evidence.ExportPath] = evidence.Path
+							files[evidence.ExportPath] = storageAbsolutePath(evidence.Path)
 						}
 					}
 				}

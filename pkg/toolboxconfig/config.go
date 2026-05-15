@@ -18,6 +18,16 @@ const (
 
 var DefaultCORSOrigins = []string{"http://localhost:3000", "http://localhost:20251"}
 
+const DefaultConfigFile = `[platform]
+fqdn = "localhost"
+port = 20251
+tls = false
+bind = "0.0.0.0"
+
+[services.api]
+host = "127.0.0.1:20250"
+`
+
 type Config struct {
 	Platform PlatformConfig
 	Web      WebConfig
