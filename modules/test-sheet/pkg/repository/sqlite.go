@@ -306,9 +306,6 @@ func (r *SQLiteRepository) CreatePlan(input model.PlanInput) (model.TestPlan, er
 	if err != nil {
 		return model.TestPlan{}, err
 	}
-	if _, err := r.CreateGroup(id, model.GroupInput{Name: "Sous-plan principal", ExecutionOrder: 1}); err != nil {
-		return model.TestPlan{}, err
-	}
 	return r.GetPlan(id)
 }
 

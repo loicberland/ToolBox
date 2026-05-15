@@ -7,6 +7,9 @@ import { MarkdownTextarea } from '../ui/MarkdownTextarea';
 type Props = {
   sheet?: TestSheet;
   nextOrder: number;
+  draft?: SheetInput;
+  draftKey?: string;
+  onDraftChange?: (input: SheetInput) => void;
   onSubmit: (input: SheetInput) => Promise<void>;
   onCancel?: () => void;
   formId?: string;
@@ -17,27 +20,21 @@ export type TestSheetFormHandle = {
   submit: () => Promise<void>;
 };
 
-export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function TestSheetForm({ sheet, nextOrder, onSubmit, onCancel, formId, hideActions = false }, ref) {
-  const [value, setValue] = useState<SheetInput>(newSheet(nextOrder));
+export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function TestSheetForm({ sheet, nextOrder, draft, draftKey, onDraftChange, onSubmit, onCancel, formId, hideActions = false }, ref) {
+  const [value, setValue] = useState<SheetInput>(() => draft ?? sheetValue(sheet, nextOrder));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const isEditing = Boolean(sheet?.id);
 
   useEffect(() => {
-    setValue(sheet ? {
-      name: sheet.name,
-      description: sheet.description,
-      prerequisites: sheet.prerequisites,
-      config: sheet.config,
-      command: sheet.command,
-      notes: sheet.notes,
-      action: sheet.action,
-      expectedResult: sheet.expectedResult,
-      executionOrder: sheet.executionOrder,
-      mockupSettings: sheet.mockupSettings,
-    } : newSheet(nextOrder));
+    setValue(draft ?? sheetValue(sheet, nextOrder));
     setError('');
-  }, [sheet, nextOrder]);
+  }, [draftKey]);
+
+  const updateValue = (nextValue: SheetInput) => {
+    setValue(nextValue);
+    onDraftChange?.(nextValue);
+  };
 
   const submitCurrent = async () => {
     setSaving(true);
@@ -68,31 +65,31 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
     >
       <label>
         {messages.testSheet.edit.name}
-        <input value={value.name} onChange={(event) => setValue({ ...value, name: event.target.value })} required />
+        <input value={value.name} onChange={(event) => updateValue({ ...value, name: event.target.value })} required />
       </label>
       <label>
         {messages.testSheet.edit.description}
-        <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
+        <textarea value={value.description} onChange={(event) => updateValue({ ...value, description: event.target.value })} />
       </label>
       <MarkdownTextarea
         label={messages.testSheet.edit.prerequisites}
         value={value.prerequisites}
-        onChange={(prerequisites) => setValue({ ...value, prerequisites })}
+        onChange={(prerequisites) => updateValue({ ...value, prerequisites })}
       />
       <MarkdownTextarea
         label={messages.testSheet.edit.configuration}
         value={value.config}
-        onChange={(config) => setValue({ ...value, config })}
+        onChange={(config) => updateValue({ ...value, config })}
       />
       <MarkdownTextarea
         label={messages.testSheet.edit.command}
         value={value.command}
-        onChange={(command) => setValue({ ...value, command })}
+        onChange={(command) => updateValue({ ...value, command })}
       />
       <MarkdownTextarea
         label={messages.testSheet.edit.notes}
         value={value.notes}
-        onChange={(notes) => setValue({ ...value, notes })}
+        onChange={(notes) => updateValue({ ...value, notes })}
       />
       {!hideActions && error && <p className="form-error">{error}</p>}
       {!hideActions && (
@@ -105,7 +102,7 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
   );
 });
 
-function newSheet(order: number): SheetInput {
+export function newSheet(order: number): SheetInput {
   return {
     name: '',
     description: '',
@@ -118,4 +115,19 @@ function newSheet(order: number): SheetInput {
     executionOrder: order,
     mockupSettings: '',
   };
+}
+
+function sheetValue(sheet: TestSheet | undefined, nextOrder: number): SheetInput {
+  return sheet ? {
+    name: sheet.name,
+    description: sheet.description,
+    prerequisites: sheet.prerequisites,
+    config: sheet.config,
+    command: sheet.command,
+    notes: sheet.notes,
+    action: sheet.action,
+    expectedResult: sheet.expectedResult,
+    executionOrder: sheet.executionOrder,
+    mockupSettings: sheet.mockupSettings,
+  } : newSheet(nextOrder);
 }

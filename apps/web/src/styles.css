@@ -340,7 +340,8 @@ textarea {
 }
 
 .step-form label,
-.step-form .button-row {
+.step-form .button-row,
+.step-form .specific-field-toggle {
   grid-column: 1 / -1;
 }
 
@@ -357,6 +358,15 @@ textarea {
 .sheet-form .markdown-field,
 .step-form .markdown-field {
   grid-column: 1 / -1;
+}
+
+.specific-field-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #334e68;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .markdown-field-label {

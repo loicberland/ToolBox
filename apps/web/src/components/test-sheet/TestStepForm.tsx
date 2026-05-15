@@ -20,14 +20,17 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
   const formRef = useRef<HTMLFormElement | null>(null);
   const [value, setValue] = useState<StepInput>(newStep(nextOrder));
   const [saving, setSaving] = useState(false);
+  const [showSpecificField, setShowSpecificField] = useState(false);
 
   useEffect(() => {
-    setValue(step ? {
+    const nextValue = step ? {
       action: step.action,
       field: step.field,
       expectedResult: step.expectedResult,
       executionOrder: step.executionOrder,
-    } : newStep(nextOrder));
+    } : newStep(nextOrder);
+    setValue(nextValue);
+    setShowSpecificField(nextValue.field.trim() !== '');
   }, [step, nextOrder]);
 
   const focusFirstField = () => {
@@ -42,12 +45,14 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
       if (createAnother && !step && onSubmitAndCreateAnother) {
         await onSubmitAndCreateAnother(value);
         setValue(newStep(nextOrder + 1));
+        setShowSpecificField(false);
         focusFirstField();
         return;
       }
       await onSubmit(value);
       if (!step) {
         setValue(newStep(nextOrder + 1));
+        setShowSpecificField(false);
       }
     } finally {
       setSaving(false);
@@ -73,28 +78,41 @@ export const TestStepForm = forwardRef<TestStepFormHandle, Props>(function TestS
         required
         onChange={(action) => setValue({ ...value, action })}
       />
-      <MarkdownTextarea
-        label={messages.testSheet.edit.specificField}
-        value={value.field}
-        onChange={(field) => setValue({ ...value, field })}
-      />
+      <div className="specific-field-toggle">
+        <span>{messages.testSheet.edit.specificField}</span>
+        {!showSpecificField && (
+          <Button type="button" size="sm" variant="secondary" onClick={() => setShowSpecificField(true)}>
+            +
+          </Button>
+        )}
+      </div>
+      {showSpecificField && (
+        <MarkdownTextarea
+          value={value.field}
+          onChange={(field) => setValue({ ...value, field })}
+        />
+      )}
       <MarkdownTextarea
         label={messages.testSheet.edit.expectedResult}
         value={value.expectedResult}
         onChange={(expectedResult) => setValue({ ...value, expectedResult })}
       />
       <div className="button-row">
-        <Button type="submit" disabled={saving}>{saving ? messages.common.saving : step ? messages.common.save : messages.testSheet.edit.addStep}</Button>
         {!step && onSubmitAndCreateAnother && (
           <Button
-            type="button"
-            variant="secondary"
+            type="submit"
             disabled={saving}
-            onClick={() => submitCurrent(true)}
+            onClick={async (event) => {
+              event.preventDefault();
+              await submitCurrent(true);
+            }}
           >
             {messages.testSheet.edit.addStepAndContinue}
           </Button>
         )}
+        <Button type="submit" variant={!step && onSubmitAndCreateAnother ? 'secondary' : undefined} disabled={saving}>
+          {saving ? messages.common.saving : step ? messages.common.save : messages.testSheet.edit.addStep}
+        </Button>
         {onCancel && <Button variant="secondary" type="button" onClick={onCancel}>{messages.common.cancel}</Button>}
       </div>
     </form>

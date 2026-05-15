@@ -42,13 +42,16 @@ type Props = {
   onModelMutation: <T>(mutation: () => Promise<T>) => Promise<T>;
   planDocuments: TestDocument[];
   onDocumentsChanged: () => Promise<void>;
+  sheetDraft?: SheetInput;
+  onSheetDraftChange?: (input: SheetInput) => void;
+  onClearSheetDraft?: () => void;
 };
 
 export type TestSheetEditorHandle = {
   submit: () => Promise<void>;
 };
 
-export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, groupId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation, planDocuments, onDocumentsChanged }, ref) {
+export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function TestSheetEditor({ mode, planId, groupId, sheet, nextOrder, onCancel, onSaved, onCreated, onRefresh, onModelMutation, planDocuments, onDocumentsChanged, sheetDraft, onSheetDraftChange, onClearSheetDraft }, ref) {
   const sheetFormRef = useRef<TestSheetFormHandle>(null);
   const stepFormRef = useRef<TestStepFormHandle>(null);
   const stepEditorContainerRef = useRef<HTMLDivElement | null>(null);
@@ -61,6 +64,7 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
 
   const isCreate = mode === 'create';
   const formId = `test-sheet-form-${sheet?.id ?? 'new'}`;
+  const formDraftKey = `${mode}:${planId}:${groupId ?? 0}:${sheet?.id ?? 0}`;
   const activeSheet = currentSheet ?? sheet;
   const canEditSteps = !isCreate && Boolean(activeSheet?.id);
   const steps = canEditSteps ? (activeSheet?.steps ?? []) : [];
@@ -135,11 +139,13 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
         const loadedSheets = await onRefresh();
         const createdSheet = loadedSheets.find((item) => item.id === created.id) ?? created;
         closeStepEditor();
+        onClearSheetDraft?.();
         onCreated(createdSheet);
         return;
       } else if (sheet) {
         await onModelMutation(() => testSheetApi.updateSheet(sheet.id, normalizedInput));
       }
+      onClearSheetDraft?.();
       await onSaved();
     } catch (err) {
       setSheetError((err as Error).message);
@@ -232,6 +238,9 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
         sheet={activeSheet ?? { ...emptySheet, executionOrder: nextOrder }}
         nextOrder={nextOrder}
         onSubmit={saveSheet}
+        draft={sheetDraft}
+        draftKey={formDraftKey}
+        onDraftChange={onSheetDraftChange}
         formId={formId}
         hideActions
       />
@@ -317,7 +326,16 @@ export const TestSheetEditor = forwardRef<TestSheetEditorHandle, Props>(function
       {sheetError && <p className="form-error">{sheetError}</p>}
       <div className="button-row end editor-footer">
         <Button type="submit" form={formId}>{isCreate ? messages.testSheet.edit.createSheet : messages.common.save}</Button>
-        <Button type="button" variant="secondary" onClick={onCancel}>{messages.common.cancel}</Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            onClearSheetDraft?.();
+            onCancel();
+          }}
+        >
+          {messages.common.cancel}
+        </Button>
       </div>
     </Card>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { testSheetApi, TestDocument, TestGroup, TestPlan, TestSheet } from '../api/testSheet';
+import { SheetInput, testSheetApi, TestDocument, TestGroup, TestPlan, TestSheet } from '../api/testSheet';
 import { DocumentFilePicker, DocumentList } from '../components/test-sheet/DocumentList';
 import { TestPlanExportDialog } from '../components/test-sheet/TestPlanExportDialog';
 import { TestPlanForm } from '../components/test-sheet/TestPlanForm';
@@ -18,6 +18,10 @@ type Props = {
 };
 
 type SheetEditorMode = 'closed' | 'create' | 'edit';
+type SheetDraft = {
+  key: string;
+  value: SheetInput;
+};
 
 const modelChangedRunCanceledMessage = messages.testSheet.dialogs.modelChangedRunCanceled;
 
@@ -29,6 +33,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const [documents, setDocuments] = useState<TestDocument[]>([]);
   const [sheetEditorMode, setSheetEditorMode] = useState<SheetEditorMode>('closed');
   const [editingSheet, setEditingSheet] = useState<TestSheet | undefined>();
+  const [sheetDraft, setSheetDraft] = useState<SheetDraft | undefined>();
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -91,6 +96,12 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
     const loadedGroups = await testSheetApi.listGroups(effectivePlanId);
     setGroups(loadedGroups);
     return loadedGroups;
+  };
+
+  const refreshSheetsAndGroups = async () => {
+    const loadedSheets = await refreshSheets();
+    await refreshGroups();
+    return loadedSheets;
   };
 
   const selectGroup = async (groupId: number) => {
@@ -169,13 +180,23 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   const closeEditor = () => {
     setSheetEditorMode('closed');
     setEditingSheet(undefined);
+    setSheetDraft(undefined);
   };
 
   const savePlan = async (input: { name: string; description: string; mockupSettings: string }) => {
+    const creating = isNew;
     const saved = isNew
       ? await testSheetApi.createPlan(input)
       : await runModelMutation(() => testSheetApi.updatePlan(effectivePlanId, input));
     setPlan(saved);
+    if (creating) {
+      const loadedGroups = await testSheetApi.listGroups(saved.id);
+      setGroups(loadedGroups);
+      const firstGroupId = loadedGroups[0]?.id;
+      setSelectedGroupId(firstGroupId);
+      setSheets(firstGroupId ? await testSheetApi.listGroupSheets(firstGroupId) : []);
+      setDocuments(await testSheetApi.listDocuments(saved.id));
+    }
   };
 
   const runModelMutation = async <T,>(mutation: () => Promise<T>): Promise<T> => {
@@ -189,11 +210,13 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
   };
 
   const afterSheetSaved = async () => {
-    await refreshSheets();
+    setSheetDraft(undefined);
+    await refreshSheetsAndGroups();
     closeEditor();
   };
 
   const afterSheetCreated = (sheet: TestSheet) => {
+    setSheetDraft(undefined);
     setEditingSheet(sheet);
     setSheetEditorMode('edit');
     scrollToSheetEditor();
@@ -201,12 +224,14 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
 
   const openCreateSheet = () => {
     setEditingSheet(undefined);
+    setSheetDraft(undefined);
     setSheetEditorMode('create');
     scrollToSheetEditor();
   };
 
   const openEditSheet = (sheet: TestSheet) => {
     setEditingSheet(sheet);
+    setSheetDraft(undefined);
     setSheetEditorMode('edit');
     scrollToSheetEditor();
   };
@@ -375,14 +400,14 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               onEdit={toggleEditSheet}
               onDelete={async (sheet) => {
                 await runModelMutation(() => testSheetApi.deleteSheet(sheet.id));
-                await refreshSheets();
+                await refreshSheetsAndGroups();
                 if (editingSheet?.id === sheet.id) {
                   closeEditor();
                 }
               }}
               onDuplicate={async (sheet) => {
                 await runModelMutation(() => testSheetApi.duplicateSheet(sheet.id));
-                await refreshSheets();
+                await refreshSheetsAndGroups();
               }}
               onMove={async (sheet, direction) => {
                 const currentIndex = sheets.findIndex((item) => item.id === sheet.id);
@@ -418,9 +443,12 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                     onCancel={closeEditor}
                     onSaved={afterSheetSaved}
                     onCreated={afterSheetCreated}
-                    onRefresh={refreshSheets}
+                    onRefresh={refreshSheetsAndGroups}
                     onModelMutation={runModelMutation}
                     planDocuments={documents}
+                    sheetDraft={sheetDraft?.key === sheetDraftKey('edit', effectivePlanId, selectedGroupId, sheet.id) ? sheetDraft.value : undefined}
+                    onSheetDraftChange={(value) => setSheetDraft({ key: sheetDraftKey('edit', effectivePlanId, selectedGroupId, sheet.id), value })}
+                    onClearSheetDraft={() => setSheetDraft(undefined)}
                     onDocumentsChanged={async () => {
                       await refreshDocuments();
                       await refreshSheets();
@@ -448,9 +476,12 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
                   onCancel={closeEditor}
                   onSaved={afterSheetSaved}
                   onCreated={afterSheetCreated}
-                  onRefresh={refreshSheets}
+                  onRefresh={refreshSheetsAndGroups}
                   onModelMutation={runModelMutation}
                   planDocuments={documents}
+                  sheetDraft={sheetDraft?.key === sheetDraftKey('create', effectivePlanId, selectedGroupId, 0) ? sheetDraft.value : undefined}
+                  onSheetDraftChange={(value) => setSheetDraft({ key: sheetDraftKey('create', effectivePlanId, selectedGroupId, 0), value })}
+                  onClearSheetDraft={() => setSheetDraft(undefined)}
                   onDocumentsChanged={async () => {
                     await refreshDocuments();
                     await refreshSheets();
@@ -577,6 +608,10 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
       )}
     </section>
   );
+}
+
+function sheetDraftKey(mode: SheetEditorMode, planId: number, groupId: number | undefined, sheetId: number) {
+  return `${planId}:${groupId ?? 0}:${mode}:${sheetId}`;
 }
 
 async function hasRunningRun(planId: number) {

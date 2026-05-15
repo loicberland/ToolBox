@@ -19,6 +19,7 @@ import (
 )
 
 const maxDocumentUploadBytes = 50 << 20
+const defaultGroupName = "Sous-plan principal"
 
 var unsafeFilenameCharacters = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 var ErrRunNotEditable = errors.New("Cette execution est terminee et ne peut plus etre modifiee.")
@@ -124,7 +125,14 @@ func (s *Service) CreatePlan(input model.PlanInput) (model.TestPlan, error) {
 	if err := s.ensurePlanNameUnique(input.Name, 0); err != nil {
 		return model.TestPlan{}, err
 	}
-	return s.repo.CreatePlan(input)
+	plan, err := s.repo.CreatePlan(input)
+	if err != nil {
+		return model.TestPlan{}, err
+	}
+	if _, err := s.ensureDefaultGroup(plan.ID); err != nil {
+		return model.TestPlan{}, err
+	}
+	return plan, nil
 }
 
 func (s *Service) ListPlans() ([]model.TestPlan, error) {
@@ -216,6 +224,26 @@ func (s *Service) ListGroups(planID int64) ([]model.TestGroup, error) {
 		return nil, err
 	}
 	return s.repo.ListGroups(planID)
+}
+
+func (s *Service) ensureDefaultGroup(planID int64) (model.TestGroup, error) {
+	groups, err := s.repo.ListGroups(planID)
+	if err != nil {
+		return model.TestGroup{}, err
+	}
+	for _, group := range groups {
+		if group.Name == defaultGroupName {
+			return group, nil
+		}
+	}
+	if len(groups) > 0 {
+		return groups[0], nil
+	}
+	return s.repo.CreateGroup(planID, model.GroupInput{
+		Name:           defaultGroupName,
+		Description:    "",
+		ExecutionOrder: 1,
+	})
 }
 
 func (s *Service) GetGroup(groupID int64) (model.TestGroup, error) {
@@ -378,10 +406,11 @@ func (s *Service) DuplicatePlan(id int64) (model.TestPlan, error) {
 	if err != nil {
 		return model.TestPlan{}, err
 	}
-	targetGroupID, err := s.repo.DefaultGroupID(copyPlan.ID)
+	targetGroup, err := s.ensureDefaultGroup(copyPlan.ID)
 	if err != nil {
 		return model.TestPlan{}, err
 	}
+	targetGroupID := targetGroup.ID
 	for _, sheet := range sheets {
 		sheetName, err := nextCopyName(sheet.Name, func(candidate string) (bool, error) {
 			return s.sheetNameExists(targetGroupID, candidate, 0)
