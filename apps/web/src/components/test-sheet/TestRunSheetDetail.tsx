@@ -231,6 +231,18 @@ function TestRunStepDetail({
   readOnly: boolean;
 }) {
   const [isSaving, setIsSaving] = useState(false);
+  const [showEvidenceSection, setShowEvidenceSection] = useState((step.evidences ?? []).length > 0);
+  const [showCommentSection, setShowCommentSection] = useState(hasMarkdownContent(draft.comment || step.comment));
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    setShowEvidenceSection((step.evidences ?? []).length > 0);
+    setShowCommentSection(hasMarkdownContent(draft.comment || step.comment));
+  }, [step.id, step.evidences, step.comment]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
 
   const setStatusAndSave = async (status: TestRunStep['status']) => {
     if (readOnly) {
@@ -241,11 +253,19 @@ function TestRunStepDetail({
     setIsSaving(true);
     try {
       await onSave(nextDraft);
+      if (mountedRef.current) {
+        setShowEvidenceSection((step.evidences ?? []).length > 0);
+        setShowCommentSection(hasMarkdownContent(nextDraft.comment));
+      }
     } finally {
-      setIsSaving(false);
+      if (mountedRef.current) {
+        setIsSaving(false);
+      }
     }
   };
   const hasField = hasMarkdownContent(step.field);
+  const hasEvidences = (step.evidences ?? []).length > 0;
+  const hasComment = hasMarkdownContent(draft.comment || step.comment);
 
   return (
     <div className="run-step-detail">
@@ -276,22 +296,40 @@ function TestRunStepDetail({
           <DocumentList documents={step.documents} />
         </section>
       )}
-      <RunEvidenceList
-        evidences={step.evidences}
-        readOnly={readOnly}
-        upload={(file) => testSheetApi.uploadRunStepEvidence(runId, step.id, file)}
-        remove={(evidence) => testSheetApi.deleteRunStepEvidence(evidence.id)}
-        downloadUrl={(evidence) => testSheetApi.runStepEvidenceDownloadUrl(evidence.id)}
-        onChanged={onEvidenceChanged}
-      />
-      {readOnly ? (
-        <RunStepCommentReadDetails comment={step.comment} />
-      ) : (
-        <MarkdownTextarea
-          label={messages.testSheet.run.comment}
-          value={draft.comment}
-          onChange={(comment) => onDraftChange({ ...draft, comment })}
-        />
+      {(!readOnly || hasEvidences) && (
+        <RunOptionalSection
+          title={messages.testSheet.run.documentsAdded}
+          open={showEvidenceSection}
+          hasContent={hasEvidences}
+          onOpen={() => setShowEvidenceSection(true)}
+        >
+          <RunEvidenceList
+            evidences={step.evidences}
+            readOnly={readOnly}
+            upload={(file) => testSheetApi.uploadRunStepEvidence(runId, step.id, file)}
+            remove={(evidence) => testSheetApi.deleteRunStepEvidence(evidence.id)}
+            downloadUrl={(evidence) => testSheetApi.runStepEvidenceDownloadUrl(evidence.id)}
+            onChanged={onEvidenceChanged}
+            bare
+          />
+        </RunOptionalSection>
+      )}
+      {(!readOnly || hasComment) && (
+        <RunOptionalSection
+          title={messages.testSheet.run.comment}
+          open={showCommentSection}
+          hasContent={hasComment}
+          onOpen={() => setShowCommentSection(true)}
+        >
+          {readOnly ? (
+            <MarkdownPreview content={step.comment} />
+          ) : (
+            <MarkdownTextarea
+              value={draft.comment}
+              onChange={(comment) => onDraftChange({ ...draft, comment })}
+            />
+          )}
+        </RunOptionalSection>
       )}
       {!readOnly && (
         <div className="status-action-grid" aria-label="Changer le statut de l action">
@@ -302,6 +340,42 @@ function TestRunStepDetail({
         </div>
       )}
     </div>
+  );
+}
+
+function RunOptionalSection({
+  title,
+  open,
+  hasContent,
+  onOpen,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  hasContent: boolean;
+  onOpen: () => void;
+  children: React.ReactNode;
+}) {
+  if (!open && !hasContent) {
+    return (
+      <div className="run-optional-section collapsed">
+        <span className="run-optional-section-title">{title}</span>
+        <Button type="button" variant="secondary" size="sm" onClick={onOpen}>
+          +
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <section className="run-optional-section">
+      <div className="run-optional-section-header">
+        <h4>{title}</h4>
+      </div>
+      <div className="run-optional-section-body">
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -426,6 +500,7 @@ function RunEvidenceList({
   remove: removeEvidence,
   downloadUrl,
   onChanged,
+  bare = false,
 }: {
   evidences?: Evidence[];
   readOnly: boolean;
@@ -433,6 +508,7 @@ function RunEvidenceList({
   remove: (evidence: Evidence) => Promise<void>;
   downloadUrl: (evidence: Evidence) => string;
   onChanged: () => Promise<void>;
+  bare?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = React.useId();
@@ -473,9 +549,8 @@ function RunEvidenceList({
     }
   };
 
-  return (
-    <section className="run-read-details">
-      <h4>{messages.testSheet.run.documentsAdded}</h4>
+  const content = (
+    <>
       {!readOnly && (
         <div className="document-upload-panel">
           <DocumentFilePicker
@@ -511,23 +586,17 @@ function RunEvidenceList({
           ))}
         </div>
       )}
-    </section>
+    </>
   );
-}
 
-function RunStepCommentReadDetails({ comment }: { comment: string }) {
-  const hasComment = hasMarkdownContent(comment);
-
-  if (!hasComment) {
-    return <p className="muted">{messages.testSheet.run.noComment}</p>;
+  if (bare) {
+    return content;
   }
 
   return (
-    <div className="run-read-details">
-      <section>
-        <h4>{messages.testSheet.run.comment}</h4>
-        <MarkdownPreview content={comment} />
-      </section>
-    </div>
+    <section className="run-read-details">
+      <h4>{messages.testSheet.run.documentsAdded}</h4>
+      {content}
+    </section>
   );
 }

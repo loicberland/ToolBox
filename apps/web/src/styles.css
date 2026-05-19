@@ -1072,6 +1072,14 @@ textarea {
   overflow: hidden;
 }
 
+.test-run-sidebar {
+  position: sticky;
+  top: 18px;
+  align-self: start;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+}
+
 .test-run-detail * {
   min-width: 0;
 }
@@ -1256,6 +1264,45 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-soft);
+}
+
+.run-optional-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.run-optional-section.collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-soft);
+}
+
+.run-optional-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-optional-section-header h4,
+.run-optional-section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.run-optional-section-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .run-sheet-footer-actions {
@@ -1507,6 +1554,12 @@ textarea {
 @media (max-width: 900px) {
   .test-run-layout {
     grid-template-columns: 1fr;
+  }
+
+  .test-run-sidebar {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 
   .plan-actions {
