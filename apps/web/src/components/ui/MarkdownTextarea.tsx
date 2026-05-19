@@ -20,9 +20,9 @@ const toolbarItems: Array<{ format: MarkdownFormat; label: string; title: string
   { format: 'underline', label: 'U', title: messages.markdownToolbar.underline },
   { format: 'strike', label: 'S', title: messages.markdownToolbar.strike },
   { format: 'link', label: 'Lien', title: messages.markdownToolbar.link },
-  { format: 'inlineCode', label: '`', title: messages.markdownToolbar.inlineCode },
+  { format: 'inlineCode', label: '<>', title: messages.markdownToolbar.inlineCode },
   { format: 'codeblock', label: '</>', title: messages.markdownToolbar.codeblock },
-  { format: 'quote', label: '"', title: messages.markdownToolbar.quote },
+  { format: 'quote', label: '❜❜', title: messages.markdownToolbar.quote },
 ];
 
 export function MarkdownTextarea({

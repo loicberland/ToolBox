@@ -25,7 +25,11 @@ const statuses: TestRunStep['status'][] = ['pending', 'passed', 'failed', 'block
 export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSaveStep, onEvidenceChanged }: Props) {
   const [openedStepId, setOpenedStepId] = useState<number | undefined>();
   const [stepDrafts, setStepDrafts] = useState<Record<number, RunStepInput>>({});
+  const [showSheetEvidenceSection, setShowSheetEvidenceSection] = useState((sheet.evidences ?? []).length > 0);
+  const [showSheetCommentSection, setShowSheetCommentSection] = useState(hasMarkdownContent(sheet.comment));
   const progress = getRunSheetProgress(sheet);
+  const hasSheetEvidences = (sheet.evidences ?? []).length > 0;
+  const hasSheetComment = hasMarkdownContent(sheet.comment);
 
   const getStepDraft = (step: TestRunStep): RunStepInput => stepDrafts[step.id] ?? {
     status: step.status,
@@ -76,6 +80,11 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
     setOpenedStepId(undefined);
     setStepDrafts({});
   }, [sheet.id]);
+
+  useEffect(() => {
+    setShowSheetEvidenceSection((sheet.evidences ?? []).length > 0);
+    setShowSheetCommentSection(hasMarkdownContent(sheet.comment));
+  }, [sheet.id, sheet.evidences, sheet.comment]);
 
   useEffect(() => {
     setStepDrafts((current) => {
@@ -174,15 +183,40 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
         <p className="muted">{messages.testSheet.run.noActions}</p>
       )}
 
-      <RunEvidenceList
-        evidences={sheet.evidences}
-        readOnly={readOnly}
-        upload={(file) => testSheetApi.uploadRunSheetEvidence(sheet.runId, sheet.id, file)}
-        remove={(evidence) => testSheetApi.deleteEvidence(evidence.id)}
-        downloadUrl={(evidence) => testSheetApi.evidenceDownloadUrl(evidence.id)}
-        onChanged={onEvidenceChanged}
-      />
-      <RunSheetCommentEditor sheet={sheet} readOnly={readOnly} onSave={onSaveSheet} />
+      <h4>{messages.testSheet.run.sheetResult}</h4>
+      {(!readOnly || hasSheetEvidences) && (
+        <RunOptionalSection
+          title={messages.testSheet.run.documentsAdded}
+          open={showSheetEvidenceSection}
+          hasContent={hasSheetEvidences}
+          onOpen={() => setShowSheetEvidenceSection(true)}
+        >
+          <RunEvidenceList
+            evidences={sheet.evidences}
+            readOnly={readOnly}
+            upload={(file) => testSheetApi.uploadRunSheetEvidence(sheet.runId, sheet.id, file)}
+            remove={(evidence) => testSheetApi.deleteEvidence(evidence.id)}
+            downloadUrl={(evidence) => testSheetApi.evidenceDownloadUrl(evidence.id)}
+            onChanged={onEvidenceChanged}
+            bare
+          />
+        </RunOptionalSection>
+      )}
+      {(!readOnly || hasSheetComment) && (
+        <RunOptionalSection
+          title={messages.testSheet.run.comment}
+          open={showSheetCommentSection}
+          hasContent={hasSheetComment}
+          onOpen={() => setShowSheetCommentSection(true)}
+        >
+          <RunSheetCommentEditor
+            sheet={sheet}
+            readOnly={readOnly}
+            onSave={onSaveSheet}
+            onCloseIfEmpty={() => setShowSheetCommentSection(false)}
+          />
+        </RunOptionalSection>
+      )}
       <div className="run-sheet-footer-actions">
         <Button
           type="button"
@@ -383,10 +417,12 @@ function RunSheetCommentEditor({
   sheet,
   readOnly,
   onSave,
+  onCloseIfEmpty,
 }: {
   sheet: TestRunSheet;
   readOnly: boolean;
   onSave: (sheetId: number, input: RunSheetInput) => Promise<void>;
+  onCloseIfEmpty: () => void;
 }) {
   const [commentDraft, setCommentDraft] = useState(sheet.comment);
   const [savedComment, setSavedComment] = useState(sheet.comment);
@@ -431,6 +467,9 @@ function RunSheetCommentEditor({
       });
       setSavedComment(commentDraft);
       setSaveState('success');
+      if (!hasMarkdownContent(commentDraft)) {
+        onCloseIfEmpty();
+      }
     } catch (err) {
       setError((err as Error).message);
       setSaveState('error');
@@ -464,15 +503,11 @@ function RunSheetCommentEditor({
   };
 
   return (
-    <div className="run-step-detail">
-      <h4>{messages.testSheet.run.sheetComment}</h4>
+    <>
       {readOnly ? (
-        hasMarkdownContent(sheet.comment)
-          ? <MarkdownPreview content={sheet.comment} />
-          : <p className="muted">{messages.testSheet.run.noComment}</p>
+        <MarkdownPreview content={sheet.comment} />
       ) : (
         <MarkdownTextarea
-          label={messages.testSheet.run.comment}
           value={commentDraft}
           onChange={updateComment}
         />
@@ -489,7 +524,7 @@ function RunSheetCommentEditor({
         </Button>
       )}
       {error && <p className="error">{error}</p>}
-    </div>
+    </>
   );
 }
 

@@ -148,6 +148,7 @@
       "readOnly": "Exécution en lecture seule",
       "expectedResult": "Résultat attendu",
       "actualResult": "Résultat obtenu",
+      "sheetResult": "Résultat de la fiche",
       "comment": "Commentaire",
       "sheetComment": "Commentaire de la fiche",
       "saveComment": "Enregistrer le commentaire",
