@@ -18,12 +18,16 @@ func NewRegistry() *Registry {
 			},
 		},
 		{
-			ID:          "test-env",
-			Name:        "Maquettes de test",
-			Description: "Installation et configuration de maquettes de test",
+			ID:          "v10-lab",
+			Name:        "V10 Lab",
+			Description: "Generateur de maquettes V10",
 			Actions: []modulecontract.ModuleAction{
-				{ID: "init-config", Name: "Initialiser la configuration", Description: "Cree un fichier de configuration local"},
-				{ID: "validate", Name: "Valider", Description: "Verifie la configuration courante"},
+				{ID: "products", Name: "Produits", Description: "Liste les produits supportes"},
+				{ID: "actions", Name: "Actions", Description: "Liste les actions disponibles"},
+				{ID: "validate", Name: "Valider", Description: "Valide une configuration JSON"},
+				{ID: "run", Name: "Executer", Description: "Execute fictivement un pipeline"},
+				{ID: "register", Name: "Enregistrer", Description: "Enregistre une maquette localement"},
+				{ID: "list", Name: "Lister", Description: "Liste les maquettes enregistrees"},
 			},
 		},
 	}

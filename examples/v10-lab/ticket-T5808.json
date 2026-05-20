@@ -1,0 +1,68 @@
+{
+  "name": "ticket-T5808",
+  "product": "gedix-v10",
+  "release": {
+    "sourcePath": "D:/Gedix/Releases/Gedix10_10.4.2",
+    "targetPath": "D:/Gedix/Maquettes/ticket-T5808"
+  },
+  "api": {
+    "baseUrl": "http://localhost/env_demo/app_prod",
+    "tokenRef": "GEDIX_API_TOKEN"
+  },
+  "database": {
+    "type": "oracle",
+    "host": "localhost",
+    "port": 1521,
+    "service": "XE",
+    "schema": "GEDIX_T5808"
+  },
+  "services": [
+    {
+      "name": "gx-entreprise",
+      "enabled": true,
+      "debug": true
+    },
+    {
+      "name": "connector-dnc1",
+      "enabled": true,
+      "debug": false
+    }
+  ],
+  "pipeline": [
+    {
+      "action": "create-env",
+      "label": "Créer la maquette",
+      "params": {
+        "releasePath": "D:/Gedix/Releases/Gedix10_10.4.2",
+        "targetPath": "D:/Gedix/Maquettes/ticket-T5808",
+        "overwrite": false
+      }
+    },
+    {
+      "action": "create-machine-group",
+      "label": "Créer groupe Fraisage",
+      "params": {
+        "code": "FRAISAGE",
+        "name": "Groupe Fraisage"
+      }
+    },
+    {
+      "action": "create-machine",
+      "label": "Créer machine FANUC 1",
+      "params": {
+        "code": "FANUC_1",
+        "name": "FANUC 31i-A",
+        "groupCode": "FRAISAGE"
+      }
+    },
+    {
+      "action": "create-cnc-folder",
+      "label": "Créer dossier CN de test",
+      "params": {
+        "machineGroupCode": "FRAISAGE",
+        "programCode": "TEST001",
+        "programIndex": "A"
+      }
+    }
+  ]
+}

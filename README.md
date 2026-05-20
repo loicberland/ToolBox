@@ -8,7 +8,7 @@ ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go,
 - `apps/web` : front React/TypeScript.
 - `apps/web-server` : serveur Go statique pour servir le build du front.
 - `modules/test-sheet` : module Cobra pour les fiches de test.
-- `modules/test-env` : module Cobra pour les maquettes de test.
+- `modules/v10-lab` : module Cobra pour les maquettes Gedix V10.
 - `pkg/modulecontract` : contrat JSON partage entre API, front et modules.
 - `pkg/toolboxruntime` : resolution des chemins runtime installes.
 - `_build` : binaires generes.
@@ -54,8 +54,8 @@ ToolBox/
    │  └─ files/
    │     ├─ documents/
    │     └─ runs/
-   └─ test-env/
-      ├─ test-env.exe
+   └─ v10-lab/
+      ├─ v10-lab.exe
       ├─ data/
       └─ files/
 ```
@@ -239,9 +239,37 @@ go run ./modules/test-sheet/cmd/test-sheet info --json
 go run ./modules/test-sheet/cmd/test-sheet actions --json
 go run ./modules/test-sheet/cmd/test-sheet run init-db --json
 
-go run ./modules/test-env/cmd/test-env info --json
-go run ./modules/test-env/cmd/test-env actions --json
-go run ./modules/test-env/cmd/test-env run init-config --json
+go run ./modules/v10-lab/cmd/v10-lab info --json
+go run ./modules/v10-lab/cmd/v10-lab products
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-v10
+go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab register --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab list
+```
+
+## V10 Lab
+
+V10 Lab est un generateur et gestionnaire de maquettes V10.
+
+Phase 1 :
+
+- registre de produits
+- registre d'actions
+- validation de fichier JSON
+- execution fictive de pipeline
+- base multi-maquettes
+
+Exemples :
+
+```bash
+go run ./modules/v10-lab/cmd/v10-lab products
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-v10
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-v10 --json
+go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab register --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab list
 ```
 
 ## Build
@@ -255,7 +283,7 @@ build.bat all
 build.bat api
 build.bat web-server
 build.bat module test-sheet
-build.bat module test-env
+build.bat module v10-lab
 build.bat installer
 build.bat package
 ```
@@ -267,7 +295,7 @@ go run ./tools/build api
 go run ./tools/build web
 go run ./tools/build web-server
 go run ./tools/build module test-sheet
-go run ./tools/build module test-env
+go run ./tools/build module v10-lab
 go run ./tools/build modules
 go run ./tools/build installer
 go run ./tools/build package

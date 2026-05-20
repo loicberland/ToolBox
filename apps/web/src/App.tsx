@@ -90,6 +90,7 @@ const App = () => {
               <header>
                 <h2>{selectedModule.name}</h2>
                 <p>{selectedModule.description}</p>
+                {selectedModule.id === 'v10-lab' && <p className="muted">Phase 1 - socle en cours</p>}
               </header>
               <div className="actions">
                 {selectedModule.actions.map((action) => (

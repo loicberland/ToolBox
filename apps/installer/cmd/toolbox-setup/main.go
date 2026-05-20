@@ -42,7 +42,7 @@ func install(parentDir string, forceConfig, cleanExe bool) error {
 			"api-toolbox.exe",
 			"web-server-toolbox.exe",
 			filepath.Join("modules", "test-sheet", "test-sheet.exe"),
-			filepath.Join("modules", "test-env", "test-env.exe"),
+			filepath.Join("modules", "v10-lab", "v10-lab.exe"),
 		} {
 			if err := os.Remove(filepath.Join(root, rel)); err != nil && !os.IsNotExist(err) {
 				return err
@@ -147,8 +147,8 @@ func ensureRuntimeDirs(root string) error {
 		filepath.Join(root, "modules", "test-sheet", "data"),
 		filepath.Join(root, "modules", "test-sheet", "files", "documents"),
 		filepath.Join(root, "modules", "test-sheet", "files", "runs"),
-		filepath.Join(root, "modules", "test-env", "data"),
-		filepath.Join(root, "modules", "test-env", "files"),
+		filepath.Join(root, "modules", "v10-lab", "data", "maquettes"),
+		filepath.Join(root, "modules", "v10-lab", "files"),
 	} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
