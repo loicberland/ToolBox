@@ -271,6 +271,13 @@ export const testSheetApi = {
   linkStepDocument: (stepId: number, documentId: number) => request<void>(`/test-sheet/steps/${stepId}/documents/${documentId}`, { method: 'POST' }),
   unlinkStepDocument: (stepId: number, documentId: number) => request<void>(`/test-sheet/steps/${stepId}/documents/${documentId}`, { method: 'DELETE' }),
   documentDownloadUrl: (documentId: number) => `${API_BASE_URL}/test-sheet/documents/${documentId}/download`,
+  documentsZipDownloadUrl: (documentIds: number[], filename?: string) => {
+    const params = new URLSearchParams({ ids: documentIds.join(',') });
+    if (filename) {
+      params.set('filename', filename);
+    }
+    return `${API_BASE_URL}/test-sheet/documents/download?${params.toString()}`;
+  },
   listSteps: (sheetId: number) => request<TestSheetStep[]>(`/test-sheet/sheets/${sheetId}/steps`),
   createStep: (sheetId: number, input: StepInput) => request<TestSheetStep>(`/test-sheet/sheets/${sheetId}/steps`, jsonRequest('POST', input)),
   updateStep: (stepId: number, input: StepInput) => request<TestSheetStep>(`/test-sheet/steps/${stepId}`, jsonRequest('PUT', input)),

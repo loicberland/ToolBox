@@ -537,6 +537,15 @@ textarea {
   background: var(--surface-soft);
 }
 
+.document-list.compact .document-list-item {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.document-list.compact .button-row {
+  justify-content: flex-start;
+}
+
 .document-content {
   min-width: 0;
 }

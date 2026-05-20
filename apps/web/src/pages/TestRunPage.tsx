@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { RunGroup, testSheetApi, TestRun, TestRunSheet } from '../api/testSheet';
+import { RunGroup, testSheetApi, TestDocument, TestRun, TestRunSheet } from '../api/testSheet';
+import { DocumentList } from '../components/test-sheet/DocumentList';
 import { TestRunProgress } from '../components/test-sheet/TestRunProgress';
 import { TestRunSheetDetail } from '../components/test-sheet/TestRunSheetDetail';
 import { TestRunSheetList } from '../components/test-sheet/TestRunSheetList';
@@ -107,6 +108,12 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
               />
               {selectedGroup && <SelectedGroupProgress group={selectedGroup} />}
               <TestRunSheetList sheets={visibleSheets} selectedSheetId={selectedSheetId} onSelect={setSelectedSheetId} />
+              {selectedSheet && selectedGroup && (
+                <RunSheetDocumentsCard
+                  documents={selectedSheet.documents ?? []}
+                  zipFilename={buildDocumentsZipFilename(run.planName, selectedGroup.name, selectedSheet.name)}
+                />
+              )}
             </div>
             <aside className="test-run-detail">
               {selectedSheet && (
@@ -152,6 +159,46 @@ export function TestRunPage({ runId, onBack, onReport }: Props) {
       />
     </section>
   );
+}
+
+function RunSheetDocumentsCard({ documents, zipFilename }: { documents: TestDocument[]; zipFilename: string }) {
+  const hasDocuments = documents.length > 0;
+
+  return (
+    <div className="run-sheet-list-card ui-card">
+      <div className="ui-card-header">
+        <div>
+          <span className="section-kicker">{messages.testSheet.run.sheetDocuments}</span>
+          <h3>{documents.length} document{documents.length > 1 ? 's' : ''}</h3>
+        </div>
+        {hasDocuments && (
+          <a
+            className="ui-button secondary sm"
+            href={testSheetApi.documentsZipDownloadUrl(documents.map((document) => document.id), zipFilename)}
+          >
+            {messages.testSheet.documents.downloadAll}
+          </a>
+        )}
+      </div>
+      <DocumentList
+        documents={documents}
+        emptyText={messages.testSheet.documents.noSheetDocument}
+      />
+    </div>
+  );
+}
+
+function buildDocumentsZipFilename(planName: string, groupName: string, sheetName: string) {
+  return `documents-${slugFilenamePart(planName)}-${slugFilenamePart(groupName)}-${slugFilenamePart(sheetName)}.zip`;
+}
+
+function slugFilenamePart(value: string) {
+  return value
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'sans-nom';
 }
 
 function SelectedGroupProgress({ group }: { group: RunGroup }) {

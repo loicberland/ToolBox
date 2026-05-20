@@ -1,12 +1,17 @@
 package httpapi
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"toolBox/modules/test-sheet/pkg/model"
 	"toolBox/modules/test-sheet/pkg/service"
@@ -65,6 +70,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/test-sheet/steps/{stepId}/documents/{documentId}", h.linkStepDocument).Methods(http.MethodPost)
 	r.HandleFunc("/api/test-sheet/steps/{stepId}/documents/{documentId}", h.unlinkStepDocument).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/sheets/{sheetId}/steps/reorder", h.reorderSteps).Methods(http.MethodPut)
+	r.HandleFunc("/api/test-sheet/documents/download", h.downloadDocumentsZip).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/documents/{documentId}/download", h.downloadDocument).Methods(http.MethodGet)
 	r.HandleFunc("/api/test-sheet/documents/{documentId}", h.deleteDocument).Methods(http.MethodDelete)
 	r.HandleFunc("/api/test-sheet/plans/{planId}/runs", h.createRun).Methods(http.MethodPost)
@@ -536,6 +542,58 @@ func (h *Handler) downloadDocument(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, h.service.DocumentFilePath(document))
 }
 
+func (h *Handler) downloadDocumentsZip(w http.ResponseWriter, r *http.Request) {
+	documentIDs, ok := queryIDs(w, r, "ids")
+	if !ok {
+		return
+	}
+	documents := make([]model.TestDocument, 0, len(documentIDs))
+	paths := make([]string, 0, len(documentIDs))
+	for _, documentID := range documentIDs {
+		document, err := h.service.GetDocument(documentID)
+		if err != nil {
+			respondError(w, err)
+			return
+		}
+		documentPath := h.service.DocumentFilePath(document)
+		info, err := os.Stat(documentPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "document file not found"})
+				return
+			}
+			respondError(w, err)
+			return
+		}
+		if info.IsDir() {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "document path is a directory"})
+			return
+		}
+		documents = append(documents, document)
+		paths = append(paths, documentPath)
+	}
+
+	var buffer bytes.Buffer
+	zipWriter := zip.NewWriter(&buffer)
+	names := map[string]int{}
+	for index, document := range documents {
+		if err := addDocumentToZip(zipWriter, paths[index], uniqueZipName(document.OriginalName, names)); err != nil {
+			_ = zipWriter.Close()
+			respondError(w, err)
+			return
+		}
+	}
+	if err := zipWriter.Close(); err != nil {
+		respondError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, safeDownloadFilename(r.URL.Query().Get("filename"))))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buffer.Bytes())
+}
+
 func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 	documentID, ok := pathID(w, r, "documentId")
 	if !ok {
@@ -844,6 +902,94 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 		return 0, false
 	}
 	return value, true
+}
+
+func queryIDs(w http.ResponseWriter, r *http.Request, name string) ([]int64, bool) {
+	rawValue := strings.TrimSpace(r.URL.Query().Get(name))
+	if rawValue == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": name + " is required"})
+		return nil, false
+	}
+	parts := strings.Split(rawValue, ",")
+	ids := make([]int64, 0, len(parts))
+	for _, part := range parts {
+		id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+		if err != nil || id <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + name})
+			return nil, false
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": name + " is required"})
+		return nil, false
+	}
+	return ids, true
+}
+
+func addDocumentToZip(zipWriter *zip.Writer, documentPath string, zipName string) error {
+	file, err := os.Open(documentPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer, err := zipWriter.Create(zipName)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(writer, file)
+	return err
+}
+
+func uniqueZipName(originalName string, names map[string]int) string {
+	name := safeZipName(originalName)
+	if names[name] == 0 {
+		names[name] = 1
+		return name
+	}
+	extension := filepath.Ext(name)
+	base := strings.TrimSuffix(name, extension)
+	for count := names[name] + 1; ; count++ {
+		candidate := fmt.Sprintf("%s (%d)%s", base, count, extension)
+		if names[candidate] == 0 {
+			names[name] = count
+			names[candidate] = 1
+			return candidate
+		}
+	}
+}
+
+func safeZipName(originalName string) string {
+	name := strings.TrimSpace(originalName)
+	name = strings.ReplaceAll(name, "\\", string(filepath.Separator))
+	name = filepath.Base(name)
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		return "document"
+	}
+	return name
+}
+
+func safeDownloadFilename(filename string) string {
+	const fallback = "documents-fiche.zip"
+	name := strings.TrimSpace(filename)
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.NewReplacer("/", "-", ":", "", "*", "", "?", "", `"`, "", "<", "", ">", "", "|", "").Replace(name)
+	name = strings.Join(strings.Fields(name), "-")
+	for strings.Contains(name, "--") {
+		name = strings.ReplaceAll(name, "--", "-")
+	}
+	name = strings.Trim(name, "-.")
+	if name == "" {
+		return fallback
+	}
+	if !strings.HasSuffix(strings.ToLower(name), ".zip") {
+		name += ".zip"
+	}
+	if name == ".zip" {
+		return fallback
+	}
+	return name
 }
 
 func respond(w http.ResponseWriter, payload any, err error) {

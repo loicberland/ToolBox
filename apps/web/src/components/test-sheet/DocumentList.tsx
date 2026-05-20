@@ -6,17 +6,18 @@ import { Button } from '../ui/Button';
 type Props = {
   documents?: TestDocument[];
   emptyText?: string;
+  compact?: boolean;
   onRemove?: (document: TestDocument) => void;
   onDelete?: (document: TestDocument) => void;
 };
 
-export function DocumentList({ documents = [], emptyText = messages.testSheet.documents.noDocument, onRemove, onDelete }: Props) {
+export function DocumentList({ documents = [], emptyText = messages.testSheet.documents.noDocument, compact = false, onRemove, onDelete }: Props) {
   if (documents.length === 0) {
     return <p className="muted">{emptyText}</p>;
   }
 
   return (
-    <div className="document-list">
+    <div className={`document-list ${compact ? 'compact' : ''}`.trim()}>
       {documents.map((document) => (
         <div className="document-list-item" key={document.id}>
           <div className="document-content">

@@ -119,13 +119,6 @@ export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSav
 
       {readOnly && <p className="readonly-notice">{messages.testSheet.run.readOnly}</p>}
 
-      {sheet.documents && sheet.documents.length > 0 && (
-        <section className="run-read-details">
-          <h4>{messages.testSheet.run.sheetDocuments}</h4>
-          <DocumentList documents={sheet.documents} />
-        </section>
-      )}
-
       <RunSheetReadDetails sheet={sheet} />
 
       {sheet.steps && sheet.steps.length > 0 ? (
