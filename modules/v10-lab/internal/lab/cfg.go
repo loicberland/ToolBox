@@ -31,33 +31,39 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 	for _, serviceName := range serviceNames {
 		service := config.GedixConfig.Services[serviceName]
 		section := fmt.Sprintf("environments.%s.applications.%s.services.%s", paths.EnvName, paths.AppName, serviceName)
+		if !sectionExists(content, section) {
+			fmt.Fprintf(writer, "[ERROR] Section introuvable dans gedix.cfg : [%s]\n", section)
+			return fmt.Errorf("section introuvable dans gedix.cfg: [%s]", section)
+		}
+		fmt.Fprintf(writer, "[INFO] Section trouvée : [%s]\n", section)
 		if servicesWithoutDB[serviceName] {
-			content = ensureSection(content, section)
 			content = removeOrCommentKey(content, section, "db-type")
 			content = removeOrCommentKey(content, section, "db-dsn")
 			continue
 		}
 		dbType := strings.ToLower(strings.TrimSpace(service.DBType))
-		content = ensureSection(content, section)
 		if dbType == "" || dbType == "sqlite" {
 			content = removeOrCommentKey(content, section, "db-type")
 			content = removeOrCommentKey(content, section, "db-dsn")
 		} else {
 			content = setSectionKey(content, section, "db-type", service.DBType, true)
+			fmt.Fprintf(writer, "[INFO] Mise à jour clé db-type dans service %s\n", serviceName)
 			content = setSectionKey(content, section, "db-dsn", service.DBDSN, true)
+			fmt.Fprintf(writer, "[INFO] Mise à jour clé db-dsn dans service %s\n", serviceName)
 		}
 		for _, key := range sortedMapKeys(service.ExtraKeys) {
 			content = setSectionKey(content, section, key, service.ExtraKeys[key], shouldQuote(service.ExtraKeys[key]))
+			fmt.Fprintf(writer, "[INFO] Mise à jour clé %s dans service %s\n", key, serviceName)
 		}
 	}
 	for _, connectorName := range sortedConnectorNames(config.GedixConfig.Connectors) {
 		connector := config.GedixConfig.Connectors[connectorName]
 		section := fmt.Sprintf("environments.%s.applications.%s.connectors.%s", paths.EnvName, paths.AppName, connectorName)
-		exists := sectionExists(content, section)
-		content = ensureSection(content, section)
-		if !exists && writer != nil {
-			fmt.Fprintf(writer, "[WARN] Section connector créée, vérifiez le nom Gedix: %s\n", connectorName)
+		if !sectionExists(content, section) {
+			fmt.Fprintf(writer, "[ERROR] Section connecteur introuvable dans gedix.cfg : [%s]\n", section)
+			return fmt.Errorf("section connecteur introuvable dans gedix.cfg: [%s]", section)
 		}
+		fmt.Fprintf(writer, "[INFO] Section connecteur trouvée : [%s]\n", section)
 		content = appendRawConfigToSection(content, section, connector.RawConfig)
 	}
 	if err := os.WriteFile(paths.CfgPath, []byte(content), 0644); err != nil {
@@ -128,12 +134,14 @@ func sectionExists(content string, section string) bool {
 }
 
 func setSectionKey(content string, section string, key string, value string, quote bool) string {
-	content = ensureSection(content, section)
 	lines := splitLines(content)
 	start, end := sectionRange(lines, section)
+	if start == -1 {
+		return content
+	}
 	rendered := renderKey(key, value, quote)
 	for index := start + 1; index < end; index++ {
-		if keyMatches(lines[index], key) {
+		if activeKeyMatches(lines[index], key) {
 			lines[index] = rendered
 			return joinLines(lines)
 		}
@@ -147,6 +155,9 @@ func removeOrCommentKey(content string, section string, key string) string {
 	}
 	lines := splitLines(content)
 	start, end := sectionRange(lines, section)
+	if start == -1 {
+		return content
+	}
 	for index := start + 1; index < end; index++ {
 		if activeKeyMatches(lines[index], key) {
 			lines[index] = "#" + lines[index]
@@ -160,8 +171,11 @@ func appendRawConfigToSection(content string, section string, raw string) string
 	if raw == "" {
 		return content
 	}
-	lines := splitLines(ensureSection(content, section))
-	_, end := sectionRange(lines, section)
+	lines := splitLines(content)
+	start, end := sectionRange(lines, section)
+	if start == -1 {
+		return content
+	}
 	rawLines := strings.Split(raw, "\n")
 	for index := range rawLines {
 		rawLines[index] = strings.TrimRight(rawLines[index], "\r")
@@ -182,7 +196,7 @@ func sectionRange(lines []string, section string) (int, int) {
 		}
 	}
 	if start == -1 {
-		return len(lines), len(lines)
+		return -1, -1
 	}
 	end := len(lines)
 	for index := start + 1; index < len(lines); index++ {

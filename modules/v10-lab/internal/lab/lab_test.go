@@ -103,7 +103,7 @@ func TestDetectEnvAndDebugTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if paths.EnvName != "env_demo" || !strings.HasSuffix(paths.AppPath, filepath.Join("env_demo", "app_prod")) {
+	if paths.EnvName != "demo" || !strings.HasSuffix(paths.AppPath, filepath.Join("env_demo", "app_prod")) {
 		t.Fatalf("unexpected paths: %#v", paths)
 	}
 	service, err := DetectDebugTarget(paths, "auth")
@@ -117,34 +117,78 @@ func TestDetectEnvAndDebugTargets(t *testing.T) {
 }
 
 func TestCfgUpdatesRootPortDBAndSQLite(t *testing.T) {
-	content := `# port=80
-fqdn="old"
-
-[environments.env_demo.applications.prod.services.auth]
-db-type="oracle"
-db-dsn="/old"
-
-[environments.env_demo.applications.prod.services.filestore]
-db-type="oracle"
-db-dsn="/old"
-`
+	content := minimalGedixCfg()
+	section := "environments.demo.applications.prod.services.auth"
 	content = setRootKey(content, "fqdn", "localhost", true)
 	content = setPort(content, 20260)
-	content = setSectionKey(content, "environments.env_demo.applications.prod.services.auth", "db-type", "oracle", true)
-	content = setSectionKey(content, "environments.env_demo.applications.prod.services.auth", "db-dsn", "/USER/PASSWORD@HOST:1521/SERVICE", true)
-	content = removeOrCommentKey(content, "environments.env_demo.applications.prod.services.filestore", "db-type")
-	content = removeOrCommentKey(content, "environments.env_demo.applications.prod.services.filestore", "db-dsn")
+	content = setSectionKey(content, section, "db-type", "oracle", true)
+	content = setSectionKey(content, section, "db-dsn", "/USER/PASSWORD@HOST:1521/SERVICE", true)
+	content = setSectionKey(content, section, "my-key", "my-value", true)
+	content = setSectionKey(content, section, "db-type", "oracle", true)
+	content = setSectionKey(content, section, "db-dsn", "/USER/PASSWORD@HOST:1521/SERVICE", true)
 
 	for _, expected := range []string{
 		`fqdn="localhost"`,
 		`port=20260`,
+		`# db-type=""`,
+		`# db-dsn=""`,
+		`db-type="oracle"`,
 		`db-dsn="/USER/PASSWORD@HOST:1521/SERVICE"`,
-		`#db-type="oracle"`,
-		`#db-dsn="/old"`,
+		`my-key="my-value"`,
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("expected %q in:\n%s", expected, content)
 		}
+	}
+	if strings.Count(content, `db-type="oracle"`) != 1 {
+		t.Fatalf("expected idempotent db-type in:\n%s", content)
+	}
+	if strings.Count(content, `db-dsn="/USER/PASSWORD@HOST:1521/SERVICE"`) != 1 {
+		t.Fatalf("expected idempotent db-dsn in:\n%s", content)
+	}
+}
+
+func TestCfgSQLiteCommentsActiveDBWithoutRemovingTemplateComments(t *testing.T) {
+	content := minimalGedixCfg()
+	section := "environments.demo.applications.prod.services.auth"
+	content = setSectionKey(content, section, "db-type", "oracle", true)
+	content = setSectionKey(content, section, "db-dsn", "/old", true)
+	content = removeOrCommentKey(content, section, "db-type")
+	content = removeOrCommentKey(content, section, "db-dsn")
+
+	if !strings.Contains(content, `#db-type="oracle"`) || !strings.Contains(content, `#db-dsn="/old"`) {
+		t.Fatalf("expected active DB keys to be commented:\n%s", content)
+	}
+	if !strings.Contains(content, `# db-type=""`) || !strings.Contains(content, `# db-dsn=""`) {
+		t.Fatalf("expected template comments to remain:\n%s", content)
+	}
+}
+
+func TestCfgMissingServiceSectionDoesNotCreateSection(t *testing.T) {
+	content := minimalGedixCfg()
+	section := "environments.demo.applications.prod.services.fake-service"
+	next := setSectionKey(content, section, "db-type", "oracle", true)
+	if next != content {
+		t.Fatalf("missing section should not change content")
+	}
+	if sectionExists(next, section) {
+		t.Fatal("missing service section was created")
+	}
+}
+
+func TestCfgConnectorExistingAndMissing(t *testing.T) {
+	content := minimalGedixCfg()
+	section := "environments.demo.applications.prod.connectors.connector-focas-01"
+	content = appendRawConfigToSection(content, section, "key1=\"value1\"\nkey2=\"value2\"")
+	if !strings.Contains(content, `type="focas"`) || !strings.Contains(content, `host="127.0.0.1"`) {
+		t.Fatalf("connector type/host should remain:\n%s", content)
+	}
+	if !strings.Contains(content, `key1="value1"`) || !strings.Contains(content, `key2="value2"`) {
+		t.Fatalf("raw config not inserted:\n%s", content)
+	}
+	missing := appendRawConfigToSection(content, "environments.demo.applications.prod.connectors.connector-unknown", `x="y"`)
+	if missing != content {
+		t.Fatal("missing connector section should not be created")
 	}
 }
 
@@ -152,6 +196,50 @@ func TestEnsureSafeDeletePathRejectsRoots(t *testing.T) {
 	if err := ensureSafeDeletePath(filepath.VolumeName(os.TempDir()) + string(os.PathSeparator)); err == nil {
 		t.Fatal("expected root deletion to be rejected")
 	}
+}
+
+func TestSafeRemoveTempDir(t *testing.T) {
+	root := t.TempDir()
+	temp := filepath.Join(root, "ticket-T5808-20260520-153000")
+	final := filepath.Join(root, "final")
+	mustMkdir(t, temp)
+	mustMkdir(t, final)
+	if err := safeRemoveTempDir(temp, root, final); err != nil {
+		t.Fatalf("expected temp removal, got %v", err)
+	}
+	if _, err := os.Stat(temp); !os.IsNotExist(err) {
+		t.Fatalf("expected temp dir removed, stat err=%v", err)
+	}
+	if err := safeRemoveTempDir(final, final); err == nil {
+		t.Fatal("expected protected final path to be rejected")
+	}
+	if err := safeRemoveTempDir("", final); err == nil {
+		t.Fatal("expected empty path to be rejected")
+	}
+}
+
+func minimalGedixCfg() string {
+	return `fqdn="old-host"
+# port=80
+
+[environments.demo.applications.prod.services]
+
+[environments.demo.applications.prod.services.auth]
+host="127.0.0.1"
+# db-type=""
+# db-dsn=""
+
+[environments.demo.applications.prod.services.entreprise]
+host="127.0.0.1"
+# db-type=""
+# db-dsn=""
+
+[environments.demo.applications.prod.connectors]
+
+[environments.demo.applications.prod.connectors.connector-focas-01]
+type="focas"
+host="127.0.0.1"
+`
 }
 
 func mustMkdir(t *testing.T, path string) {

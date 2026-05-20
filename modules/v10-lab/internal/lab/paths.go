@@ -45,7 +45,7 @@ func DetectGedixPaths(config Config) (GedixPaths, error) {
 	if _, err := os.Stat(paths.FrontExePath); err != nil {
 		return paths, fmt.Errorf("gx-front.exe introuvable dans %s: %w", root, err)
 	}
-	envName, envPath, err := detectEnv(root, "env_"+config.Maquette.EnvName)
+	envName, envPath, err := detectEnv(root, config.Maquette.EnvName)
 	if err != nil {
 		return paths, err
 	}
@@ -66,14 +66,19 @@ func DetectGedixPaths(config Config) (GedixPaths, error) {
 
 func detectEnv(root string, configured string) (string, string, error) {
 	if strings.TrimSpace(configured) != "" {
-		path := filepath.Join(root, configured)
+		configured = strings.TrimSpace(configured)
+		dirName := configured
+		if !strings.HasPrefix(strings.ToLower(dirName), "env_") {
+			dirName = "env_" + dirName
+		}
+		path := filepath.Join(root, dirName)
 		if info, err := os.Stat(path); err != nil || !info.IsDir() {
 			if err == nil {
 				err = fmt.Errorf("not a directory")
 			}
 			return "", "", fmt.Errorf("env configuré %q introuvable: %w", configured, err)
 		}
-		return configured, path, nil
+		return strings.TrimPrefix(dirName, "env_"), path, nil
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -89,7 +94,7 @@ func detectEnv(root string, configured string) (string, string, error) {
 	if len(matches) == 0 {
 		return "", "", fmt.Errorf("aucun dossier env_* trouvé dans %s", root)
 	}
-	return matches[0], filepath.Join(root, matches[0]), nil
+	return strings.TrimPrefix(matches[0], "env_"), filepath.Join(root, matches[0]), nil
 }
 
 func detectOrCreateCfg(root string, frontExePath string) (string, error) {

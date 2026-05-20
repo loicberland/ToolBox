@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 func CreateEnv(ctx ActionContext, params map[string]any) error {
@@ -22,19 +23,34 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	if _, err := os.Stat(zipPath); err != nil {
 		return fmt.Errorf("ZIP release introuvable %s: %w", zipPath, err)
 	}
+	tempRoot := ""
 	if workDir == "" {
-		temp, err := os.MkdirTemp("", "v10-lab-*")
+		temp, err := os.MkdirTemp("", "v10-lab-")
 		if err != nil {
 			return err
 		}
-		workDir = temp
+		tempRoot = temp
 	} else if err := os.MkdirAll(workDir, 0755); err != nil {
 		return err
+	} else {
+		tempRoot = filepath.Join(workDir, safeDirName(config.Name)+"-"+time.Now().Format("20060102-150405"))
 	}
-	extractDir := filepath.Join(workDir, "release-"+safeDirName(config.Name))
-	if err := os.RemoveAll(extractDir); err != nil {
+	target := ResolveMaquetteTargetPath(config)
+	if err := os.MkdirAll(tempRoot, 0755); err != nil {
 		return err
 	}
+	success := false
+	defer func() {
+		if success {
+			fmt.Fprintf(ctx.Writer, "[INFO] Nettoyage du répertoire temporaire : %s\n", tempRoot)
+			if err := safeRemoveTempDir(tempRoot, workDir, target); err != nil {
+				fmt.Fprintf(ctx.Writer, "[WARN] Nettoyage impossible : %v\n", err)
+			}
+			return
+		}
+		fmt.Fprintf(ctx.Writer, "[WARN] Création interrompue, répertoire temporaire conservé pour diagnostic : %s\n", tempRoot)
+	}()
+	extractDir := filepath.Join(tempRoot, "release")
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
 		return err
 	}
@@ -55,7 +71,6 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	if err != nil {
 		return err
 	}
-	target := ResolveMaquetteTargetPath(config)
 	if err := prepareTargetDirectory(target, overwrite); err != nil {
 		return err
 	}
@@ -64,6 +79,7 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 		return err
 	}
 	fmt.Fprintf(ctx.Writer, "Maquette créée: %s\n", target)
+	success = true
 	return nil
 }
 
@@ -78,8 +94,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 	}
 	appArgs := []string{"run"}
 	if len(config.Runtime.DebugTargets) > 0 {
-		appArgs = append(appArgs, "-e")
-		appArgs = append(appArgs, config.Runtime.DebugTargets...)
+		appArgs = append(appArgs, "-e", strings.Join(config.Runtime.DebugTargets, ","))
 	}
 	fmt.Fprintf(writer, "Démarrage gx-app dans %s: gx-app.exe %s\n", paths.AppPath, strings.Join(appArgs, " "))
 	if err := openConsole(paths.AppPath, "V10 Lab gx-app", paths.AppExePath, appArgs...); err != nil {
@@ -273,6 +288,32 @@ func ensureSafeDeletePath(target string) error {
 		return fmt.Errorf("refus de supprimer un chemin trop court: %s", target)
 	}
 	return nil
+}
+
+func safeRemoveTempDir(path string, protectedPaths ...string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("refus de supprimer un chemin vide")
+	}
+	clean, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return err
+	}
+	if err := ensureSafeDeletePath(clean); err != nil {
+		return err
+	}
+	for _, protected := range protectedPaths {
+		if strings.TrimSpace(protected) == "" {
+			continue
+		}
+		protectedClean, err := filepath.Abs(filepath.Clean(protected))
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(clean, protectedClean) {
+			return fmt.Errorf("refus de supprimer un chemin protégé: %s", path)
+		}
+	}
+	return os.RemoveAll(clean)
 }
 
 func copyDir(source string, target string) error {

@@ -55,11 +55,6 @@
   },
   "pipeline": [
     {
-      "action": "configure-gedix-cfg",
-      "label": "Configurer gedix.cfg",
-      "params": {}
-    },
-    {
       "action": "start-maquette",
       "label": "Démarrer la maquette",
       "params": {}
