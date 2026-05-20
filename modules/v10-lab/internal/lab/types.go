@@ -1,9 +1,7 @@
 package lab
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,9 +16,9 @@ const (
 	ModuleID   = "v10-lab"
 	ModuleName = "V10 Lab"
 
-	ProductGedixV10 = "gedix-v10"
-	KindSystem      = "system"
-	KindAPI         = "api"
+	GedixProdV10 = "gedix-prod-v10"
+	KindSystem   = "system"
+	KindAPI      = "api"
 )
 
 type Product struct {
@@ -56,18 +54,53 @@ type ActionContext struct {
 }
 
 type Config struct {
-	Name     string         `json:"name"`
-	Product  string         `json:"product"`
-	Release  ReleaseConfig  `json:"release"`
-	API      APIConfig      `json:"api"`
-	Database DatabaseConfig `json:"database"`
-	Services []ServiceSpec  `json:"services"`
-	Pipeline []PipelineStep `json:"pipeline"`
+	Name         string                 `json:"name"`
+	Product      string                 `json:"product"`
+	Release      ReleaseConfig          `json:"release"`
+	Maquette     MaquetteConfig         `json:"maquette"`
+	GedixConfig  GedixConfig            `json:"gedixConfig"`
+	Runtime      RuntimeConfig          `json:"runtime"`
+	API          APIConfig              `json:"api"`
+	Database     DatabaseConfig         `json:"database"`
+	Services     []ServiceSpec          `json:"services"`
+	Pipeline     []PipelineStep         `json:"pipeline"`
+	LegacyExtras map[string]interface{} `json:"-"`
 }
 
 type ReleaseConfig struct {
-	SourcePath string `json:"sourcePath"`
+	ZipPath    string `json:"zipPath"`
+	WorkDir    string `json:"workDir"`
+	Overwrite  bool   `json:"overwrite"`
+	SourcePath string `json:"sourcePath,omitempty"`
+	TargetPath string `json:"targetPath,omitempty"`
+}
+
+type MaquetteConfig struct {
 	TargetPath string `json:"targetPath"`
+	EnvName    string `json:"envName"`
+	AppName    string `json:"appName"`
+}
+
+type GedixConfig struct {
+	FQDN       string                     `json:"fqdn"`
+	Port       int                        `json:"port"`
+	Services   map[string]ServiceDBConfig `json:"services"`
+	Connectors map[string]ConnectorConfig `json:"connectors"`
+}
+
+type ServiceDBConfig struct {
+	DBType    string            `json:"dbType"`
+	DBDSN     string            `json:"dbDsn"`
+	ExtraKeys map[string]string `json:"extraKeys"`
+}
+
+type ConnectorConfig struct {
+	RawConfig string `json:"rawConfig"`
+}
+
+type RuntimeConfig struct {
+	DebugTargets []string `json:"debugTargets"`
+	OpenConsole  bool     `json:"openConsole"`
 }
 
 type APIConfig struct {
@@ -101,6 +134,11 @@ type RegisteredMaquette struct {
 	Path    string `json:"path"`
 }
 
+type DBTemplate struct {
+	Type     string `json:"type"`
+	Template string `json:"template"`
+}
+
 type ValidationError struct {
 	Items []string
 }
@@ -131,151 +169,35 @@ func Info() modulecontract.ModuleInfo {
 		Actions: []modulecontract.ModuleAction{
 			{ID: "products", Name: "Produits", Description: "Liste les produits supportes"},
 			{ID: "actions", Name: "Actions", Description: "Liste les actions disponibles"},
+			{ID: "db-templates", Name: "Templates DB", Description: "Liste les templates de DSN"},
 			{ID: "validate", Name: "Valider", Description: "Valide une configuration JSON"},
-			{ID: "run", Name: "Executer", Description: "Execute fictivement un pipeline"},
+			{ID: "run", Name: "Executer", Description: "Execute un pipeline de maquette"},
 			{ID: "register", Name: "Enregistrer", Description: "Enregistre une maquette localement"},
 			{ID: "list", Name: "Lister", Description: "Liste les maquettes enregistrees"},
+			{ID: "kill-gx-processes", Name: "Taskkill gx-*", Description: "Tue manuellement les processus gx-*"},
 		},
 	}
 }
 
 func Products() []Product {
 	return []Product{
-		{ID: ProductGedixV10, Label: "Gedix V10"},
+		{ID: GedixProdV10, Label: "Gedix prod V10"},
+	}
+}
+
+func DBTemplates() []DBTemplate {
+	return []DBTemplate{
+		{Type: "sqlite", Template: ""},
+		{Type: "mysql", Template: ""},
+		{Type: "postgres", Template: "user= password= dbname= sslmode=disable"},
+		{Type: "mssql", Template: "server=;instance=;database=;port=;user id=;password="},
+		{Type: "oracle", Template: "/@:/"},
 	}
 }
 
 func ProductExists(productID string) bool {
 	for _, product := range Products() {
 		if product.ID == productID {
-			return true
-		}
-	}
-	return false
-}
-
-func Actions() []Action {
-	return []Action{
-		{
-			ID:          "create-env",
-			Label:       "Créer maquette",
-			Description: "Prépare le dossier d’une maquette à partir d’une release.",
-			Kind:        KindSystem,
-			Products:    []string{},
-			Fields: []ActionField{
-				{Name: "releasePath", Label: "Release", Type: "string", Required: true},
-				{Name: "targetPath", Label: "Dossier cible", Type: "string", Required: true},
-				{Name: "overwrite", Label: "Écraser", Type: "bool", Default: false},
-			},
-			Execute: func(ctx ActionContext, params map[string]any) error {
-				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Prépare le dossier %s depuis %s\n", stringParam(params, "targetPath"), stringParam(params, "releasePath"))
-				return nil
-			},
-		},
-		{
-			ID:          "start-services",
-			Label:       "Démarrer services",
-			Description: "Démarre les services/exécutables configurés pour la maquette.",
-			Kind:        KindSystem,
-			Products:    []string{},
-			Fields: []ActionField{
-				{Name: "debugServices", Label: "Services debug", Type: "string[]"},
-				{Name: "services", Label: "Services", Type: "string[]"},
-			},
-			Execute: func(ctx ActionContext, params map[string]any) error {
-				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Démarre les services %v avec debug %v\n", params["services"], params["debugServices"])
-				return nil
-			},
-		},
-		{
-			ID:          "stop-services",
-			Label:       "Arrêter services",
-			Description: "Arrête les services/exécutables de la maquette.",
-			Kind:        KindSystem,
-			Products:    []string{},
-			Fields: []ActionField{
-				{Name: "taskkill", Label: "Forcer taskkill", Type: "bool", Default: false},
-			},
-			Execute: func(ctx ActionContext, params map[string]any) error {
-				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Arrête les services (taskkill=%v)\n", boolParam(params, "taskkill"))
-				return nil
-			},
-		},
-		{
-			ID:          "create-machine-group",
-			Label:       "Créer groupe machine",
-			Description: "Crée fictivement un groupe machine Gedix V10.",
-			Kind:        KindAPI,
-			Products:    []string{ProductGedixV10},
-			Fields: []ActionField{
-				{Name: "code", Label: "Code", Type: "string", Required: true},
-				{Name: "name", Label: "Nom", Type: "string", Required: true},
-			},
-			Execute: func(ctx ActionContext, params map[string]any) error {
-				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Créer groupe machine %s / %s\n", stringParam(params, "code"), stringParam(params, "name"))
-				return nil
-			},
-		},
-		{
-			ID:          "create-machine",
-			Label:       "Créer machine",
-			Description: "Crée fictivement une machine Gedix V10.",
-			Kind:        KindAPI,
-			Products:    []string{ProductGedixV10},
-			Fields: []ActionField{
-				{Name: "code", Label: "Code", Type: "string", Required: true},
-				{Name: "name", Label: "Nom", Type: "string", Required: true},
-				{Name: "groupCode", Label: "Groupe", Type: "string"},
-			},
-			Execute: func(ctx ActionContext, params map[string]any) error {
-				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Créer machine %s / %s\n", stringParam(params, "code"), stringParam(params, "name"))
-				return nil
-			},
-		},
-		{
-			ID:          "create-cnc-folder",
-			Label:       "Créer dossier CN",
-			Description: "Crée fictivement un dossier CN Gedix V10.",
-			Kind:        KindAPI,
-			Products:    []string{ProductGedixV10},
-			Fields: []ActionField{
-				{Name: "machineGroupCode", Label: "Groupe machine", Type: "string", Required: true},
-				{Name: "programCode", Label: "Programme", Type: "string", Required: true},
-				{Name: "programIndex", Label: "Indice", Type: "string", Default: "A"},
-			},
-			Execute: func(ctx ActionContext, params map[string]any) error {
-				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Créer dossier CN %s indice %s pour groupe %s\n", stringParam(params, "programCode"), stringParam(params, "programIndex"), stringParam(params, "machineGroupCode"))
-				return nil
-			},
-		},
-	}
-}
-
-func ActionsForProduct(productID string) []Action {
-	items := []Action{}
-	for _, action := range Actions() {
-		if action.SupportsProduct(productID) {
-			items = append(items, action)
-		}
-	}
-	return items
-}
-
-func FindAction(actionID string) (Action, bool) {
-	for _, action := range Actions() {
-		if action.ID == actionID {
-			return action, true
-		}
-	}
-	return Action{}, false
-}
-
-func (a Action) SupportsProduct(productID string) bool {
-	if len(a.Products) == 0 {
-		return true
-	}
-	for _, product := range a.Products {
-		if product == productID {
 			return true
 		}
 	}
@@ -291,75 +213,20 @@ func LoadConfig(path string) (Config, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return Config{}, err
 	}
+	ApplyDefaults(&config)
 	return config, nil
 }
 
-func ValidateConfig(config Config) error {
-	errors := []string{}
-	if strings.TrimSpace(config.Name) == "" {
-		errors = append(errors, "name: champ requis manquant")
+func ApplyDefaults(config *Config) {
+	if strings.TrimSpace(config.Maquette.AppName) == "" {
+		config.Maquette.AppName = "prod"
 	}
-	if strings.TrimSpace(config.Product) == "" {
-		errors = append(errors, "product: champ requis manquant")
-	} else if !ProductExists(config.Product) {
-		errors = append(errors, fmt.Sprintf("product: produit inconnu %q", config.Product))
+	if config.GedixConfig.Services == nil {
+		config.GedixConfig.Services = map[string]ServiceDBConfig{}
 	}
-	for index, step := range config.Pipeline {
-		action, ok := FindAction(step.Action)
-		if !ok {
-			errors = append(errors, fmt.Sprintf("pipeline[%d].action: action inconnue %q", index, step.Action))
-			continue
-		}
-		if !action.SupportsProduct(config.Product) {
-			errors = append(errors, fmt.Sprintf("pipeline[%d].action: action %q incompatible avec le produit %q", index, step.Action, config.Product))
-		}
-		params := step.Params
-		if params == nil {
-			params = map[string]any{}
-		}
-		for _, field := range action.Fields {
-			value, exists := params[field.Name]
-			if field.Required && !exists {
-				errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: champ requis manquant", index, field.Name))
-				continue
-			}
-			if exists && !fieldValueMatchesType(value, field.Type) {
-				errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: type attendu %s", index, field.Name, field.Type))
-			}
-		}
+	if config.GedixConfig.Connectors == nil {
+		config.GedixConfig.Connectors = map[string]ConnectorConfig{}
 	}
-	if len(errors) > 0 {
-		return ValidationError{Items: errors}
-	}
-	return nil
-}
-
-func RunPipeline(ctx context.Context, config Config, writer io.Writer) error {
-	if err := ValidateConfig(config); err != nil {
-		return err
-	}
-	fmt.Fprintf(writer, "V10 Lab - Exécution maquette %s\n", config.Name)
-	fmt.Fprintf(writer, "Produit: %s\n\n", config.Product)
-	for index, step := range config.Pipeline {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		action, _ := FindAction(step.Action)
-		label := step.Label
-		if strings.TrimSpace(label) == "" {
-			label = action.Label
-		}
-		params := paramsWithDefaults(action, step.Params)
-		fmt.Fprintf(writer, "[%d/%d] %s - %s\n", index+1, len(config.Pipeline), action.ID, label)
-		if err := action.Execute(ActionContext{Writer: writer, Config: config, Step: step}, params); err != nil {
-			return err
-		}
-		fmt.Fprintln(writer)
-	}
-	fmt.Fprintln(writer, "Exécution terminée.")
-	return nil
 }
 
 func MaquettesDir() string {
@@ -368,6 +235,25 @@ func MaquettesDir() string {
 		return filepath.Join("data", ModuleID, "maquettes")
 	}
 	return filepath.Join(layout.DataDir, "maquettes")
+}
+
+func MaquettesFilesDir() string {
+	layout, err := toolboxruntime.ForModule(ModuleID)
+	if err != nil {
+		return filepath.Join("files", ModuleID, "maquettes")
+	}
+	return filepath.Join(layout.FilesDir, "maquettes")
+}
+
+func DefaultMaquetteTargetPath(config Config) string {
+	return filepath.Join(MaquettesFilesDir(), "Gedix_"+safeDirName(config.Name))
+}
+
+func ResolveMaquetteTargetPath(config Config) string {
+	if strings.TrimSpace(config.Maquette.TargetPath) != "" {
+		return config.Maquette.TargetPath
+	}
+	return DefaultMaquetteTargetPath(config)
 }
 
 func RegisterConfig(configPath string) (RegisteredMaquette, error) {
@@ -397,6 +283,12 @@ func RegisterConfig(configPath string) (RegisteredMaquette, error) {
 	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath}, nil
 }
 
+func LoadRegisteredConfig(name string) (Config, string, error) {
+	path := filepath.Join(MaquettesDir(), safeDirName(name), "maquette.json")
+	config, err := LoadConfig(path)
+	return config, path, err
+}
+
 func ListMaquettes() ([]RegisteredMaquette, error) {
 	root := MaquettesDir()
 	entries, err := os.ReadDir(root)
@@ -424,58 +316,6 @@ func ListMaquettes() ([]RegisteredMaquette, error) {
 	return items, nil
 }
 
-func paramsWithDefaults(action Action, params map[string]any) map[string]any {
-	next := map[string]any{}
-	for key, value := range params {
-		next[key] = value
-	}
-	for _, field := range action.Fields {
-		if _, exists := next[field.Name]; !exists && field.Default != nil {
-			next[field.Name] = field.Default
-		}
-	}
-	return next
-}
-
-func fieldValueMatchesType(value any, expected string) bool {
-	switch expected {
-	case "", "any":
-		return true
-	case "string":
-		_, ok := value.(string)
-		return ok
-	case "bool":
-		_, ok := value.(bool)
-		return ok
-	case "string[]":
-		switch items := value.(type) {
-		case []any:
-			for _, item := range items {
-				if _, ok := item.(string); !ok {
-					return false
-				}
-			}
-			return true
-		case []string:
-			return true
-		default:
-			return false
-		}
-	default:
-		return true
-	}
-}
-
-func stringParam(params map[string]any, key string) string {
-	value, _ := params[key].(string)
-	return value
-}
-
-func boolParam(params map[string]any, key string) bool {
-	value, _ := params[key].(bool)
-	return value
-}
-
 func safeDirName(value string) string {
 	name := strings.TrimSpace(value)
 	name = strings.NewReplacer("\\", "-", "/", "-", ":", "", "*", "", "?", "", `"`, "", "<", "", ">", "", "|", "").Replace(name)
@@ -488,4 +328,14 @@ func safeDirName(value string) string {
 		return "sans-nom"
 	}
 	return name
+}
+
+func stringParam(params map[string]any, key string) string {
+	value, _ := params[key].(string)
+	return value
+}
+
+func boolParam(params map[string]any, key string) bool {
+	value, _ := params[key].(bool)
+	return value
 }

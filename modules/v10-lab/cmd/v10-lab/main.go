@@ -24,10 +24,12 @@ func main() {
 	rootCmd.AddCommand(infoCommand())
 	rootCmd.AddCommand(productsCommand())
 	rootCmd.AddCommand(actionsCommand())
+	rootCmd.AddCommand(dbTemplatesCommand())
 	rootCmd.AddCommand(validateCommand())
 	rootCmd.AddCommand(runCommand())
 	rootCmd.AddCommand(registerCommand())
 	rootCmd.AddCommand(listCommand())
+	rootCmd.AddCommand(killGXProcessesCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -91,6 +93,23 @@ func actionsCommand() *cobra.Command {
 	return command
 }
 
+func dbTemplatesCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "db-templates",
+		Short: "Liste les templates DB",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			templates := lab.DBTemplates()
+			if jsonOutput {
+				return printValue(templates)
+			}
+			for _, item := range templates {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s -> %s\n", item.Type, item.Template)
+			}
+			return nil
+		},
+	}
+}
+
 func validateCommand() *cobra.Command {
 	var configPath string
 	command := &cobra.Command{
@@ -121,9 +140,10 @@ func validateCommand() *cobra.Command {
 
 func runCommand() *cobra.Command {
 	var configPath string
+	var name string
 	command := &cobra.Command{
 		Use:   "run [action]",
-		Short: "Execute fictivement un pipeline",
+		Short: "Execute un pipeline de maquette",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if configPath == "" && len(args) == 1 {
 				return printValue(modulecontract.ActionResponse{
@@ -135,7 +155,13 @@ func runCommand() *cobra.Command {
 					},
 				})
 			}
-			config, err := lab.LoadConfig(configPath)
+			var config lab.Config
+			var err error
+			if name != "" {
+				config, _, err = lab.LoadRegisteredConfig(name)
+			} else {
+				config, err = lab.LoadConfig(configPath)
+			}
 			if err != nil {
 				return err
 			}
@@ -158,6 +184,7 @@ func runCommand() *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&configPath, "config", "", "path to maquette config JSON")
+	command.Flags().StringVar(&name, "name", "", "registered maquette name")
 	return command
 }
 
@@ -205,6 +232,19 @@ func listCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func killGXProcessesCommand() *cobra.Command {
+	var force bool
+	command := &cobra.Command{
+		Use:   "kill-gx-processes",
+		Short: "Tue manuellement tous les processus gx-*",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return lab.KillGXProcesses(cmd.OutOrStdout(), force, true)
+		},
+	}
+	command.Flags().BoolVar(&force, "force", false, "skip confirmation")
+	return command
 }
 
 func printValue(value any) error {

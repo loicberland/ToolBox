@@ -1,0 +1,68 @@
+{
+  "name": "ticket-T5808",
+  "product": "gedix-prod-v10",
+  "release": {
+    "zipPath": "C:\\Users\\LB\\Downloads\\gx.R2026-21-__lmba-demo__-1.zip",
+    "workDir": "",
+    "overwrite": false
+  },
+  "maquette": {
+    "targetPath": "",
+    "envName": "demo",
+    "appName": "prod"
+  },
+  "gedixConfig": {
+    "fqdn": "PORTLB",
+    "port": 80,
+    "services": {
+      "auth": {
+        "dbType": "",
+        "dbDsn": ""
+      },
+      "filestore": {
+        "dbType": "",
+        "dbDsn": ""
+      },
+      "entreprise": {
+        "dbType": "",
+        "dbDsn": ""
+      },
+      "etl": {
+        "dbType": "",
+        "dbDsn": ""
+      },
+      "dnc": {
+        "dbType": "",
+        "dbDsn": ""
+      },
+      "config": {
+        "dbType": "",
+        "dbDsn": ""
+      }
+    },
+    "connectors": {
+      "connector-focas-01": {
+        "rawConfig": "focas-host=\"192.168.85.177\""
+      }
+    }
+  },
+  "runtime": {
+    "debugTargets": [
+      "auth",
+      "connector-focas-01"
+    ],
+    "openConsole": true
+  },
+  "pipeline": [
+    {
+      "action": "configure-gedix-cfg",
+      "label": "Configurer gedix.cfg",
+      "params": {}
+    },
+    {
+      "action": "start-maquette",
+      "label": "Démarrer la maquette",
+      "params": {}
+    }
+  ]
+}

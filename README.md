@@ -260,6 +260,16 @@ Phase 1 :
 - execution fictive de pipeline
 - base multi-maquettes
 
+Phase 2 - Actions systeme Gedix :
+
+- creation d'une maquette depuis une release ZIP
+- detection du dossier Gedix, de `env_*` et de `app_prod`
+- generation si besoin puis modification controlee du `gedix.cfg`
+- demarrage standard de la maquette
+- demarrage avec exclusions pour debug
+- lancement de services/connecteurs en debug
+- commande manuelle `taskkill gx-*`
+
 Exemples :
 
 ```bash
@@ -270,7 +280,21 @@ go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket
 go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808.json
 go run ./modules/v10-lab/cmd/v10-lab register --config ./examples/v10-lab/ticket-T5808.json
 go run ./modules/v10-lab/cmd/v10-lab list
+go run ./modules/v10-lab/cmd/v10-lab db-templates
+go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808-system.json
+go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808-system.json
+go run ./modules/v10-lab/cmd/v10-lab kill-gx-processes --force
 ```
+
+Debug Gedix :
+
+```bat
+gx-app.exe run -e auth connector-focas-01
+gx-auth.exe listen --debug -v2
+connector-focas-01\gx-connector.exe listen --debug -v2
+```
+
+`kill-gx-processes` est volontairement manuel et ne doit pas etre appele automatiquement par `stop-maquette`.
 
 ## Build
 
