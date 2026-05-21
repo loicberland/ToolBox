@@ -88,7 +88,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(writer, "Démarrage gx-front dans %s\n", paths.GedixRoot)
+	fmt.Fprintf(writer, "Démarrage gx-front : %s listen\n", paths.FrontExePath)
 	if err := openConsole(paths.GedixRoot, "V10 Lab gx-front", paths.FrontExePath, "listen"); err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 	if len(config.Runtime.DebugTargets) > 0 {
 		appArgs = append(appArgs, "-e", strings.Join(config.Runtime.DebugTargets, ","))
 	}
-	fmt.Fprintf(writer, "Démarrage gx-app dans %s: gx-app.exe %s\n", paths.AppPath, strings.Join(appArgs, " "))
+	fmt.Fprintf(writer, "Démarrage gx-app : %s %s\n", paths.AppExePath, strings.Join(appArgs, " "))
 	if err := openConsole(paths.AppPath, "V10 Lab gx-app", paths.AppExePath, appArgs...); err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(writer, "Démarrage debug %s (%s)\n", debugTarget.Name, debugTarget.Kind)
+		fmt.Fprintf(writer, "Démarrage debug %s (%s) : %s listen --debug -v2\n", debugTarget.Name, debugTarget.Kind, debugTarget.ExePath)
 		if err := openConsole(debugTarget.WorkDir, "V10 Lab debug "+debugTarget.Name, debugTarget.ExePath, "listen", "--debug", "-v2"); err != nil {
 			return err
 		}
@@ -160,7 +160,7 @@ func openConsole(dir string, title string, exe string, args ...string) error {
 }
 
 func quoteCmdArg(value string) string {
-	if strings.ContainsAny(value, " \t&()[]{}^=;!'+,`~") {
+	if strings.ContainsAny(value, " \t&()[]{}^=;!'`~") {
 		return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
 	}
 	return value

@@ -116,6 +116,15 @@ func TestDetectEnvAndDebugTargets(t *testing.T) {
 	}
 }
 
+func TestQuoteCmdArgDoesNotQuoteDebugTargetList(t *testing.T) {
+	if got := quoteCmdArg("auth,connector-focas-01"); got != "auth,connector-focas-01" {
+		t.Fatalf("debug target list should not be quoted, got %q", got)
+	}
+	if got := quoteCmdArg(`D:\Program Files\Gedix\gx-app.exe`); got != `"D:\Program Files\Gedix\gx-app.exe"` {
+		t.Fatalf("path with spaces should be quoted, got %q", got)
+	}
+}
+
 func TestCfgUpdatesRootPortDBAndSQLite(t *testing.T) {
 	content := minimalGedixCfg()
 	section := "environments.demo.applications.prod.services.auth"

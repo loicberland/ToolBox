@@ -55,6 +55,16 @@
   },
   "pipeline": [
     {
+      "action": "create-env",
+      "label": "Créer maquette",
+      "params": {}
+    },
+    {
+      "action": "configure-gedix-cfg",
+      "label": "Configurer gedix.cfg",
+      "params": {}
+    },
+    {
       "action": "start-maquette",
       "label": "Démarrer la maquette",
       "params": {}
