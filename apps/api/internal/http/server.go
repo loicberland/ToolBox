@@ -15,6 +15,7 @@ import (
 	testsheetapi "toolBox/modules/test-sheet/pkg/httpapi"
 	"toolBox/modules/test-sheet/pkg/repository"
 	"toolBox/modules/test-sheet/pkg/service"
+	v10labapi "toolBox/modules/v10-lab/pkg/httpapi"
 	"toolBox/pkg/modulecontract"
 	"toolBox/pkg/toolboxruntime"
 
@@ -32,8 +33,15 @@ type Server struct {
 func NewServer(runtimeLayout toolboxruntime.Layout) (*Server, error) {
 	_ = os.Setenv(toolboxruntime.EnvRoot, runtimeLayout.RootDir)
 	testSheetLayout := runtimeLayout.Module("test-sheet")
+	v10LabLayout := runtimeLayout.Module("v10-lab")
 	if err := testSheetLayout.EnsureBaseDirs(); err != nil {
 		return nil, fmt.Errorf("init test-sheet runtime dirs: %w", err)
+	}
+	if err := v10LabLayout.EnsureBaseDirs(); err != nil {
+		return nil, fmt.Errorf("init v10-lab runtime dirs: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(v10LabLayout.DataDir, "maquettes"), 0755); err != nil {
+		return nil, fmt.Errorf("init v10-lab maquettes dir: %w", err)
 	}
 	if err := os.MkdirAll(testSheetFilesDocumentsDir(testSheetLayout), 0755); err != nil {
 		return nil, fmt.Errorf("init test-sheet document dir: %w", err)
@@ -79,6 +87,7 @@ func ListenAndServe(configPath string) error {
 func (s *Server) Routes() http.Handler {
 	r := mux.NewRouter()
 	testsheetapi.NewHandler(service.New(s.testSheetRepo)).Register(r)
+	v10labapi.NewHandler().Register(r)
 	r.HandleFunc("/api/health", s.health).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules", s.listModules).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules/{moduleId}", s.getModule).Methods(http.MethodGet)

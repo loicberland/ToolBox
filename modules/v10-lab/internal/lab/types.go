@@ -22,8 +22,10 @@ const (
 )
 
 type Product struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Label       string `json:"label,omitempty"`
 }
 
 type ActionField struct {
@@ -181,7 +183,7 @@ func Info() modulecontract.ModuleInfo {
 
 func Products() []Product {
 	return []Product{
-		{ID: GedixProdV10, Label: "Gedix prod V10"},
+		{ID: GedixProdV10, Name: "Gedix V10", Description: "Produit Gedix V10", Label: "Gedix V10"},
 	}
 }
 
@@ -202,6 +204,42 @@ func ProductExists(productID string) bool {
 		}
 	}
 	return false
+}
+
+func SaveRegisteredConfig(config Config) (RegisteredMaquette, error) {
+	ApplyDefaults(&config)
+	if err := ValidateConfig(config); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	name := safeDirName(config.Name)
+	targetDir := filepath.Join(MaquettesDir(), name)
+	if err := os.MkdirAll(filepath.Join(targetDir, "data"), 0755); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	if err := os.MkdirAll(filepath.Join(targetDir, "logs"), 0755); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	payload, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return RegisteredMaquette{}, err
+	}
+	targetPath := filepath.Join(targetDir, "maquette.json")
+	if err := os.WriteFile(targetPath, append(payload, '\n'), 0644); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath}, nil
+}
+
+func DeleteRegisteredConfig(name string) error {
+	path := filepath.Join(MaquettesDir(), safeDirName(name), "maquette.json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func RegisteredLogsDir(name string) string {
+	return filepath.Join(MaquettesDir(), safeDirName(name), "logs")
 }
 
 func LoadConfig(path string) (Config, error) {

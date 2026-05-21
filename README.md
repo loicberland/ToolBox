@@ -241,7 +241,7 @@ go run ./modules/test-sheet/cmd/test-sheet run init-db --json
 
 go run ./modules/v10-lab/cmd/v10-lab info --json
 go run ./modules/v10-lab/cmd/v10-lab products
-go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-v10
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-prod-v10
 go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808.json
 go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808.json
 go run ./modules/v10-lab/cmd/v10-lab register --config ./examples/v10-lab/ticket-T5808.json
@@ -270,12 +270,29 @@ Phase 2 - Actions systeme Gedix :
 - lancement de services/connecteurs en debug
 - commande manuelle `taskkill gx-*`
 
+Phase 3 - Interface V10 Lab :
+
+- page web V10 Lab
+- liste des maquettes
+- creation / edition d'une maquette
+- edition de la configuration Gedix
+- edition services/connecteurs
+- builder graphique de pipeline
+- validation et lancement depuis le front
+- consultation des logs
+
+Notes phase 3 :
+
+- le chemin ZIP release est saisi manuellement pour le moment
+- la suppression d'une maquette supprime seulement l'enregistrement V10 Lab, pas le dossier Gedix physique
+- `taskkill gx-*` reste une action manuelle avec confirmation
+
 Exemples :
 
 ```bash
 go run ./modules/v10-lab/cmd/v10-lab products
-go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-v10
-go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-v10 --json
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-prod-v10
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-prod-v10 --json
 go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808.json
 go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808.json
 go run ./modules/v10-lab/cmd/v10-lab register --config ./examples/v10-lab/ticket-T5808.json

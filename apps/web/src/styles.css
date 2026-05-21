@@ -1489,6 +1489,213 @@ textarea {
   font-weight: 800;
 }
 
+.v10-lab-workspace {
+  display: grid;
+  gap: 18px;
+}
+
+.v10-section {
+  display: grid;
+  gap: 16px;
+}
+
+.v10-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.v10-form-grid > .checkbox-row {
+  grid-column: auto;
+}
+
+.checkbox-row {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.v10-table {
+  display: grid;
+  gap: 8px;
+}
+
+.v10-table-head,
+.v10-table-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(180px, 1.4fr) 82px minmax(145px, 1fr) minmax(260px, auto);
+  gap: 12px;
+  align-items: center;
+}
+
+.v10-table-head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.v10-table-row {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.v10-table-row.active {
+  border-color: rgba(37, 99, 235, 0.55);
+  background: #eff6ff;
+}
+
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v10-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.v10-tabs button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.v10-tabs button.active {
+  border-color: rgba(37, 99, 235, 0.6);
+  background: #eff6ff;
+  color: var(--primary-dark);
+}
+
+.v10-service-list,
+.v10-connector-list,
+.v10-pipeline,
+.v10-execution,
+.v10-json-panel,
+.v10-extra-keys {
+  display: grid;
+  gap: 12px;
+}
+
+.v10-service-row,
+.v10-connector-row,
+.v10-pipeline-step {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface-soft);
+}
+
+.v10-service-config {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.v10-extra-keys,
+.v10-extra-keys .section-header {
+  grid-column: 1 / -1;
+}
+
+.v10-key-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 1fr) auto;
+  gap: 8px;
+}
+
+.v10-connector-row {
+  grid-template-columns: minmax(180px, 0.45fr) minmax(260px, 1fr) auto;
+  align-items: start;
+}
+
+.v10-pipeline-step {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
+.v10-step-order {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--primary-dark);
+  font-weight: 900;
+}
+
+.v10-step-body {
+  display: grid;
+  gap: 12px;
+}
+
+.v10-output {
+  min-height: 120px;
+  max-height: 420px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+.v10-log-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.v10-log-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.v10-log-list button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-soft);
+  color: var(--text);
+  text-align: left;
+}
+
+.v10-log-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.v10-json-panel textarea {
+  min-height: 480px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.whitespace {
+  white-space: pre-wrap;
+}
+
 .error {
   border: 1px solid var(--danger-soft);
   border-radius: 8px;
@@ -1602,6 +1809,14 @@ textarea {
 
   .sheet-form,
   .step-form,
+  .v10-form-grid,
+  .v10-table-head,
+  .v10-table-row,
+  .v10-service-config,
+  .v10-key-row,
+  .v10-connector-row,
+  .v10-pipeline-step,
+  .v10-log-layout,
   .plan-toolbar,
   .document-upload-row,
   .document-list-item,

@@ -25,9 +25,10 @@ func NewRegistry() *Registry {
 				{ID: "products", Name: "Produits", Description: "Liste les produits supportes"},
 				{ID: "actions", Name: "Actions", Description: "Liste les actions disponibles"},
 				{ID: "validate", Name: "Valider", Description: "Valide une configuration JSON"},
-				{ID: "run", Name: "Executer", Description: "Execute fictivement un pipeline"},
+				{ID: "run", Name: "Executer", Description: "Execute un pipeline de maquette"},
 				{ID: "register", Name: "Enregistrer", Description: "Enregistre une maquette localement"},
 				{ID: "list", Name: "Lister", Description: "Liste les maquettes enregistrees"},
+				{ID: "kill-gx-processes", Name: "Taskkill gx-*", Description: "Tue manuellement les processus gx-*"},
 			},
 		},
 	}

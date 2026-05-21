@@ -4,6 +4,7 @@ import { TestPlanEditPage } from './pages/TestPlanEditPage';
 import { TestPlanListPage } from './pages/TestPlanListPage';
 import { TestRunPage } from './pages/TestRunPage';
 import { TestRunReportPage } from './pages/TestRunReportPage';
+import { V10LabPage } from './pages/V10LabPage';
 
 type View =
   | { name: 'module' }
@@ -84,13 +85,14 @@ const App = () => {
               />
             )}
           </>
+        ) : selectedModuleId === 'v10-lab' ? (
+          <V10LabPage />
         ) : (
           selectedModule && (
             <>
               <header>
                 <h2>{selectedModule.name}</h2>
                 <p>{selectedModule.description}</p>
-                {selectedModule.id === 'v10-lab' && <p className="muted">Phase 1 - socle en cours</p>}
               </header>
               <div className="actions">
                 {selectedModule.actions.map((action) => (
