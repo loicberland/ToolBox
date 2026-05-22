@@ -27,6 +27,11 @@ type ConnectorFormRow = {
   name: string;
   rawConfig: string;
 };
+type ExtraKeyRow = {
+  id: string;
+  key: string;
+  value: string;
+};
 
 export function V10LabPage() {
   const [products, setProducts] = useState<V10Product[]>([]);
@@ -44,6 +49,7 @@ export function V10LabPage() {
   const [defaultTargetPath, setDefaultTargetPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [runState, setRunState] = useState<RunState>('idle');
+  const [isDirty, setIsDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -57,9 +63,14 @@ export function V10LabPage() {
   useEffect(() => {
     if (config) {
       setJsonText(JSON.stringify(config, null, 2));
+    }
+  }, [config]);
+
+  useEffect(() => {
+    if (config) {
       void loadActions(config.product);
     }
-  }, [config?.name, config?.product]);
+  }, [config?.product]);
 
   useEffect(() => {
     void loadDefaultTarget(showCreate ? draft.name : config?.name ?? '');
@@ -107,6 +118,7 @@ export function V10LabPage() {
       const loaded = normalizeConfig(await v10LabApi.getMaquette(name));
       setSelectedName(loaded.name);
       setConfig(loaded);
+      setIsDirty(false);
       setActiveTab(m.tabs.general);
       setExecution(null);
       setSelectedLog('');
@@ -131,20 +143,25 @@ export function V10LabPage() {
     });
   }
 
-  async function saveCurrent() {
+  async function saveCurrent(): Promise<boolean> {
     if (!config) {
-      return;
+      return true;
     }
     const validation = validateConfig(config);
     if (validation) {
       setError(validation);
-      return;
+      return false;
     }
+    let saved = false;
     await run(async () => {
-      await v10LabApi.updateMaquette(config.name, normalizeConfig(config));
+      const next = normalizeConfig(await v10LabApi.updateMaquette(config.name, normalizeConfig(config)));
+      setConfig(next);
+      setIsDirty(false);
       await reloadList();
       setMessage(m.saved);
+      saved = true;
     });
+    return saved;
   }
 
   async function validateCurrent(name = selectedName) {
@@ -203,11 +220,11 @@ export function V10LabPage() {
   }
 
   async function killGXProcesses() {
+    setConfirmKill(false);
     await run(async () => {
       const result = await v10LabApi.killGXProcesses();
-      setConfirmKill(false);
       setExecution(result);
-      setMessage('Taskkill gx-* terminé.');
+      setMessage(m.killFinished);
     });
   }
 
@@ -217,8 +234,9 @@ export function V10LabPage() {
     }
     try {
       const parsed = normalizeConfig(JSON.parse(jsonText) as V10Config);
-      setConfig(parsed);
-      await v10LabApi.updateMaquette(config.name, parsed);
+      const saved = normalizeConfig(await v10LabApi.updateMaquette(config.name, parsed));
+      setConfig(saved);
+      setIsDirty(false);
       await reloadList();
       setMessage(m.jsonSaved);
       setError('');
@@ -236,7 +254,13 @@ export function V10LabPage() {
     });
   }
 
-  function closeMaquette() {
+  async function closeMaquette() {
+    if (isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
+    }
     setSelectedName('');
     setConfig(null);
     setExecution(null);
@@ -247,8 +271,14 @@ export function V10LabPage() {
 
   async function toggleMaquette(name: string) {
     if (selectedName === name) {
-      closeMaquette();
+      await closeMaquette();
       return;
+    }
+    if (config && isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
     }
     await openMaquette(name);
   }
@@ -269,7 +299,7 @@ export function V10LabPage() {
           connectors[connector.name] = { rawConfig: connector.rawConfig };
         }
       }
-      setConfig({
+      updateConfig({
         ...config,
         maquette: { ...config.maquette, envName: result.envName || config.maquette.envName, appName: result.appName || config.maquette.appName },
         gedixConfig: { ...config.gedixConfig, connectors },
@@ -290,6 +320,11 @@ export function V10LabPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function updateConfig(next: V10Config) {
+    setConfig(next);
+    setIsDirty(true);
   }
 
   return (
@@ -362,7 +397,7 @@ export function V10LabPage() {
               <p className="muted">{selectedSummary?.targetPath ?? config.maquette.targetPath}</p>
             </div>
             <div className="button-row end">
-              <Button type="button" variant="secondary" onClick={closeMaquette} disabled={busy}>{m.close}</Button>
+              <Button type="button" variant="secondary" onClick={() => void closeMaquette()} disabled={busy}>{m.close}</Button>
               <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
               <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
               <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
@@ -377,13 +412,13 @@ export function V10LabPage() {
             ))}
           </div>
 
-          {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} defaultTargetPath={defaultTargetPath} onChange={setConfig} onSelectZip={selectReleaseZip} />}
-          {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={setConfig} />}
-          {activeTab === m.tabs.services && <ServicesForm config={config} templates={templates} onChange={setConfig} />}
-          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} onChange={setConfig} onScanCfg={(file) => void scanCfg(file)} />}
+          {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
+          {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
+          {activeTab === m.tabs.services && <ServicesForm config={config} templates={templates} onChange={updateConfig} />}
+          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} onChange={updateConfig} onScanCfg={(file) => void scanCfg(file)} />}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
-              <PipelineBuilder config={config} actions={actions} onChange={setConfig} />
+              <PipelineBuilder config={config} actions={actions} onChange={updateConfig} />
             </LocalErrorBoundary>
           )}
           {activeTab === m.tabs.execution && (
@@ -472,7 +507,45 @@ function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, on
         {m.overwriteLabel}
       </label>
       <p className="muted v10-help-text">{m.overwriteHelp}</p>
+      {!creating && <DebugTargetsEditor config={config} onChange={onChange} />}
       {creating && <GedixForm config={config} onChange={onChange} compact />}
+    </div>
+  );
+}
+
+function DebugTargetsEditor({ config, onChange }: { config: V10Config; onChange: (config: V10Config) => void }) {
+  const [selected, setSelected] = useState('');
+  const options = [...serviceNames, ...Object.keys(config.gedixConfig.connectors ?? {})]
+    .filter((item, index, items) => items.indexOf(item) === index)
+    .filter((item) => !config.runtime.debugTargets.includes(item));
+  return (
+    <div className="v10-debug-targets">
+      <h4>{m.debugTargets}</h4>
+      <div className="v10-file-row">
+        <select value={selected} onChange={(event) => setSelected(event.target.value)}>
+          <option value="">{m.chooseDebugTarget}</option>
+          {options.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={!selected}
+          onClick={() => {
+            onChange({ ...config, runtime: { ...config.runtime, debugTargets: [...config.runtime.debugTargets, selected] } });
+            setSelected('');
+          }}
+        >
+          {m.addDebugTarget}
+        </Button>
+      </div>
+      <div className="button-row">
+        {config.runtime.debugTargets.map((target) => (
+          <Button key={target} type="button" size="sm" variant="secondary" onClick={() => onChange({ ...config, runtime: { ...config.runtime, debugTargets: config.runtime.debugTargets.filter((item) => item !== target) } })}>
+            {target} x
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -506,8 +579,9 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
     <div className="v10-service-list">
       {serviceNames.map((name) => {
         const disabled = noDatabaseServices.has(name);
-        const service = config.gedixConfig.services[name];
-        const enabled = Boolean(service);
+        const existingService = config.gedixConfig.services[name];
+        const service = existingService ?? { dbType: '', dbDsn: '', extraKeys: {} };
+        const enabled = Boolean(existingService?.dbType);
         return (
           <div className="v10-service-row" key={name}>
             <div>
@@ -540,11 +614,11 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
                         {templates.filter((template) => template.template).map((template) => <option key={template.type} value={template.template}>{template.type}</option>)}
                       </select>
                     </label>
-                    <ExtraKeysEditor service={service!} onChange={(next) => updateService(name, next)} />
                   </div>
                 )}
               </>
             )}
+            <ExtraKeysEditor service={service} onChange={(next) => updateService(name, next)} />
           </div>
         );
       })}
@@ -553,18 +627,35 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
 }
 
 function ExtraKeysEditor({ service, onChange }: { service: ServiceDBConfig; onChange: (service: ServiceDBConfig) => void }) {
-  const entries = Object.entries(service.extraKeys ?? {});
+  const [rows, setRows] = useState<ExtraKeyRow[]>(() => extraKeyRowsFromService(service));
+
+  useEffect(() => {
+    setRows(extraKeyRowsFromService(service));
+  }, [service.extraKeys]);
+
+  const commitRows = (nextRows: ExtraKeyRow[]) => {
+    setRows(nextRows);
+    const extraKeys: Record<string, string> = {};
+    for (const row of nextRows) {
+      const key = row.key.trim();
+      if (key) {
+        extraKeys[key] = row.value;
+      }
+    }
+    onChange({ ...service, extraKeys });
+  };
+
   return (
     <div className="v10-extra-keys">
       <div className="section-header compact">
         <h4>{m.extraKeys}</h4>
-        <Button type="button" size="sm" variant="secondary" onClick={() => onChange({ ...service, extraKeys: { ...(service.extraKeys ?? {}), '': '' } })}>{messages.common.add}</Button>
+        <Button type="button" size="sm" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), key: '', value: '' }])}>{m.addExtraKey}</Button>
       </div>
-      {entries.map(([key, value], index) => (
-        <div className="v10-key-row" key={`${key}-${index}`}>
-          <input value={key} placeholder={m.key} onChange={(event) => replaceExtraKey(service, key, event.target.value, value, onChange)} />
-          <input value={value} placeholder={m.value} onChange={(event) => onChange({ ...service, extraKeys: { ...(service.extraKeys ?? {}), [key]: event.target.value } })} />
-          <Button type="button" size="sm" variant="danger" onClick={() => removeExtraKey(service, key, onChange)}>{m.delete}</Button>
+      {rows.map((row) => (
+        <div className="v10-key-row" key={row.id}>
+          <input value={row.key} placeholder={m.extraKeyName} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, key: event.target.value } : item))} />
+          <input value={row.value} placeholder={m.extraKeyValue} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} />
+          <Button type="button" size="sm" variant="danger" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
       ))}
     </div>
@@ -651,9 +742,6 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
   };
   return (
     <div className="v10-pipeline">
-      <div className="button-row">
-        <Button type="button" variant="secondary" onClick={() => onChange({ ...config, pipeline: [...(config.pipeline ?? []), { action: actions[0]?.id ?? '', label: actions[0]?.label ?? '', params: {} }] })}>{m.addStep}</Button>
-      </div>
       {(config.pipeline ?? []).map((step, index) => {
         const action = byID[step.action];
         const fields = action?.fields ?? [];
@@ -675,6 +763,7 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
                   <input value={step.label} onChange={(event) => updateStep(index, { ...step, label: event.target.value })} />
                 </label>
               </div>
+              {step.action === 'create-env' && <p className="readonly-notice">{m.actionUsesGeneralSettings}</p>}
               {fields.length > 0 && (
                 <div className="form-grid v10-form-grid">
                   {fields.map((field) => (
@@ -696,6 +785,9 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
           </div>
         );
       })}
+      <div className="button-row">
+        <Button type="button" variant="secondary" onClick={() => onChange({ ...config, pipeline: [...(config.pipeline ?? []), { action: actions[0]?.id ?? '', label: actions[0]?.label ?? '', params: {} }] })}>{m.addAction}</Button>
+      </div>
     </div>
   );
 }
@@ -828,21 +920,16 @@ function validateConfig(config: V10Config): string {
   return '';
 }
 
-function replaceExtraKey(service: ServiceDBConfig, oldKey: string, nextKey: string, value: string, onChange: (service: ServiceDBConfig) => void) {
-  const next = { ...(service.extraKeys ?? {}) };
-  delete next[oldKey];
-  next[nextKey] = value;
-  onChange({ ...service, extraKeys: next });
-}
-
-function removeExtraKey(service: ServiceDBConfig, key: string, onChange: (service: ServiceDBConfig) => void) {
-  const next = { ...(service.extraKeys ?? {}) };
-  delete next[key];
-  onChange({ ...service, extraKeys: next });
-}
-
 function formatDate(value: string) {
   return new Date(value).toLocaleString('fr-FR');
+}
+
+function extraKeyRowsFromService(service: ServiceDBConfig): ExtraKeyRow[] {
+  return Object.entries(service.extraKeys ?? {}).map(([key, value]) => ({
+    id: makeID(),
+    key,
+    value,
+  }));
 }
 
 function filepathExt(filename: string) {

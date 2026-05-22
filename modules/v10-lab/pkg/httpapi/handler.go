@@ -103,7 +103,7 @@ func (h *Handler) actions(w http.ResponseWriter, r *http.Request) {
 	if product != "" {
 		actions = lab.ActionsForProduct(product)
 	}
-	writeJSON(w, http.StatusOK, actions)
+	writeJSON(w, http.StatusOK, pipelineActions(actions))
 }
 
 func (h *Handler) dbTemplates(w http.ResponseWriter, _ *http.Request) {
@@ -181,8 +181,12 @@ func (h *Handler) updateMaquette(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "le renommage de maquette n'est pas disponible dans cette phase"})
 		return
 	}
-	item, err := lab.SaveRegisteredConfig(config)
-	respond(w, item, err)
+	if _, err := lab.SaveRegisteredConfig(config); err != nil {
+		respondError(w, err)
+		return
+	}
+	saved, _, err := lab.LoadRegisteredConfig(config.Name)
+	respond(w, saved, err)
 }
 
 func (h *Handler) deleteMaquette(w http.ResponseWriter, r *http.Request) {
@@ -503,4 +507,24 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func pipelineActions(actions []lab.Action) []lab.Action {
+	visible := map[string]bool{
+		"create-env":          true,
+		"configure-gedix-cfg": true,
+		"start-maquette":      true,
+		"update-env":          true,
+	}
+	items := []lab.Action{}
+	for _, action := range actions {
+		if !visible[action.ID] {
+			continue
+		}
+		if action.ID == "create-env" || action.ID == "start-maquette" {
+			action.Fields = nil
+		}
+		items = append(items, action)
+	}
+	return items
 }

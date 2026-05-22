@@ -54,19 +54,23 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
 		return err
 	}
-	fmt.Fprintf(ctx.Writer, "Décompression release: %s\n", zipPath)
+	fmt.Fprintf(ctx.Writer, "[INFO] Décompression de la release : %s\n", zipPath)
 	if err := unzip(zipPath, extractDir); err != nil {
 		return err
 	}
+	fmt.Fprintf(ctx.Writer, "[INFO] Release dézippée dans : %s\n", extractDir)
 	releaseRoot, err := findReleaseRoot(extractDir)
 	if err != nil {
 		return err
 	}
 	gxPath := filepath.Join(releaseRoot, "gx.exe")
-	fmt.Fprintf(ctx.Writer, "Installation Gedix: %s install --write-config\n", gxPath)
-	if err := runInstallCommand(releaseRoot, gxPath); err != nil {
+	fmt.Fprintf(ctx.Writer, "[INFO] Lancement : %s install --write-config\n", gxPath)
+	fmt.Fprintf(ctx.Writer, "[INFO] Répertoire de travail : %s\n", releaseRoot)
+	fmt.Fprintln(ctx.Writer, "[INFO] Installation Gedix en cours, cette étape peut durer plusieurs minutes...")
+	if err := runInstallCommand(releaseRoot, gxPath, ctx.Writer); err != nil {
 		return err
 	}
+	fmt.Fprintln(ctx.Writer, "[INFO] Installation terminée.")
 	gedixDir, err := findGedixDirectory(releaseRoot)
 	if err != nil {
 		return err
@@ -74,10 +78,12 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	if err := prepareTargetDirectory(target, overwrite); err != nil {
 		return err
 	}
-	fmt.Fprintf(ctx.Writer, "Copie maquette: %s -> %s\n", gedixDir, target)
+	fmt.Fprintf(ctx.Writer, "[INFO] Copie du dossier Gedix vers : %s\n", target)
+	fmt.Fprintf(ctx.Writer, "[INFO] Source Gedix : %s\n", gedixDir)
 	if err := copyDir(gedixDir, target); err != nil {
 		return err
 	}
+	fmt.Fprintln(ctx.Writer, "[INFO] Copie terminée.")
 	fmt.Fprintf(ctx.Writer, "Maquette créée: %s\n", target)
 	success = true
 	return nil
@@ -88,13 +94,18 @@ func StartMaquette(config Config, writer io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if len(config.Runtime.DebugTargets) > 0 {
+		fmt.Fprintf(writer, "[INFO] Cibles debug : %s\n", strings.Join(config.Runtime.DebugTargets, ", "))
+	}
 	fmt.Fprintf(writer, "Démarrage gx-front : %s listen\n", paths.FrontExePath)
 	if err := openConsole(paths.GedixRoot, "V10 Lab gx-front", paths.FrontExePath, "listen"); err != nil {
 		return err
 	}
 	appArgs := []string{"run"}
 	if len(config.Runtime.DebugTargets) > 0 {
-		appArgs = append(appArgs, "-e", strings.Join(config.Runtime.DebugTargets, ","))
+		appArgs = append(appArgs, "-e")
+		appArgs = append(appArgs, config.Runtime.DebugTargets...)
+		fmt.Fprintf(writer, "[INFO] Lancement gx-app avec exclusions : gx-app.exe %s\n", strings.Join(appArgs, " "))
 	}
 	fmt.Fprintf(writer, "Démarrage gx-app : %s %s\n", paths.AppExePath, strings.Join(appArgs, " "))
 	if err := openConsole(paths.AppPath, "V10 Lab gx-app", paths.AppExePath, appArgs...); err != nil {
@@ -104,6 +115,11 @@ func StartMaquette(config Config, writer io.Writer) error {
 		debugTarget, err := DetectDebugTarget(paths, target)
 		if err != nil {
 			return err
+		}
+		if debugTarget.Kind == DebugTargetConnector {
+			fmt.Fprintf(writer, "[INFO] Lancement connecteur debug %s : gx-connector.exe listen --debug -v2\n", debugTarget.Name)
+		} else {
+			fmt.Fprintf(writer, "[INFO] Lancement service debug %s : %s listen --debug -v2\n", debugTarget.Name, filepath.Base(debugTarget.ExePath))
 		}
 		fmt.Fprintf(writer, "Démarrage debug %s (%s) : %s listen --debug -v2\n", debugTarget.Name, debugTarget.Kind, debugTarget.ExePath)
 		if err := openConsole(debugTarget.WorkDir, "V10 Lab debug "+debugTarget.Name, debugTarget.ExePath, "listen", "--debug", "-v2"); err != nil {
@@ -130,20 +146,45 @@ func KillGXProcesses(writer io.Writer, force bool, interactive bool) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("kill-gx-processes est disponible uniquement sur Windows")
 	}
-	cmd := exec.Command("taskkill", "-f", "-t", "-im", "gx-*")
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", `[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); taskkill /f /t /im gx-* 2>&1`)
 	output, err := cmd.CombinedOutput()
 	if len(output) > 0 {
 		fmt.Fprintln(writer, strings.TrimSpace(string(output)))
 	}
+	if err != nil && strings.Contains(strings.ToLower(string(output)), "not found") {
+		fmt.Fprintln(writer, "Aucun processus gx-* à arrêter.")
+		return nil
+	}
+	if err != nil && strings.Contains(strings.ToLower(string(output)), "introuvable") {
+		fmt.Fprintln(writer, "Aucun processus gx-* à arrêter.")
+		return nil
+	}
 	return err
 }
 
-func runInstallCommand(dir string, gxPath string) error {
+func runInstallCommand(dir string, gxPath string, writer io.Writer) error {
 	cmd := exec.Command(gxPath, "install", "--write-config")
 	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = prefixedWriter{writer: writer, prefix: "[GX] "}
+	cmd.Stderr = prefixedWriter{writer: writer, prefix: "[GX] "}
 	return cmd.Run()
+}
+
+type prefixedWriter struct {
+	writer io.Writer
+	prefix string
+}
+
+func (w prefixedWriter) Write(payload []byte) (int, error) {
+	text := strings.TrimRight(string(payload), "\r\n")
+	if text != "" {
+		for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+			if strings.TrimSpace(line) != "" {
+				fmt.Fprintln(w.writer, w.prefix+line)
+			}
+		}
+	}
+	return len(payload), nil
 }
 
 func openConsole(dir string, title string, exe string, args ...string) error {

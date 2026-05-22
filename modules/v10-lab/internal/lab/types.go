@@ -44,6 +44,7 @@ type Action struct {
 	Kind        string        `json:"kind"`
 	Products    []string      `json:"products"`
 	Fields      []ActionField `json:"fields"`
+	Hidden      bool          `json:"hidden,omitempty"`
 	Execute     ActionExecute `json:"-"`
 }
 
