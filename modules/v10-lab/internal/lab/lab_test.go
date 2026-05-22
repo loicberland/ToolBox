@@ -127,6 +127,13 @@ func TestQuoteCmdArgDoesNotQuoteDebugTargetList(t *testing.T) {
 	}
 }
 
+func TestDebugTargetsUseCommaSeparatedExclusionArg(t *testing.T) {
+	got := debugExclusionArg([]string{"auth", "connector-focas-01"})
+	if got != "auth,connector-focas-01" {
+		t.Fatalf("expected comma separated debug targets, got %q", got)
+	}
+}
+
 func TestCfgUpdatesRootPortDBAndSQLite(t *testing.T) {
 	content := minimalGedixCfg()
 	section := "environments.demo.applications.prod.services.auth"

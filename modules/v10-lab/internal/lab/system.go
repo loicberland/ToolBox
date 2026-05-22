@@ -104,7 +104,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 	appArgs := []string{"run"}
 	if len(config.Runtime.DebugTargets) > 0 {
 		appArgs = append(appArgs, "-e")
-		appArgs = append(appArgs, config.Runtime.DebugTargets...)
+		appArgs = append(appArgs, debugExclusionArg(config.Runtime.DebugTargets))
 		fmt.Fprintf(writer, "[INFO] Lancement gx-app avec exclusions : gx-app.exe %s\n", strings.Join(appArgs, " "))
 	}
 	fmt.Fprintf(writer, "Démarrage gx-app : %s %s\n", paths.AppExePath, strings.Join(appArgs, " "))
@@ -127,6 +127,10 @@ func StartMaquette(config Config, writer io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func debugExclusionArg(targets []string) string {
+	return strings.Join(targets, ",")
 }
 
 func KillGXProcesses(writer io.Writer, force bool, interactive bool) error {

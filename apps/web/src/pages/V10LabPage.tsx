@@ -32,8 +32,9 @@ type ExtraKeyRow = {
   key: string;
   value: string;
 };
+type BeforeLeaveHandler = () => Promise<boolean>;
 
-export function V10LabPage() {
+export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (handler: BeforeLeaveHandler | null) => void }) {
   const [products, setProducts] = useState<V10Product[]>([]);
   const [actions, setActions] = useState<V10Action[]>([]);
   const [templates, setTemplates] = useState<DBTemplate[]>([]);
@@ -75,6 +76,24 @@ export function V10LabPage() {
   useEffect(() => {
     void loadDefaultTarget(showCreate ? draft.name : config?.name ?? '');
   }, [showCreate, draft.name, config?.name]);
+
+  useEffect(() => {
+    if (!onBeforeLeaveChange) {
+      return;
+    }
+    onBeforeLeaveChange(async () => {
+      if (!config || !isDirty) {
+        return true;
+      }
+      setMessage(m.savingBeforeModuleChange);
+      const saved = await saveCurrent();
+      if (!saved) {
+        setError(m.autosaveFailed);
+      }
+      return saved;
+    });
+    return () => onBeforeLeaveChange(null);
+  }, [onBeforeLeaveChange, config, isDirty]);
 
   const selectedSummary = maquettes.find((item) => item.name === selectedName);
 
@@ -162,6 +181,21 @@ export function V10LabPage() {
       saved = true;
     });
     return saved;
+  }
+
+  async function changeTab(nextTab: Tab) {
+    if (nextTab === activeTab) {
+      return;
+    }
+    if (config && isDirty) {
+      setMessage(m.savingBeforeTabChange);
+      const saved = await saveCurrent();
+      if (!saved) {
+        setError(m.autosaveFailed);
+        return;
+      }
+    }
+    setActiveTab(nextTab);
   }
 
   async function validateCurrent(name = selectedName) {
@@ -418,7 +452,7 @@ export function V10LabPage() {
 
           <div className="v10-tabs">
             {tabs.map((tab) => (
-              <button type="button" key={tab} className={tab === activeTab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
+              <button type="button" key={tab} className={tab === activeTab ? 'active' : ''} onClick={() => void changeTab(tab)}>
                 {tab}
               </button>
             ))}

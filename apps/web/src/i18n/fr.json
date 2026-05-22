@@ -16,6 +16,8 @@
     "restore": "Restaurer",
     "save": "Enregistrer",
     "saving": "Enregistrement…",
+    "saveBeforeLeavingError": "Impossible de sauvegarder avant de quitter.",
+    "unsavedChanges": "Modifications non sauvegardées",
     "retry": "Réessayer"
   },
   "status": {
@@ -104,6 +106,9 @@
     "runFinished": "Lancement terminé.",
     "validationOk": "Validation OK.",
     "saved": "Sauvegarde effectuée.",
+    "autosaveFailed": "La sauvegarde automatique de la maquette a échoué.",
+    "savingBeforeTabChange": "Sauvegarde avant changement d'onglet...",
+    "savingBeforeModuleChange": "Sauvegarde avant changement d'application...",
     "created": "Maquette enregistrée.",
     "jsonSaved": "JSON sauvegardé.",
     "deleted": "Enregistrement supprimé. Le dossier Gedix physique n’a pas été supprimé.",
