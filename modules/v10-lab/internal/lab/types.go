@@ -183,7 +183,7 @@ func Info() modulecontract.ModuleInfo {
 
 func Products() []Product {
 	return []Product{
-		{ID: GedixProdV10, Name: "Gedix V10", Description: "Produit Gedix V10", Label: "Gedix V10"},
+		{ID: GedixProdV10, Name: "Gedix Prod 10", Description: "Produit Gedix Prod 10", Label: "Gedix Prod 10"},
 	}
 }
 
