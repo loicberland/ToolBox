@@ -183,7 +183,7 @@ func Info() modulecontract.ModuleInfo {
 
 func Products() []Product {
 	return []Product{
-		{ID: GedixProdV10, Name: "Gedix Prod 10", Description: "Produit Gedix Prod 10", Label: "Gedix Prod 10"},
+		{ID: GedixProdV10, Name: "Gedix V10 prod", Description: "Produit Gedix V10 prod", Label: "Gedix V10 prod"},
 	}
 }
 
@@ -208,6 +208,7 @@ func ProductExists(productID string) bool {
 
 func SaveRegisteredConfig(config Config) (RegisteredMaquette, error) {
 	ApplyDefaults(&config)
+	NormalizeConfigForSave(&config)
 	if err := ValidateConfig(config); err != nil {
 		return RegisteredMaquette{}, err
 	}
@@ -240,6 +241,24 @@ func DeleteRegisteredConfig(name string) error {
 
 func RegisteredLogsDir(name string) string {
 	return filepath.Join(MaquettesDir(), safeDirName(name), "logs")
+}
+
+func ReleasesDir(name string) string {
+	layout, err := toolboxruntime.ForModule(ModuleID)
+	if err != nil {
+		return filepath.Join("files", ModuleID, "releases", safeDirName(name))
+	}
+	return filepath.Join(layout.FilesDir, "releases", safeDirName(name))
+}
+
+func NormalizeConfigForSave(config *Config) {
+	ApplyDefaults(config)
+	for serviceName, service := range config.GedixConfig.Services {
+		dbType := strings.ToLower(strings.TrimSpace(service.DBType))
+		if dbType == "sqlite" && strings.TrimSpace(service.DBDSN) == "" && len(service.ExtraKeys) == 0 {
+			delete(config.GedixConfig.Services, serviceName)
+		}
+	}
 }
 
 func LoadConfig(path string) (Config, error) {

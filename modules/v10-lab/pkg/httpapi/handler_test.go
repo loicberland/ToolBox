@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -72,6 +73,34 @@ func TestActionsByProduct(t *testing.T) {
 	}
 }
 
+func TestUploadReleaseAndScanCfg(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	var upload UploadReleaseResponse
+	postMultipart(t, router, "/api/v10-lab/releases/upload", "release.zip", []byte("zip"), map[string]string{"maquetteName": config.Name}, &upload, http.StatusCreated)
+	if upload.StoredPath == "" || filepath.Ext(upload.StoredPath) != ".zip" {
+		t.Fatalf("unexpected upload response: %#v", upload)
+	}
+	if _, err := os.Stat(upload.StoredPath); err != nil {
+		t.Fatalf("uploaded zip not stored: %v", err)
+	}
+
+	cfg := `[environments.demo.applications.prod.connectors.connector-focas-01]
+[environments.demo.applications.prod.connectors.connector-dnc-01]
+`
+	var scan ScanCfgResponse
+	postMultipart(t, router, "/api/v10-lab/maquettes/ticket-T5808/scan-cfg", "gedix.cfg", []byte(cfg), nil, &scan, http.StatusOK)
+	if scan.EnvName != "demo" || len(scan.Connectors) != 2 {
+		t.Fatalf("unexpected scan response: %#v", scan)
+	}
+}
+
 func testConfig() lab.Config {
 	return lab.Config{
 		Name:    "ticket-T5808",
@@ -133,6 +162,39 @@ func postJSONInto(t *testing.T, router http.Handler, path string, body any, targ
 	router.ServeHTTP(response, request)
 	if response.Code != expectedStatus {
 		t.Fatalf("%s %s status=%d body=%s", method, path, response.Code, response.Body.String())
+	}
+	if target != nil {
+		if err := json.NewDecoder(response.Body).Decode(target); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func postMultipart(t *testing.T, router http.Handler, path string, filename string, payload []byte, fields map[string]string, target any, expectedStatus int) {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, path, &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != expectedStatus {
+		t.Fatalf("POST %s status=%d body=%s", path, response.Code, response.Body.String())
 	}
 	if target != nil {
 		if err := json.NewDecoder(response.Body).Decode(target); err != nil {

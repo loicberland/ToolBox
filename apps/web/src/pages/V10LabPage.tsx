@@ -14,11 +14,19 @@ import {
 } from '../api/v10Lab';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { messages } from '../i18n';
 
 const serviceNames = ['webserver', 'auth', 'filestore', 'entreprise', 'etl', 'dnc', 'reactor', 'config'];
 const noDatabaseServices = new Set(['webserver', 'reactor']);
-const tabs = ['Général', 'Configuration Gedix', 'Services', 'Connecteurs', 'Pipeline', 'Exécution / logs', 'JSON'] as const;
+const m = messages.v10Lab;
+const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.connectors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
 type Tab = typeof tabs[number];
+type RunState = 'idle' | 'running' | 'success' | 'failed';
+type ConnectorFormRow = {
+  id: string;
+  name: string;
+  rawConfig: string;
+};
 
 export function V10LabPage() {
   const [products, setProducts] = useState<V10Product[]>([]);
@@ -27,13 +35,15 @@ export function V10LabPage() {
   const [maquettes, setMaquettes] = useState<MaquetteSummary[]>([]);
   const [selectedName, setSelectedName] = useState('');
   const [config, setConfig] = useState<V10Config | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('Général');
+  const [activeTab, setActiveTab] = useState<Tab>(m.tabs.general);
   const [showCreate, setShowCreate] = useState(false);
   const [draft, setDraft] = useState(() => defaultConfig());
   const [jsonText, setJsonText] = useState('');
   const [logs, setLogs] = useState<LogSummary[]>([]);
   const [selectedLog, setSelectedLog] = useState('');
+  const [defaultTargetPath, setDefaultTargetPath] = useState('');
   const [busy, setBusy] = useState(false);
+  const [runState, setRunState] = useState<RunState>('idle');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -50,6 +60,10 @@ export function V10LabPage() {
       void loadActions(config.product);
     }
   }, [config?.name, config?.product]);
+
+  useEffect(() => {
+    void loadDefaultTarget(showCreate ? draft.name : config?.name ?? '');
+  }, [showCreate, draft.name, config?.name]);
 
   const selectedSummary = maquettes.find((item) => item.name === selectedName);
 
@@ -74,6 +88,15 @@ export function V10LabPage() {
     setActions(items);
   }
 
+  async function loadDefaultTarget(name: string) {
+    try {
+      const result = await v10LabApi.defaultTarget(name);
+      setDefaultTargetPath(result.targetPath);
+    } catch {
+      setDefaultTargetPath('');
+    }
+  }
+
   async function reloadList() {
     const items = await v10LabApi.listMaquettes();
     setMaquettes(items);
@@ -84,7 +107,7 @@ export function V10LabPage() {
       const loaded = normalizeConfig(await v10LabApi.getMaquette(name));
       setSelectedName(loaded.name);
       setConfig(loaded);
-      setActiveTab('Général');
+      setActiveTab(m.tabs.general);
       setExecution(null);
       setSelectedLog('');
       setLogs([]);
@@ -104,7 +127,7 @@ export function V10LabPage() {
       setDraft(defaultConfig(products[0]?.id));
       await reloadList();
       await openMaquette(next.name);
-      setMessage('Maquette enregistrée.');
+      setMessage(m.created);
     });
   }
 
@@ -120,7 +143,7 @@ export function V10LabPage() {
     await run(async () => {
       await v10LabApi.updateMaquette(config.name, normalizeConfig(config));
       await reloadList();
-      setMessage('Sauvegarde effectuée.');
+      setMessage(m.saved);
     });
   }
 
@@ -131,21 +154,24 @@ export function V10LabPage() {
     await run(async () => {
       const result = await v10LabApi.validateMaquette(name);
       setExecution(result);
-      setMessage('Validation OK.');
+      setMessage(m.validationOk);
     });
   }
 
   async function runCurrent(name = selectedName) {
-    if (!name) {
+    if (!name || runState === 'running') {
       return;
     }
+    setRunState('running');
+    setExecution({ status: 'running', output: m.running });
     await run(async () => {
       const result = await v10LabApi.runMaquette(name);
       setExecution(result);
       await reloadList();
       await refreshLogs(name);
-      setMessage('Lancement terminé.');
-    });
+      setRunState('success');
+      setMessage(m.runFinished);
+    }, () => setRunState('failed'));
   }
 
   async function refreshLogs(name = selectedName) {
@@ -172,7 +198,7 @@ export function V10LabPage() {
         setConfig(null);
       }
       await reloadList();
-      setMessage('Enregistrement supprimé. Le dossier Gedix physique n’a pas été supprimé.');
+      setMessage(m.deleted);
     });
   }
 
@@ -194,20 +220,75 @@ export function V10LabPage() {
       setConfig(parsed);
       await v10LabApi.updateMaquette(config.name, parsed);
       await reloadList();
-      setMessage('JSON sauvegardé.');
+      setMessage(m.jsonSaved);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'JSON invalide');
     }
   }
 
-  async function run(task: () => Promise<void>) {
+  async function uploadReleaseZip(file: File, target: V10Config, onChange: (config: V10Config) => void) {
+    if (!stringsEqual(filepathExt(file.name), '.zip')) {
+      setError(m.errors.zipOnly);
+      return;
+    }
+    await run(async () => {
+      const result = await v10LabApi.uploadRelease(target.name || 'sans-nom', file);
+      onChange({ ...target, release: { ...target.release, zipPath: result.storedPath } });
+      setMessage(m.selectedZip.replace('{{name}}', result.fileName));
+    });
+  }
+
+  function closeMaquette() {
+    setSelectedName('');
+    setConfig(null);
+    setExecution(null);
+    setSelectedLog('');
+    setLogs([]);
+    setRunState('idle');
+  }
+
+  async function toggleMaquette(name: string) {
+    if (selectedName === name) {
+      closeMaquette();
+      return;
+    }
+    await openMaquette(name);
+  }
+
+  async function scanCfg(file: File) {
+    if (!config) {
+      return;
+    }
+    if (!stringsEqual(filepathExt(file.name), '.cfg')) {
+      setError(m.errors.cfgOnly);
+      return;
+    }
+    await run(async () => {
+      const result = await v10LabApi.scanCfg(config.name, file, config.maquette.envName, config.maquette.appName || 'prod');
+      const connectors = { ...config.gedixConfig.connectors };
+      for (const connector of result.connectors) {
+        if (!connectors[connector.name]) {
+          connectors[connector.name] = { rawConfig: connector.rawConfig };
+        }
+      }
+      setConfig({
+        ...config,
+        maquette: { ...config.maquette, envName: result.envName || config.maquette.envName, appName: result.appName || config.maquette.appName },
+        gedixConfig: { ...config.gedixConfig, connectors },
+      });
+      setMessage(`${result.connectors.length} connecteur(s) détecté(s).`);
+    });
+  }
+
+  async function run(task: () => Promise<void>, onError?: () => void) {
     setBusy(true);
     setError('');
     setMessage('');
     try {
       await task();
     } catch (err) {
+      onError?.();
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
     } finally {
       setBusy(false);
@@ -218,12 +299,12 @@ export function V10LabPage() {
     <div className="workspace v10-lab-workspace">
       <header className="page-header">
         <div className="page-title-group">
-          <p className="page-eyebrow">V10 Lab</p>
-          <h2>Générateur de maquettes V10</h2>
-          <p>Gérez les maquettes, leur configuration Gedix et les pipelines système existants.</p>
+          <p className="page-eyebrow">{m.title}</p>
+          <h2>{m.subtitle}</h2>
+          <p>{m.description}</p>
         </div>
         <div className="page-actions">
-          <Button type="button" onClick={() => setShowCreate((value) => !value)}>Nouvelle maquette</Button>
+          <Button type="button" onClick={() => setShowCreate((value) => !value)}>{m.newMaquette}</Button>
         </div>
       </header>
 
@@ -233,47 +314,42 @@ export function V10LabPage() {
       {showCreate && (
         <section className="ui-card v10-section">
           <div className="ui-card-header">
-            <h3>Nouvelle maquette</h3>
+            <h3>{m.newMaquette}</h3>
           </div>
-          <MaquetteGeneralForm config={draft} products={products} onChange={setDraft} creating />
+          <MaquetteGeneralForm config={draft} products={products} defaultTargetPath={defaultTargetPath} onChange={setDraft} onUploadZip={uploadReleaseZip} creating />
           <div className="button-row end">
-            <Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>Annuler</Button>
-            <Button type="button" onClick={() => void createMaquette()} disabled={busy}>Créer</Button>
+            <Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>{messages.common.cancel}</Button>
+            <Button type="button" onClick={() => void createMaquette()} disabled={busy}>{m.create}</Button>
           </div>
         </section>
       )}
 
       <section className="ui-card v10-section">
         <div className="ui-card-header">
-          <h3>Maquettes enregistrées</h3>
-          <Button type="button" variant="secondary" size="sm" onClick={() => void reloadList()} disabled={busy}>Rafraîchir</Button>
+          <h3>{m.registeredMaquettes}</h3>
+          <Button type="button" variant="secondary" size="sm" onClick={() => void reloadList()} disabled={busy}>{m.refreshLogs}</Button>
         </div>
         {maquettes.length === 0 ? (
           <div className="empty-state">
-            <h3>Aucune maquette enregistrée.</h3>
+            <h3>{m.noMaquette}</h3>
           </div>
         ) : (
           <div className="v10-table">
             <div className="v10-table-head">
-              <span>Nom</span>
-              <span>Produit</span>
-              <span>Cible</span>
-              <span>Disque</span>
-              <span>Dernier lancement</span>
-              <span>Actions</span>
+              <span>{m.name}</span>
+              <span>{m.product}</span>
+              <span>{m.installed}</span>
+              <span>{m.latestRun}</span>
+              <span>{m.actions}</span>
             </div>
             {maquettes.map((item) => (
               <div className={`v10-table-row ${item.name === selectedName ? 'active' : ''}`} key={item.name}>
                 <strong>{item.name}</strong>
                 <span>{item.product}</span>
-                <span className="truncate">{item.targetPath || '-'}</span>
-                <span>{item.existsOnDisk ? 'Présent' : 'Absent'}</span>
+                <span>{item.existsOnDisk ? m.yes : m.no}</span>
                 <span>{item.lastRunAt ? `${formatDate(item.lastRunAt)} (${item.lastStatus ?? 'unknown'})` : '-'}</span>
                 <div className="button-row">
-                  <Button type="button" size="sm" variant="secondary" onClick={() => void openMaquette(item.name)}>Ouvrir</Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={() => void validateCurrent(item.name)}>Valider</Button>
-                  <Button type="button" size="sm" onClick={() => void runCurrent(item.name)}>Lancer</Button>
-                  <Button type="button" size="sm" variant="danger" onClick={() => setConfirmDelete(item.name)}>Supprimer</Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => void toggleMaquette(item.name)}>{item.name === selectedName ? m.close : m.open}</Button>
                 </div>
               </div>
             ))}
@@ -289,8 +365,10 @@ export function V10LabPage() {
               <p className="muted">{selectedSummary?.targetPath ?? config.maquette.targetPath}</p>
             </div>
             <div className="button-row end">
-              <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>Recharger</Button>
-              <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>Sauvegarder</Button>
+              <Button type="button" variant="secondary" onClick={closeMaquette} disabled={busy}>{m.close}</Button>
+              <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
+              <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
+              <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
             </div>
           </div>
 
@@ -302,14 +380,19 @@ export function V10LabPage() {
             ))}
           </div>
 
-          {activeTab === 'Général' && <MaquetteGeneralForm config={config} products={products} onChange={setConfig} />}
-          {activeTab === 'Configuration Gedix' && <GedixForm config={config} onChange={setConfig} />}
-          {activeTab === 'Services' && <ServicesForm config={config} templates={templates} onChange={setConfig} />}
-          {activeTab === 'Connecteurs' && <ConnectorsForm config={config} onChange={setConfig} />}
-          {activeTab === 'Pipeline' && <PipelineBuilder config={config} actions={actions} onChange={setConfig} />}
-          {activeTab === 'Exécution / logs' && (
+          {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} defaultTargetPath={defaultTargetPath} onChange={setConfig} onUploadZip={uploadReleaseZip} />}
+          {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={setConfig} />}
+          {activeTab === m.tabs.services && <ServicesForm config={config} templates={templates} onChange={setConfig} />}
+          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} onChange={setConfig} onScanCfg={(file) => void scanCfg(file)} />}
+          {activeTab === m.tabs.pipeline && (
+            <LocalErrorBoundary>
+              <PipelineBuilder config={config} actions={actions} onChange={setConfig} />
+            </LocalErrorBoundary>
+          )}
+          {activeTab === m.tabs.execution && (
             <ExecutionPanel
               busy={busy}
+              runState={runState}
               execution={execution}
               logs={logs}
               selectedLog={selectedLog}
@@ -320,12 +403,12 @@ export function V10LabPage() {
               onReadLog={(logFile) => void readLog(logFile)}
             />
           )}
-          {activeTab === 'JSON' && (
+          {activeTab === m.tabs.json && (
             <div className="v10-json-panel">
               <textarea value={jsonText} onChange={(event) => setJsonText(event.target.value)} spellCheck={false} />
               <div className="button-row end">
-                <Button type="button" variant="secondary" onClick={() => void navigator.clipboard?.writeText(jsonText)}>Copier</Button>
-                <Button type="button" onClick={() => void saveJSON()}>Sauvegarder JSON</Button>
+                <Button type="button" variant="secondary" onClick={() => void navigator.clipboard?.writeText(jsonText)}>{m.copy}</Button>
+                <Button type="button" onClick={() => void saveJSON()}>{m.saveJson}</Button>
               </div>
             </div>
           )}
@@ -334,16 +417,16 @@ export function V10LabPage() {
 
       <ConfirmDialog
         open={confirmDelete !== null}
-        title="Supprimer la maquette"
-        message="Cette suppression retire seulement l’enregistrement V10 Lab. Le dossier Gedix physique ne sera pas supprimé."
-        confirmLabel="Supprimer"
+        title={m.deleteTitle}
+        message={m.deleteMessage}
+        confirmLabel={m.delete}
         onCancel={() => setConfirmDelete(null)}
         onConfirm={() => confirmDelete && void deleteMaquette(confirmDelete)}
       />
       <ConfirmDialog
         open={confirmKill}
-        title="Taskkill gx-*"
-        message="Cette action tue tous les processus gx-* sur la machine. Continuer ?"
+        title={m.killTitle}
+        message={m.killMessage}
         confirmLabel="Continuer"
         onCancel={() => setConfirmKill(false)}
         onConfirm={() => void killGXProcesses()}
@@ -352,38 +435,57 @@ export function V10LabPage() {
   );
 }
 
-function MaquetteGeneralForm({ config, products, onChange, creating = false }: {
+function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, onUploadZip, creating = false }: {
   config: V10Config;
   products: V10Product[];
+  defaultTargetPath: string;
   onChange: (config: V10Config) => void;
+  onUploadZip: (file: File, config: V10Config, onChange: (config: V10Config) => void) => void;
   creating?: boolean;
 }) {
   return (
     <div className="form-grid v10-form-grid">
-      <label>Nom
+      <label>{m.name}
         <input value={config.name} disabled={!creating} onChange={(event) => onChange({ ...config, name: event.target.value })} />
       </label>
-      <label>Produit
+      <label>{m.product}
         <select value={config.product} onChange={(event) => onChange({ ...config, product: event.target.value })}>
           {products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}
         </select>
       </label>
-      <label>Chemin ZIP release
-        <input value={config.release.zipPath} onChange={(event) => onChange({ ...config, release: { ...config.release, zipPath: event.target.value } })} />
+      <label>{m.releaseZip}
+        <div className="v10-file-row">
+          <label className="ui-button secondary sm v10-file-button">
+            {m.selectZip}
+            <input
+              type="file"
+              accept=".zip,application/zip"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  onUploadZip(file, config, onChange);
+                }
+                event.currentTarget.value = '';
+              }}
+            />
+          </label>
+          <input placeholder={m.manualZip} value={config.release.zipPath} onChange={(event) => onChange({ ...config, release: { ...config.release, zipPath: event.target.value } })} />
+        </div>
       </label>
-      <label>Dossier cible
-        <input value={config.maquette.targetPath} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, targetPath: event.target.value } })} />
+      <label>{m.targetPath}
+        <input placeholder={m.targetPlaceholder.replace('{{path}}', defaultTargetPath)} value={config.maquette.targetPath} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, targetPath: event.target.value } })} />
       </label>
-      <label>Environnement
+      <label>{m.envName}
         <input value={config.maquette.envName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, envName: event.target.value } })} />
       </label>
-      <label>Application
+      <label>{m.appName}
         <input value={config.maquette.appName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, appName: event.target.value } })} />
       </label>
       <label className="checkbox-row">
         <input type="checkbox" checked={config.release.overwrite} onChange={(event) => onChange({ ...config, release: { ...config.release, overwrite: event.target.checked } })} />
-        Overwrite
+        {m.overwriteLabel}
       </label>
+      <p className="muted v10-help-text">{m.overwriteHelp}</p>
       {creating && <GedixForm config={config} onChange={onChange} compact />}
     </div>
   );
@@ -424,7 +526,7 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
           <div className="v10-service-row" key={name}>
             <div>
               <strong>{name}</strong>
-              {disabled && <p className="muted">Pas de base de données pour ce service.</p>}
+              {disabled && <p className="muted">{m.noDatabase}</p>}
             </div>
             {!disabled && (
               <>
@@ -434,23 +536,21 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
                     checked={enabled}
                     onChange={(event) => updateService(name, event.target.checked ? { dbType: 'sqlite', dbDsn: '', extraKeys: {} } : null)}
                   />
-                  Configurer DB
+                  {m.configureDb}
                 </label>
                 {enabled && (
                   <div className="v10-service-config">
-                    <label>Type DB
+                    <label>{m.dbType}
                       <select value={service?.dbType ?? ''} onChange={(event) => updateService(name, { ...service!, dbType: event.target.value, dbDsn: event.target.value === 'sqlite' ? '' : service?.dbDsn ?? '' })}>
                         {['sqlite', 'mysql', 'postgres', 'mssql', 'oracle'].map((type) => <option key={type} value={type}>{type}</option>)}
                       </select>
                     </label>
-                    {service?.dbType !== 'sqlite' && (
-                      <label>DSN
-                        <input value={service?.dbDsn ?? ''} onChange={(event) => updateService(name, { ...service!, dbDsn: event.target.value })} />
-                      </label>
-                    )}
-                    <label>Template DSN
+                    <label>{service?.dbType === 'sqlite' ? m.sqliteDsn : m.dbDsn}
+                      <input placeholder={service?.dbType === 'sqlite' ? m.sqliteDsnPlaceholder : ''} value={service?.dbDsn ?? ''} onChange={(event) => updateService(name, { ...service!, dbDsn: event.target.value })} />
+                    </label>
+                    <label>{m.dsnTemplate}
                       <select value="" onChange={(event) => updateService(name, { ...service!, dbDsn: event.target.value })}>
-                        <option value="">Insérer un template</option>
+                        <option value="">{m.insertTemplate}</option>
                         {templates.filter((template) => template.template).map((template) => <option key={template.type} value={template.template}>{template.type}</option>)}
                       </select>
                     </label>
@@ -471,47 +571,86 @@ function ExtraKeysEditor({ service, onChange }: { service: ServiceDBConfig; onCh
   return (
     <div className="v10-extra-keys">
       <div className="section-header compact">
-        <h4>Extra keys</h4>
-        <Button type="button" size="sm" variant="secondary" onClick={() => onChange({ ...service, extraKeys: { ...(service.extraKeys ?? {}), '': '' } })}>Ajouter</Button>
+        <h4>{m.extraKeys}</h4>
+        <Button type="button" size="sm" variant="secondary" onClick={() => onChange({ ...service, extraKeys: { ...(service.extraKeys ?? {}), '': '' } })}>{messages.common.add}</Button>
       </div>
       {entries.map(([key, value], index) => (
         <div className="v10-key-row" key={`${key}-${index}`}>
-          <input value={key} placeholder="clé" onChange={(event) => replaceExtraKey(service, key, event.target.value, value, onChange)} />
-          <input value={value} placeholder="valeur" onChange={(event) => onChange({ ...service, extraKeys: { ...(service.extraKeys ?? {}), [key]: event.target.value } })} />
-          <Button type="button" size="sm" variant="danger" onClick={() => removeExtraKey(service, key, onChange)}>Supprimer</Button>
+          <input value={key} placeholder={m.key} onChange={(event) => replaceExtraKey(service, key, event.target.value, value, onChange)} />
+          <input value={value} placeholder={m.value} onChange={(event) => onChange({ ...service, extraKeys: { ...(service.extraKeys ?? {}), [key]: event.target.value } })} />
+          <Button type="button" size="sm" variant="danger" onClick={() => removeExtraKey(service, key, onChange)}>{m.delete}</Button>
         </div>
       ))}
     </div>
   );
 }
 
-function ConnectorsForm({ config, onChange }: { config: V10Config; onChange: (config: V10Config) => void }) {
-  const connectors = config.gedixConfig.connectors;
-  const update = (name: string, nextName: string, rawConfig: string) => {
-    const next = { ...connectors };
-    delete next[name];
-    if (nextName.trim()) {
-      next[nextName.trim()] = { rawConfig };
+function ConnectorsForm({ config, onChange, onScanCfg }: { config: V10Config; onChange: (config: V10Config) => void; onScanCfg: (file: File) => void }) {
+  const [rows, setRows] = useState<ConnectorFormRow[]>(() => connectorRowsFromConfig(config));
+
+  useEffect(() => {
+    setRows(connectorRowsFromConfig(config));
+  }, [config.name]);
+
+  useEffect(() => {
+    setRows((current) => {
+      const existing = new Set(current.map((row) => row.name));
+      const missing = Object.entries(config.gedixConfig.connectors)
+        .filter(([name]) => !existing.has(name))
+        .map(([name, connector]) => ({ id: makeID(), name, rawConfig: connector.rawConfig }));
+      return missing.length > 0 ? [...current, ...missing] : current;
+    });
+  }, [config.gedixConfig.connectors]);
+
+  const commitRows = (nextRows: ConnectorFormRow[]) => {
+    setRows(nextRows);
+    const connectors: Record<string, { rawConfig: string }> = {};
+    for (const row of nextRows) {
+      const name = row.name.trim();
+      if (name) {
+        connectors[name] = { rawConfig: row.rawConfig };
+      }
     }
-    onChange({ ...config, gedixConfig: { ...config.gedixConfig, connectors: next } });
+    onChange({ ...config, gedixConfig: { ...config.gedixConfig, connectors } });
   };
+
+  const duplicate = hasDuplicateConnector(rows);
+
   return (
     <div className="v10-connector-list">
-      <p className="readonly-notice">Le nom du connecteur doit correspondre exactement à la section du gedix.cfg : [environments.&lt;env&gt;.applications.&lt;app&gt;.connectors.&lt;nomConnecteur&gt;]</p>
-      {Object.keys(connectors).map((name) => (
-        <div className="v10-connector-row" key={name}>
-          <input value={name} onChange={(event) => update(name, event.target.value, connectors[name].rawConfig)} />
-          <textarea value={connectors[name].rawConfig} onChange={(event) => update(name, name, event.target.value)} />
-          <Button type="button" variant="danger" size="sm" onClick={() => update(name, '', '')}>Supprimer</Button>
+      <p className="readonly-notice">{m.connectorHelp}</p>
+      <p className="muted">{m.scanCfgHelp}</p>
+      <div className="button-row">
+        <label className="ui-button secondary sm v10-file-button">
+          {m.scanCfg}
+          <input
+            type="file"
+            accept=".cfg"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                onScanCfg(file);
+              }
+              event.currentTarget.value = '';
+            }}
+          />
+        </label>
+      </div>
+      {duplicate && <p className="error">{m.duplicateConnector}</p>}
+      {rows.map((row) => (
+        <div className="v10-connector-row" key={row.id}>
+          <input value={row.name} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} />
+          <textarea value={row.rawConfig} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, rawConfig: event.target.value } : item))} />
+          <Button type="button" variant="danger" size="sm" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" variant="secondary" onClick={() => update('', `connector-${Object.keys(connectors).length + 1}`, '')}>Ajouter connecteur</Button>
+      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `connector-${rows.length + 1}`, rawConfig: '' }])}>{messages.common.add}</Button>
     </div>
   );
 }
 
 function PipelineBuilder({ config, actions, onChange }: { config: V10Config; actions: V10Action[]; onChange: (config: V10Config) => void }) {
-  const byID = useMemo(() => Object.fromEntries(actions.map((action) => [action.id, action])), [actions]);
+  const byID = useMemo<Record<string, V10Action>>(() => Object.fromEntries(actions.map((action) => [action.id, action])), [actions]);
   const updateStep = (index: number, step: PipelineStep) => {
     onChange({ ...config, pipeline: config.pipeline.map((item, itemIndex) => itemIndex === index ? step : item) });
   };
@@ -527,31 +666,32 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
   return (
     <div className="v10-pipeline">
       <div className="button-row">
-        <Button type="button" variant="secondary" onClick={() => onChange({ ...config, pipeline: [...config.pipeline, { action: actions[0]?.id ?? '', label: actions[0]?.label ?? '', params: {} }] })}>Ajouter une étape</Button>
+        <Button type="button" variant="secondary" onClick={() => onChange({ ...config, pipeline: [...(config.pipeline ?? []), { action: actions[0]?.id ?? '', label: actions[0]?.label ?? '', params: {} }] })}>{m.addStep}</Button>
       </div>
-      {config.pipeline.map((step, index) => {
+      {(config.pipeline ?? []).map((step, index) => {
         const action = byID[step.action];
+        const fields = action?.fields ?? [];
         return (
           <div className="v10-pipeline-step" key={`${step.action}-${index}`}>
             <div className="v10-step-order">{index + 1}</div>
             <div className="v10-step-body">
               <div className="form-grid v10-form-grid">
-                <label>Action
+                <label>{m.action}
                   <select value={step.action} onChange={(event) => {
                     const selected = byID[event.target.value];
                     updateStep(index, { action: event.target.value, label: selected?.label ?? '', params: {} });
                   }}>
-                    <option value="">Choisir une action</option>
+                    <option value="">{m.chooseAction}</option>
                     {actions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                   </select>
                 </label>
-                <label>Label
+                <label>{m.label}
                   <input value={step.label} onChange={(event) => updateStep(index, { ...step, label: event.target.value })} />
                 </label>
               </div>
-              {action && action.fields.length > 0 && (
+              {fields.length > 0 && (
                 <div className="form-grid v10-form-grid">
-                  {action.fields.map((field) => (
+                  {fields.map((field) => (
                     <ActionFieldInput
                       field={field}
                       value={step.params?.[field.name]}
@@ -562,9 +702,9 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
                 </div>
               )}
               <div className="button-row">
-                <Button type="button" size="sm" variant="secondary" onClick={() => move(index, -1)}>Monter</Button>
-                <Button type="button" size="sm" variant="secondary" onClick={() => move(index, 1)}>Descendre</Button>
-                <Button type="button" size="sm" variant="danger" onClick={() => onChange({ ...config, pipeline: config.pipeline.filter((_, itemIndex) => itemIndex !== index) })}>Supprimer</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => move(index, -1)}>{m.moveUp}</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => move(index, 1)}>{m.moveDown}</Button>
+                <Button type="button" size="sm" variant="danger" onClick={() => onChange({ ...config, pipeline: (config.pipeline ?? []).filter((_, itemIndex) => itemIndex !== index) })}>{m.delete}</Button>
               </div>
             </div>
           </div>
@@ -584,8 +724,9 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function ExecutionPanel({ busy, execution, logs, selectedLog, onValidate, onRun, onKill, onRefreshLogs, onReadLog }: {
+function ExecutionPanel({ busy, runState, execution, logs, selectedLog, onValidate, onRun, onKill, onRefreshLogs, onReadLog }: {
   busy: boolean;
+  runState: RunState;
   execution: ExecutionResponse | null;
   logs: LogSummary[];
   selectedLog: string;
@@ -598,24 +739,24 @@ function ExecutionPanel({ busy, execution, logs, selectedLog, onValidate, onRun,
   return (
     <div className="v10-execution">
       <div className="button-row">
-        <Button type="button" variant="secondary" onClick={onValidate} disabled={busy}>Valider</Button>
-        <Button type="button" onClick={onRun} disabled={busy}>Lancer</Button>
-        <Button type="button" variant="danger" onClick={onKill} disabled={busy}>Taskkill gx-*</Button>
-        <Button type="button" variant="secondary" onClick={onRefreshLogs} disabled={busy}>Rafraîchir logs</Button>
+        <Button type="button" variant="secondary" onClick={onValidate} disabled={busy || runState === 'running'}>{m.validate}</Button>
+        <Button type="button" onClick={onRun} disabled={busy || runState === 'running'}>{runState === 'running' ? m.running : m.run}</Button>
+        <Button type="button" variant="danger" onClick={onKill} disabled={busy || runState === 'running'}>{m.taskkill}</Button>
+        <Button type="button" variant="secondary" onClick={onRefreshLogs} disabled={busy}>{m.refreshLogs}</Button>
       </div>
       {execution && (
         <pre className="v10-output">{execution.errors?.length ? execution.errors.join('\n') : execution.output || execution.status}</pre>
       )}
       <div className="v10-log-layout">
         <div className="v10-log-list">
-          {logs.length === 0 ? <p className="muted">Aucun log disponible.</p> : logs.map((log) => (
+          {logs.length === 0 ? <p className="muted">{m.noLog}</p> : logs.map((log) => (
             <button type="button" key={log.name} onClick={() => onReadLog(log.name)}>
               <strong>{log.name}</strong>
               <span>{formatDate(log.modifiedAt)}</span>
             </button>
           ))}
         </div>
-        <pre className="v10-output">{selectedLog || 'Sélectionnez un log.'}</pre>
+        <pre className="v10-output">{selectedLog || m.selectLog}</pre>
       </div>
     </div>
   );
@@ -656,13 +797,13 @@ function normalizeConfig(config: V10Config): V10Config {
       envName: maquette.envName ?? 'demo',
       appName: maquette.appName ?? 'prod',
     },
-    gedixConfig: {
+    gedixConfig: normalizeGedixConfig({
       ...gedixConfig,
       fqdn: gedixConfig.fqdn ?? '',
       port: gedixConfig.port ?? 80,
       services: gedixConfig.services ?? {},
       connectors: gedixConfig.connectors ?? {},
-    },
+    }),
     runtime: {
       ...runtime,
       debugTargets: runtime.debugTargets ?? [],
@@ -670,6 +811,16 @@ function normalizeConfig(config: V10Config): V10Config {
     },
     pipeline: config.pipeline ?? [],
   };
+}
+
+function normalizeGedixConfig(gedixConfig: V10Config['gedixConfig']): V10Config['gedixConfig'] {
+  const services = { ...(gedixConfig.services ?? {}) };
+  for (const [name, service] of Object.entries(services)) {
+    if (service.dbType === 'sqlite' && !service.dbDsn?.trim() && Object.keys(service.extraKeys ?? {}).length === 0) {
+      delete services[name];
+    }
+  }
+  return { ...gedixConfig, services };
 }
 
 function validateConfig(config: V10Config): string {
@@ -684,6 +835,9 @@ function validateConfig(config: V10Config): string {
   }
   if (config.pipeline.some((step) => !step.action.trim())) {
     return 'Chaque étape de pipeline doit avoir une action.';
+  }
+  if (hasDuplicateConnector(Object.keys(config.gedixConfig.connectors ?? {}).map((name) => ({ id: name, name, rawConfig: '' })))) {
+    return m.duplicateConnector;
   }
   return '';
 }
@@ -703,4 +857,55 @@ function removeExtraKey(service: ServiceDBConfig, key: string, onChange: (servic
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString('fr-FR');
+}
+
+function filepathExt(filename: string) {
+  const index = filename.lastIndexOf('.');
+  return index >= 0 ? filename.slice(index) : '';
+}
+
+function stringsEqual(left: string, right: string) {
+  return left.localeCompare(right, undefined, { sensitivity: 'accent' }) === 0;
+}
+
+function makeID() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function connectorRowsFromConfig(config: V10Config): ConnectorFormRow[] {
+  return Object.entries(config.gedixConfig.connectors ?? {}).map(([name, connector]) => ({
+    id: makeID(),
+    name,
+    rawConfig: connector.rawConfig,
+  }));
+}
+
+function hasDuplicateConnector(rows: ConnectorFormRow[]) {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const name = row.name.trim().toLowerCase();
+    if (!name) {
+      continue;
+    }
+    if (seen.has(name)) {
+      return true;
+    }
+    seen.add(name);
+  }
+  return false;
+}
+
+class LocalErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: string }> {
+  state = { error: '' };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message };
+  }
+
+  render() {
+    if (this.state.error) {
+      return <p className="error">{this.state.error}</p>;
+    }
+    return this.props.children;
+  }
 }

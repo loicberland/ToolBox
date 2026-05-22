@@ -173,6 +173,17 @@ func TestCfgSQLiteCommentsActiveDBWithoutRemovingTemplateComments(t *testing.T) 
 	}
 }
 
+func TestCfgSQLiteWithExplicitDSNWritesDBKeys(t *testing.T) {
+	content := minimalGedixCfg()
+	section := "environments.demo.applications.prod.services.auth"
+	content = setSectionKey(content, section, "db-type", "sqlite", true)
+	content = setSectionKey(content, section, "db-dsn", "custom.sqlite", true)
+
+	if !strings.Contains(content, `db-type="sqlite"`) || !strings.Contains(content, `db-dsn="custom.sqlite"`) {
+		t.Fatalf("expected explicit sqlite DB keys:\n%s", content)
+	}
+}
+
 func TestCfgMissingServiceSectionDoesNotCreateSection(t *testing.T) {
 	content := minimalGedixCfg()
 	section := "environments.demo.applications.prod.services.fake-service"

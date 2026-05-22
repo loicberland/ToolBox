@@ -42,7 +42,7 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 			continue
 		}
 		dbType := strings.ToLower(strings.TrimSpace(service.DBType))
-		if dbType == "" || dbType == "sqlite" {
+		if dbType == "" || (dbType == "sqlite" && strings.TrimSpace(service.DBDSN) == "") {
 			content = removeOrCommentKey(content, section, "db-type")
 			content = removeOrCommentKey(content, section, "db-dsn")
 		} else {

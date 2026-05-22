@@ -1525,7 +1525,7 @@ textarea {
 .v10-table-head,
 .v10-table-row {
   display: grid;
-  grid-template-columns: minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(180px, 1.4fr) 82px minmax(145px, 1fr) minmax(260px, auto);
+  grid-template-columns: minmax(140px, 1fr) minmax(120px, 0.8fr) 90px minmax(150px, 1fr) minmax(120px, auto);
   gap: 12px;
   align-items: center;
 }
@@ -1692,6 +1692,32 @@ textarea {
   font-size: 13px;
 }
 
+.v10-file-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.v10-file-button {
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.v10-file-button input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.v10-help-text {
+  grid-column: 1 / -1;
+  margin: -6px 0 0;
+  font-size: 13px;
+}
+
 .whitespace {
   white-space: pre-wrap;
 }
@@ -1817,6 +1843,7 @@ textarea {
   .v10-connector-row,
   .v10-pipeline-step,
   .v10-log-layout,
+  .v10-file-row,
   .plan-toolbar,
   .document-upload-row,
   .document-list-item,

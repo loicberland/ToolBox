@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"toolBox/modules/v10-lab/internal/lab"
@@ -17,16 +20,21 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type Handler struct{}
+type Handler struct {
+	mu      sync.Mutex
+	running map[string]bool
+}
 
 func NewHandler() *Handler {
-	return &Handler{}
+	return &Handler{running: map[string]bool{}}
 }
 
 func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/products", h.products).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/actions", h.actions).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/db-templates", h.dbTemplates).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/default-target", h.defaultTarget).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/releases/upload", h.uploadRelease).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes", h.listMaquettes).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes", h.createMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.getMaquette).Methods(http.MethodGet)
@@ -34,6 +42,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.deleteMaquette).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/validate", h.validateMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run", h.runMaquette).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/scan-cfg", h.scanCfg).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/logs", h.logs).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/logs/{logFile}", h.logFile).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/kill-gx-processes", h.killGXProcesses).Methods(http.MethodPost)
@@ -50,15 +59,32 @@ type MaquetteSummary struct {
 }
 
 type ExecutionResponse struct {
-	Status string   `json:"status"`
-	Output string   `json:"output,omitempty"`
-	Errors []string `json:"errors,omitempty"`
+	Status     string   `json:"status"`
+	Output     string   `json:"output,omitempty"`
+	Errors     []string `json:"errors,omitempty"`
+	DurationMs int64    `json:"durationMs,omitempty"`
 }
 
 type LogSummary struct {
 	Name       string `json:"name"`
 	SizeBytes  int64  `json:"sizeBytes"`
 	ModifiedAt string `json:"modifiedAt"`
+}
+
+type UploadReleaseResponse struct {
+	FileName   string `json:"fileName"`
+	StoredPath string `json:"storedPath"`
+}
+
+type ScanConnector struct {
+	Name      string `json:"name"`
+	RawConfig string `json:"rawConfig"`
+}
+
+type ScanCfgResponse struct {
+	EnvName    string          `json:"envName"`
+	AppName    string          `json:"appName"`
+	Connectors []ScanConnector `json:"connectors"`
 }
 
 func (h *Handler) products(w http.ResponseWriter, _ *http.Request) {
@@ -80,6 +106,51 @@ func (h *Handler) actions(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) dbTemplates(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, lab.DBTemplates())
+}
+
+func (h *Handler) defaultTarget(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	config := lab.Config{Name: name}
+	writeJSON(w, http.StatusOK, map[string]string{"targetPath": lab.DefaultMaquetteTargetPath(config)})
+}
+
+func (h *Handler) uploadRelease(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(512 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fichier ZIP requis"})
+		return
+	}
+	maquetteName := strings.TrimSpace(r.FormValue("maquetteName"))
+	if maquetteName == "" {
+		maquetteName = "sans-nom"
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fichier ZIP requis"})
+		return
+	}
+	defer file.Close()
+	if !strings.EqualFold(filepath.Ext(header.Filename), ".zip") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "seuls les fichiers .zip sont acceptes"})
+		return
+	}
+	dir := lab.ReleasesDir(maquetteName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		respondError(w, err)
+		return
+	}
+	filename := uniqueFilename(dir, filepath.Base(header.Filename))
+	targetPath := filepath.Join(dir, filename)
+	target, err := os.OpenFile(targetPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	defer target.Close()
+	if _, err := io.Copy(target, file); err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, UploadReleaseResponse{FileName: filename, StoredPath: targetPath})
 }
 
 func (h *Handler) listMaquettes(w http.ResponseWriter, _ *http.Request) {
@@ -164,22 +235,66 @@ func (h *Handler) validateMaquette(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) runMaquette(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	if !h.acquireRun(name) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Une execution est deja en cours pour cette maquette."})
+		return
+	}
+	defer h.releaseRun(name)
+
+	config, _, err := lab.LoadRegisteredConfig(name)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	startedAt := time.Now()
+	var output bytes.Buffer
+	err = lab.RunPipeline(context.Background(), config, &output)
+	duration := time.Since(startedAt).Milliseconds()
+	if err != nil {
+		if validationErr, ok := err.(lab.ValidationError); ok {
+			writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "failed", Output: output.String(), Errors: validationErr.Items, DurationMs: duration})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "failed", Output: output.String(), Errors: []string{err.Error()}, DurationMs: duration})
+		return
+	}
+	writeJSON(w, http.StatusOK, ExecutionResponse{Status: "success", Output: output.String(), DurationMs: duration})
+}
+
+func (h *Handler) scanCfg(w http.ResponseWriter, r *http.Request) {
 	config, _, err := lab.LoadRegisteredConfig(mux.Vars(r)["name"])
 	if err != nil {
 		respondError(w, err)
 		return
 	}
-	var output bytes.Buffer
-	err = lab.RunPipeline(context.Background(), config, &output)
-	if err != nil {
-		if validationErr, ok := err.(lab.ValidationError); ok {
-			writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "failed", Output: output.String(), Errors: validationErr.Items})
-			return
-		}
-		writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "failed", Output: output.String(), Errors: []string{err.Error()}})
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fichier cfg requis"})
 		return
 	}
-	writeJSON(w, http.StatusOK, ExecutionResponse{Status: "success", Output: output.String()})
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fichier cfg requis"})
+		return
+	}
+	defer file.Close()
+	if !strings.EqualFold(filepath.Ext(header.Filename), ".cfg") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "seuls les fichiers .cfg sont acceptes"})
+		return
+	}
+	payload, err := io.ReadAll(io.LimitReader(file, 16<<20))
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	envName := firstNonEmpty(r.FormValue("envName"), config.Maquette.EnvName)
+	appName := firstNonEmpty(r.FormValue("appName"), config.Maquette.AppName, "prod")
+	result, err := scanConnectors(string(payload), envName, appName)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) logs(w http.ResponseWriter, r *http.Request) {
@@ -333,4 +448,73 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func safeName(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func (h *Handler) acquireRun(name string) bool {
+	key := safeName(name)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.running[key] {
+		return false
+	}
+	h.running[key] = true
+	return true
+}
+
+func (h *Handler) releaseRun(name string) {
+	key := safeName(name)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.running, key)
+}
+
+func uniqueFilename(dir string, filename string) string {
+	base := strings.TrimSuffix(filename, filepath.Ext(filename))
+	ext := filepath.Ext(filename)
+	candidate := filename
+	for index := 1; ; index++ {
+		if _, err := os.Stat(filepath.Join(dir, candidate)); os.IsNotExist(err) {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d%s", base, index, ext)
+	}
+}
+
+func scanConnectors(content string, envName string, appName string) (ScanCfgResponse, error) {
+	sectionPattern := regexp.MustCompile(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.connectors\.([^\]]+)\]\s*$`)
+	envs := map[string]bool{}
+	connectors := []ScanConnector{}
+	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		matches := sectionPattern.FindStringSubmatch(line)
+		if len(matches) != 4 {
+			continue
+		}
+		envs[matches[1]] = true
+		if envName != "" && !strings.EqualFold(matches[1], envName) {
+			continue
+		}
+		if !strings.EqualFold(matches[2], appName) {
+			continue
+		}
+		connectors = append(connectors, ScanConnector{Name: matches[3], RawConfig: ""})
+	}
+	if envName == "" {
+		if len(envs) == 1 {
+			for env := range envs {
+				envName = env
+			}
+		} else if len(envs) > 1 {
+			return ScanCfgResponse{}, fmt.Errorf("plusieurs environnements detectes, renseignez l'environnement")
+		}
+	}
+	return ScanCfgResponse{EnvName: envName, AppName: appName, Connectors: connectors}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

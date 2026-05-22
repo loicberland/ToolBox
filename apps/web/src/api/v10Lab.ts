@@ -95,12 +95,24 @@ export type ExecutionResponse = {
   status: string;
   output?: string;
   errors?: string[];
+  durationMs?: number;
 };
 
 export type LogSummary = {
   name: string;
   sizeBytes: number;
   modifiedAt: string;
+};
+
+export type UploadReleaseResponse = {
+  fileName: string;
+  storedPath: string;
+};
+
+export type ScanCfgResponse = {
+  envName: string;
+  appName: string;
+  connectors: Array<{ name: string; rawConfig: string }>;
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -142,6 +154,8 @@ export const v10LabApi = {
   products: () => request<V10Product[]>('/v10-lab/products'),
   actions: (product: string) => request<V10Action[]>(`/v10-lab/actions?product=${encodeURIComponent(product)}`),
   dbTemplates: () => request<DBTemplate[]>('/v10-lab/db-templates'),
+  defaultTarget: (name: string) => request<{ targetPath: string }>(`/v10-lab/default-target?name=${encodeURIComponent(name)}`),
+  uploadRelease: (maquetteName: string, file: File) => uploadRelease(maquetteName, file),
   listMaquettes: () => request<MaquetteSummary[]>('/v10-lab/maquettes'),
   createMaquette: (config: V10Config) => request('/v10-lab/maquettes', jsonRequest('POST', config)),
   getMaquette: (name: string) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`),
@@ -150,6 +164,7 @@ export const v10LabApi = {
   validateMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/validate`, { method: 'POST' }),
   runMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run`, { method: 'POST' }),
   logs: (name: string) => request<LogSummary[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/logs`),
+  scanCfg: (name: string, file: File, envName: string, appName: string) => scanCfg(name, file, envName, appName),
   logFile: async (name: string, logFile: string) => {
     const response = await fetch(`${API_BASE_URL}/v10-lab/maquettes/${encodeURIComponent(name)}/logs/${encodeURIComponent(logFile)}`);
     if (!response.ok) {
@@ -159,3 +174,43 @@ export const v10LabApi = {
   },
   killGXProcesses: () => request<ExecutionResponse>('/v10-lab/kill-gx-processes', jsonRequest('POST', { force: true })),
 };
+
+async function uploadRelease(maquetteName: string, file: File): Promise<UploadReleaseResponse> {
+  const formData = new FormData();
+  formData.append('maquetteName', maquetteName);
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE_URL}/v10-lab/releases/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    await throwResponseError(response);
+  }
+  return response.json();
+}
+
+async function scanCfg(name: string, file: File, envName: string, appName: string): Promise<ScanCfgResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('envName', envName);
+  formData.append('appName', appName);
+  const response = await fetch(`${API_BASE_URL}/v10-lab/maquettes/${encodeURIComponent(name)}/scan-cfg`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    await throwResponseError(response);
+  }
+  return response.json();
+}
+
+async function throwResponseError(response: Response): Promise<never> {
+  let message = `Erreur HTTP: ${response.status}`;
+  try {
+    const payload = await response.json();
+    message = payload.error ?? (Array.isArray(payload.errors) ? payload.errors.join('\n') : message);
+  } catch {
+    // Keep generic message.
+  }
+  throw new Error(message);
+}
