@@ -225,6 +225,71 @@ func TestCfgConnectorExistingAndMissing(t *testing.T) {
 	}
 }
 
+func TestCfgConnectorRawConfigPreservesTripleQuotedBlocks(t *testing.T) {
+	content := minimalGedixCfg()
+	section := "environments.demo.applications.prod.connectors.connector-focas-01"
+	raw := connectorMultilineRawConfig()
+	content = appendRawConfigToSection(content, section, raw)
+	content = appendRawConfigToSection(content, section, raw)
+
+	for _, expected := range []string{
+		`filesystem-delete-remote-after-unload=true`,
+		`filesystem-header-content = """`,
+		`(DOSSIER =${job.name})`,
+		`(INDICE  =${job.version})`,
+		`(ETAT    =${state.name})`,
+		`(DATE MOD=${program.created_at})`,
+		`(CREE PAR=${program.created_by})`,
+		`(TRANSF  =${date.now_fr})`,
+		`filesystem-header-first-line = "(******* ENTETE GEDIX *******)"`,
+		`filesystem-header-last-line = "(***** FIN ENTETE GEDIX *****)"`,
+		`filesystem-header-line-number = 1`,
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected preserved raw line %q in:\n%s", expected, content)
+		}
+	}
+	if strings.Count(content, `"""`) != 2 {
+		t.Fatalf("expected opening and closing triple quotes only once:\n%s", content)
+	}
+	if strings.Count(content, `filesystem-delete-remote-after-unload`) != 1 ||
+		strings.Count(content, `filesystem-header-content`) != 1 ||
+		strings.Count(content, `filesystem-header-first-line`) != 1 {
+		t.Fatalf("expected connector raw config to be idempotent:\n%s", content)
+	}
+}
+
+func TestCfgConnectorRawConfigReplacesExistingMultilineBlock(t *testing.T) {
+	section := "environments.demo.applications.prod.connectors.connector-focas-01"
+	content := minimalGedixCfg()
+	content = appendRawConfigToSection(content, section, "filesystem-header-content = \"\"\"\nOLD\n\"\"\"")
+	content = appendRawConfigToSection(content, section, "filesystem-header-content = \"\"\"\nNEW\n\"\"\"")
+
+	if strings.Contains(content, "OLD") || !strings.Contains(content, "NEW") {
+		t.Fatalf("expected multiline block to be replaced:\n%s", content)
+	}
+	if strings.Count(content, `filesystem-header-content`) != 1 || strings.Count(content, `"""`) != 2 {
+		t.Fatalf("expected one multiline block:\n%s", content)
+	}
+}
+
+func TestCfgServiceExtraKeysUseRawValuesAndCanUpdateHost(t *testing.T) {
+	content := minimalGedixCfg()
+	section := "environments.demo.applications.prod.services.auth"
+	content = setSectionRawBlock(content, section, cfgEntry{Key: "host", Lines: []string{`host="127.0.0.2"`}})
+	content = setSectionRawBlock(content, section, cfgEntry{Key: "custom-key", Lines: []string{`custom-key=true`}})
+	content = setSectionRawBlock(content, section, cfgEntry{Key: "quoted-key", Lines: []string{`quoted-key="texte avec espaces"`}})
+
+	for _, expected := range []string{`host="127.0.0.2"`, `custom-key=true`, `quoted-key="texte avec espaces"`} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected %q in:\n%s", expected, content)
+		}
+	}
+	if strings.Count(content, `host="127.0.0.2"`) != 1 || strings.Contains(content, `custom-key="true"`) {
+		t.Fatalf("expected raw service extra keys without duplicates or forced quotes:\n%s", content)
+	}
+}
+
 func TestEnsureSafeDeletePathRejectsRoots(t *testing.T) {
 	if err := ensureSafeDeletePath(filepath.VolumeName(os.TempDir()) + string(os.PathSeparator)); err == nil {
 		t.Fatal("expected root deletion to be rejected")
@@ -249,6 +314,21 @@ func TestSafeRemoveTempDir(t *testing.T) {
 	if err := safeRemoveTempDir("", final); err == nil {
 		t.Fatal("expected empty path to be rejected")
 	}
+}
+
+func connectorMultilineRawConfig() string {
+	return `filesystem-delete-remote-after-unload=true
+filesystem-header-content = """
+(DOSSIER =${job.name})
+(INDICE  =${job.version})
+(ETAT    =${state.name})
+(DATE MOD=${program.created_at})
+(CREE PAR=${program.created_by})
+(TRANSF  =${date.now_fr})
+"""
+filesystem-header-first-line = "(******* ENTETE GEDIX *******)"
+filesystem-header-last-line = "(***** FIN ENTETE GEDIX *****)"
+filesystem-header-line-number = 1`
 }
 
 func minimalGedixCfg() string {

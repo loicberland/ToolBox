@@ -13,6 +13,13 @@ var servicesWithoutDB = map[string]bool{
 	"reactor":   true,
 }
 
+type cfgEntry struct {
+	Key   string
+	Lines []string
+	Start int
+	End   int
+}
+
 func ConfigureGedixCfg(config Config, writer io.Writer) error {
 	paths, err := DetectGedixPaths(config)
 	if err != nil {
@@ -39,20 +46,23 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 		if servicesWithoutDB[serviceName] {
 			content = removeOrCommentKey(content, section, "db-type")
 			content = removeOrCommentKey(content, section, "db-dsn")
-			continue
-		}
-		dbType := strings.ToLower(strings.TrimSpace(service.DBType))
-		if dbType == "" || (dbType == "sqlite" && strings.TrimSpace(service.DBDSN) == "") {
-			content = removeOrCommentKey(content, section, "db-type")
-			content = removeOrCommentKey(content, section, "db-dsn")
 		} else {
-			content = setSectionKey(content, section, "db-type", service.DBType, true)
-			fmt.Fprintf(writer, "[INFO] Mise à jour clé db-type dans service %s\n", serviceName)
-			content = setSectionKey(content, section, "db-dsn", service.DBDSN, true)
-			fmt.Fprintf(writer, "[INFO] Mise à jour clé db-dsn dans service %s\n", serviceName)
+			dbType := strings.ToLower(strings.TrimSpace(service.DBType))
+			if dbType == "" || (dbType == "sqlite" && strings.TrimSpace(service.DBDSN) == "") {
+				content = removeOrCommentKey(content, section, "db-type")
+				content = removeOrCommentKey(content, section, "db-dsn")
+			} else {
+				content = setSectionKey(content, section, "db-type", service.DBType, true)
+				fmt.Fprintf(writer, "[INFO] Mise à jour clé db-type dans service %s\n", serviceName)
+				content = setSectionKey(content, section, "db-dsn", service.DBDSN, true)
+				fmt.Fprintf(writer, "[INFO] Mise à jour clé db-dsn dans service %s\n", serviceName)
+			}
 		}
 		for _, key := range sortedMapKeys(service.ExtraKeys) {
-			content = setSectionKey(content, section, key, service.ExtraKeys[key], shouldQuote(service.ExtraKeys[key]))
+			content = setSectionRawBlock(content, section, cfgEntry{
+				Key:   key,
+				Lines: []string{fmt.Sprintf("%s=%s", key, service.ExtraKeys[key])},
+			})
 			fmt.Fprintf(writer, "[INFO] Mise à jour clé %s dans service %s\n", key, serviceName)
 		}
 	}
@@ -175,48 +185,97 @@ func applyConnectorRawConfig(content string, section string, raw string) string 
 	if raw == "" {
 		return content
 	}
-	rawLines := strings.Split(raw, "\n")
-	for _, line := range rawLines {
-		key, value, ok := parseRawKeyValue(line)
-		if !ok || strings.EqualFold(key, "type") || strings.EqualFold(key, "host") {
+	for _, entry := range parseCfgEntries(splitLines(raw)) {
+		if strings.EqualFold(entry.Key, "type") || strings.EqualFold(entry.Key, "host") {
 			continue
 		}
-		content = setSectionRawKey(content, section, key, value)
+		content = setSectionRawBlock(content, section, entry)
 	}
 	return content
 }
 
-func setSectionRawKey(content string, section string, key string, rawValue string) string {
+func setSectionRawBlock(content string, section string, entry cfgEntry) string {
 	lines := splitLines(content)
 	start, end := sectionRange(lines, section)
 	if start == -1 {
 		return content
 	}
-	rendered := fmt.Sprintf("%s=%s", key, rawValue)
-	for index := start + 1; index < end; index++ {
-		if activeKeyMatches(lines[index], key) {
-			lines[index] = rendered
-			return joinLines(lines)
+	for _, existing := range parseCfgEntryRanges(lines, start+1, end) {
+		if strings.EqualFold(existing.Key, entry.Key) {
+			next := append([]string{}, lines[:existing.Start]...)
+			next = append(next, entry.Lines...)
+			next = append(next, lines[existing.End:]...)
+			return joinLines(next)
 		}
 	}
-	return joinLines(insertLine(lines, end, rendered))
+	next := append([]string{}, lines[:end]...)
+	next = append(next, entry.Lines...)
+	next = append(next, lines[end:]...)
+	return joinLines(next)
 }
 
-func parseRawKeyValue(line string) (string, string, bool) {
-	trimmed := strings.TrimSpace(strings.TrimRight(line, "\r"))
-	if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
-		return "", "", false
+func parseCfgEntries(lines []string) []cfgEntry {
+	return parseCfgEntryRanges(lines, 0, len(lines))
+}
+
+func parseCfgEntryRanges(lines []string, start int, end int) []cfgEntry {
+	entries := []cfgEntry{}
+	current := cfgEntry{Start: -1}
+	for index := start; index < end; index++ {
+		line := strings.TrimRight(lines[index], "\r")
+		key, ok := cfgKeyFromLine(line)
+		if ok {
+			if current.Start != -1 {
+				current.End = index
+				entries = append(entries, current)
+			}
+			current = cfgEntry{Key: key, Lines: []string{line}, Start: index}
+			continue
+		}
+		if current.Start != -1 {
+			current.Lines = append(current.Lines, line)
+		}
+	}
+	if current.Start != -1 {
+		current.End = end
+		entries = append(entries, current)
+	}
+	return entries
+}
+
+func cfgKeyFromLine(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") || strings.HasPrefix(trimmed, "[") {
+		return "", false
 	}
 	index := strings.Index(trimmed, "=")
 	if index <= 0 {
-		return "", "", false
+		return "", false
 	}
 	key := strings.TrimSpace(trimmed[:index])
-	value := strings.TrimSpace(trimmed[index+1:])
-	if key == "" {
-		return "", "", false
+	if key == "" || !isCfgKey(key) {
+		return "", false
 	}
-	return key, value, true
+	return key, true
+}
+
+func isCfgKey(key string) bool {
+	for _, char := range key {
+		if char >= 'a' && char <= 'z' {
+			continue
+		}
+		if char >= 'A' && char <= 'Z' {
+			continue
+		}
+		if char >= '0' && char <= '9' {
+			continue
+		}
+		if char == '-' || char == '_' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func sectionRange(lines []string, section string) (int, int) {
@@ -259,7 +318,8 @@ func keyMatches(line string, key string) bool {
 	trimmed := strings.TrimSpace(line)
 	trimmed = strings.TrimPrefix(trimmed, "#")
 	trimmed = strings.TrimSpace(trimmed)
-	return strings.HasPrefix(trimmed, key+"=")
+	lineKey, ok := cfgKeyFromLine(trimmed)
+	return ok && strings.EqualFold(lineKey, key)
 }
 
 func renderKey(key string, value string, quote bool) string {
