@@ -20,6 +20,7 @@ const serviceNames = ['webserver', 'auth', 'filestore', 'entreprise', 'etl', 'dn
 const noDatabaseServices = new Set(['webserver', 'reactor']);
 const m = messages.v10Lab;
 const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.connectors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
+const systemPipelineActions = new Set(['create-env', 'configure-gedix-cfg', 'start-maquette', 'stop-maquette', 'start-services', 'stop-services', 'kill-gx-processes', 'update-env']);
 type Tab = typeof tabs[number];
 type RunState = 'idle' | 'running' | 'success' | 'failed';
 type ConnectorFormRow = {
@@ -202,6 +203,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     if (!name) {
       return;
     }
+    if (config && isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
+    }
     await run(async () => {
       const result = await v10LabApi.validateMaquette(name);
       setExecution(result);
@@ -209,9 +216,43 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
+  async function runSystemAction(actionId: string, name = selectedName) {
+    if (!name || runState === 'running') {
+      return;
+    }
+    if (config && isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
+    }
+    setRunState('running');
+    setExecution({ status: 'running', running: true, output: m.executionRunning });
+    await run(async () => {
+      const started = await v10LabApi.runAction(name, actionId);
+      setExecution(started);
+      const result = await pollCurrentRun(name);
+      await reloadList();
+      await refreshLogs(name);
+      setRunState(result.status === 'success' ? 'success' : 'failed');
+      setMessage(result.status === 'success' ? m.executionFinished : m.executionFailed);
+    }, () => setRunState('failed'));
+  }
+
   async function runCurrent(name = selectedName) {
     if (!name || runState === 'running') {
       return;
+    }
+    if (!config?.pipeline?.some((step) => !systemPipelineActions.has(step.action))) {
+      setExecution({ status: 'idle', output: m.pipeline.noApiActions });
+      setMessage(m.pipeline.noApiActions);
+      return;
+    }
+    if (config && isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
     }
     setRunState('running');
     setExecution({ status: 'running', running: true, output: m.executionRunning });
@@ -270,6 +311,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     await run(async () => {
       const result = await v10LabApi.killGXProcesses();
       setExecution(result);
+      await refreshLogs();
       setMessage(m.killFinished);
     });
   }
@@ -476,8 +518,10 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               logs={logs}
               selectedLog={selectedLog}
               onConfigChange={updateConfig}
-              onValidate={() => void validateCurrent()}
-              onRun={() => void runCurrent()}
+              onCreate={() => void runSystemAction('create-env')}
+              onConfigure={() => void runSystemAction('configure-gedix-cfg')}
+              onStart={() => void runSystemAction('start-maquette')}
+              onRunPipeline={() => void runCurrent()}
               onKill={() => setConfirmKill(true)}
               onRefreshLogs={() => void refreshLogs()}
               onReadLog={(logFile) => void readLog(logFile)}
@@ -486,9 +530,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.json && (
             <div className="v10-json-panel">
               <textarea value={jsonText} onChange={(event) => setJsonText(event.target.value)} spellCheck={false} />
+              {execution?.errors?.length ? <p className="error whitespace">{execution.errors.join('\n')}</p> : null}
+              {execution?.status === 'valid' && <p className="info-message">{execution.output || m.validationOk}</p>}
               <div className="button-row end">
                 <Button type="button" variant="secondary" onClick={() => void navigator.clipboard?.writeText(jsonText)}>{m.copy}</Button>
                 <Button type="button" onClick={() => void saveJSON()}>{m.saveJson}</Button>
+                <Button type="button" variant="secondary" onClick={() => void validateCurrent()} disabled={busy}>{m.json.validateConfig}</Button>
               </div>
             </div>
           )}
@@ -567,7 +614,6 @@ function DebugTargetsEditor({ config, onChange }: { config: V10Config; onChange:
     .filter((item) => !config.runtime.debugTargets.includes(item));
   return (
     <div className="v10-debug-targets">
-      <h4>{m.debugTargets}</h4>
       <div className="v10-file-row">
         <select value={selected} onChange={(event) => setSelected(event.target.value)}>
           <option value="">{m.chooseDebugTarget}</option>
@@ -775,11 +821,13 @@ function ConnectorsForm({ config, onChange, onScanCfg }: { config: V10Config; on
 
 function PipelineBuilder({ config, actions, onChange }: { config: V10Config; actions: V10Action[]; onChange: (config: V10Config) => void }) {
   const byID = useMemo<Record<string, V10Action>>(() => Object.fromEntries(actions.map((action) => [action.id, action])), [actions]);
+  const legacySteps = (config.pipeline ?? []).filter((step) => systemPipelineActions.has(step.action));
+  const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
   const updateStep = (index: number, step: PipelineStep) => {
-    onChange({ ...config, pipeline: config.pipeline.map((item, itemIndex) => itemIndex === index ? step : item) });
+    onChange({ ...config, pipeline: apiSteps.map((item, itemIndex) => itemIndex === index ? step : item) });
   };
   const move = (index: number, direction: -1 | 1) => {
-    const next = [...config.pipeline];
+    const next = [...apiSteps];
     const target = index + direction;
     if (target < 0 || target >= next.length) {
       return;
@@ -789,7 +837,15 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
   };
   return (
     <div className="v10-pipeline">
-      {(config.pipeline ?? []).map((step, index) => {
+      <p className="readonly-notice">{m.pipeline.help}</p>
+      {legacySteps.length > 0 && (
+        <div className="readonly-notice warning">
+          <p>{m.pipeline.legacySystemActions}</p>
+          <Button type="button" size="sm" variant="secondary" onClick={() => onChange({ ...config, pipeline: apiSteps })}>{m.pipeline.cleanSystemActions}</Button>
+        </div>
+      )}
+      {actions.length === 0 && <p className="muted">{m.pipeline.noApiActions}</p>}
+      {apiSteps.map((step, index) => {
         const action = byID[step.action];
         const fields = action?.fields ?? [];
         return (
@@ -826,14 +882,14 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
               <div className="button-row">
                 <Button type="button" size="sm" variant="secondary" onClick={() => move(index, -1)}>{m.moveUp}</Button>
                 <Button type="button" size="sm" variant="secondary" onClick={() => move(index, 1)}>{m.moveDown}</Button>
-                <Button type="button" size="sm" variant="danger" onClick={() => onChange({ ...config, pipeline: (config.pipeline ?? []).filter((_, itemIndex) => itemIndex !== index) })}>{m.delete}</Button>
+                <Button type="button" size="sm" variant="danger" onClick={() => onChange({ ...config, pipeline: apiSteps.filter((_, itemIndex) => itemIndex !== index) })}>{m.delete}</Button>
               </div>
             </div>
           </div>
         );
       })}
       <div className="button-row">
-        <Button type="button" variant="secondary" onClick={() => onChange({ ...config, pipeline: [...(config.pipeline ?? []), { action: actions[0]?.id ?? '', label: actions[0]?.label ?? '', params: {} }] })}>{m.addAction}</Button>
+        <Button type="button" variant="secondary" onClick={() => onChange({ ...config, pipeline: [...apiSteps, { action: actions[0]?.id ?? '', label: actions[0]?.label ?? '', params: {} }] })} disabled={actions.length === 0}>{m.addAction}</Button>
       </div>
     </div>
   );
@@ -849,7 +905,7 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, onConfigChange, onValidate, onRun, onKill, onRefreshLogs, onReadLog }: {
+function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onConfigure, onStart, onRunPipeline, onKill, onRefreshLogs, onReadLog }: {
   config: V10Config;
   busy: boolean;
   runState: RunState;
@@ -857,23 +913,44 @@ function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, 
   logs: LogSummary[];
   selectedLog: string;
   onConfigChange: (config: V10Config) => void;
-  onValidate: () => void;
-  onRun: () => void;
+  onCreate: () => void;
+  onConfigure: () => void;
+  onStart: () => void;
+  onRunPipeline: () => void;
   onKill: () => void;
   onRefreshLogs: () => void;
   onReadLog: (logFile: string) => void;
 }) {
-  const hasDebugTargets = pipelineStartsMaquette(config.pipeline);
   const currentLog = execution?.log || execution?.output || execution?.status || '';
+  const disabled = busy || runState === 'running';
   return (
     <div className="v10-execution">
-      {hasDebugTargets && <DebugTargetsEditor config={config} onChange={onConfigChange} />}
-      <div className="button-row">
-        <Button type="button" variant="secondary" onClick={onValidate} disabled={busy || runState === 'running'}>{m.validate}</Button>
-        <Button type="button" onClick={onRun} disabled={busy || runState === 'running'}>{runState === 'running' ? m.running : m.run}</Button>
-        <Button type="button" variant="danger" onClick={onKill} disabled={busy || runState === 'running'}>{m.taskkill}</Button>
-        <Button type="button" variant="secondary" onClick={onRefreshLogs} disabled={busy}>{m.refreshLogs}</Button>
-      </div>
+      <section className="v10-execution-section">
+        <h4>{m.execution.debugTitle}</h4>
+        <DebugTargetsEditor config={config} onChange={onConfigChange} />
+      </section>
+      <section className="v10-execution-section">
+        <h4>{m.execution.actionsTitle}</h4>
+        <div className="button-row">
+          <Button type="button" onClick={onCreate} disabled={disabled}>{m.execution.createMaquette}</Button>
+          <Button type="button" variant="secondary" disabled title={m.execution.updateNotImplemented}>{m.execution.updateMaquette}</Button>
+          <Button type="button" variant="secondary" onClick={onConfigure} disabled={disabled}>{m.execution.configureCfg}</Button>
+          <Button type="button" variant="secondary" onClick={onStart} disabled={disabled}>{m.execution.startMaquette}</Button>
+        </div>
+      </section>
+      <section className="v10-execution-section">
+        <h4>{m.execution.apiPipelineTitle}</h4>
+        <div className="button-row">
+          <Button type="button" onClick={onRunPipeline} disabled={disabled}>{runState === 'running' ? m.running : m.execution.runApiPipeline}</Button>
+        </div>
+      </section>
+      <section className="v10-execution-section">
+        <h4>{m.execution.maintenanceTitle}</h4>
+        <div className="button-row">
+          <Button type="button" variant="danger" onClick={onKill} disabled={disabled}>{m.taskkill}</Button>
+          <Button type="button" variant="secondary" onClick={onRefreshLogs} disabled={busy}>{m.execution.refreshLogs}</Button>
+        </div>
+      </section>
       <h4>{m.currentExecutionLogs}</h4>
       {execution?.errors?.length ? <p className="error whitespace">{execution.errors.join('\n')}</p> : null}
       <pre className="v10-output">{currentLog || m.noLog}</pre>
@@ -901,10 +978,7 @@ function defaultConfig(product = DEFAULT_V10_PRODUCT_ID): V10Config {
     maquette: { targetPath: '', envName: 'demo', appName: 'prod' },
     gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {} },
     runtime: { debugTargets: [], openConsole: true },
-    pipeline: [
-      { action: 'create-env', label: 'Créer la maquette', params: {} },
-      { action: 'configure-gedix-cfg', label: 'Configurer gedix.cfg', params: {} },
-    ],
+    pipeline: [],
   } as V10Config);
 }
 
@@ -956,16 +1030,16 @@ function normalizeGedixConfig(gedixConfig: V10Config['gedixConfig']): V10Config[
 
 function validateConfig(config: V10Config): string {
   if (!config.name.trim()) {
-    return 'Nom obligatoire.';
+    return m.errors.nameRequired;
   }
   if (!config.product.trim()) {
-    return 'Produit obligatoire.';
+    return m.errors.productRequired;
   }
   if (!Number.isFinite(config.gedixConfig.port) || config.gedixConfig.port < 0 || config.gedixConfig.port > 65535) {
-    return 'Port numérique invalide.';
+    return m.errors.portInvalid;
   }
   if (config.pipeline.some((step) => !step.action.trim())) {
-    return 'Chaque étape de pipeline doit avoir une action.';
+    return m.errors.pipelineActionRequired;
   }
   if (hasDuplicateConnector(Object.keys(config.gedixConfig.connectors ?? {}).map((name) => ({ id: name, name, rawConfig: '' })))) {
     return m.duplicateConnector;
@@ -1019,10 +1093,6 @@ function hasDuplicateConnector(rows: ConnectorFormRow[]) {
     seen.add(name);
   }
   return false;
-}
-
-function pipelineStartsMaquette(pipeline: PipelineStep[]) {
-  return (pipeline ?? []).some((step) => step.action === 'start-maquette' || stringsEqual(step.label, m.startMaquetteLabel));
 }
 
 function delay(ms: number) {

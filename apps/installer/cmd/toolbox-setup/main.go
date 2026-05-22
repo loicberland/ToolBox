@@ -59,6 +59,9 @@ func install(parentDir string, forceConfig, cleanExe bool) error {
 	if err := ensureConfig(root, forceConfig); err != nil {
 		return err
 	}
+	if err := ensureStartScript(root); err != nil {
+		return err
+	}
 
 	fmt.Printf("ToolBox installed in %s\n", root)
 	return nil
@@ -167,4 +170,18 @@ func ensureConfig(root string, force bool) error {
 		}
 	}
 	return os.WriteFile(path, []byte(toolboxconfig.DefaultConfigFile), 0644)
+}
+
+func ensureStartScript(root string) error {
+	const content = "@echo off\r\n" +
+		"cd /d \"%~dp0\"\r\n" +
+		"\r\n" +
+		"start \"ToolBox api\" cmd /k \"\"%~dp0api-toolbox.exe\" server\"\r\n" +
+		"start \"ToolBox front\" cmd /k \"\"%~dp0web-server-toolbox.exe\" start\"\r\n" +
+		"\r\n" +
+		"timeout /t 2 /nobreak >nul\r\n" +
+		"start \"\" \"http://localhost:20251\"\r\n" +
+		"\r\n" +
+		"exit\r\n"
+	return os.WriteFile(filepath.Join(root, "ToolBox Start.bat"), []byte(content), 0644)
 }

@@ -44,6 +44,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.deleteMaquette).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/validate", h.validateMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run", h.runMaquette).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/actions/{actionId}/run", h.runMaquetteAction).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current/logs", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/scan-cfg", h.scanCfg).Methods(http.MethodPost)
@@ -241,6 +242,7 @@ func (h *Handler) runMaquette(w http.ResponseWriter, r *http.Request) {
 		respondError(w, err)
 		return
 	}
+	config.Pipeline = apiPipelineSteps(config.Pipeline, config.Product)
 	run, ok := h.acquireRun(name)
 	if !ok {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Une execution est deja en cours pour cette maquette."})
@@ -248,6 +250,29 @@ func (h *Handler) runMaquette(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go h.executeRun(run, config)
+	writeJSON(w, http.StatusAccepted, run.snapshot())
+}
+
+func (h *Handler) runMaquetteAction(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+	actionID := vars["actionId"]
+	if !isRunnableSystemAction(actionID) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("action systeme non autorisee %q", actionID)})
+		return
+	}
+	config, _, err := lab.LoadRegisteredConfig(name)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	run, ok := h.acquireRun(name)
+	if !ok {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Une execution est deja en cours pour cette maquette."})
+		return
+	}
+
+	go h.executeActionRun(run, config, actionID)
 	writeJSON(w, http.StatusAccepted, run.snapshot())
 }
 
@@ -482,6 +507,21 @@ func (h *Handler) executeRun(run *currentRun, config lab.Config) {
 	run.finish("success", nil, duration)
 }
 
+func (h *Handler) executeActionRun(run *currentRun, config lab.Config, actionID string) {
+	startedAt := time.Now()
+	err := lab.RunAction(context.Background(), config, actionID, io.MultiWriter(os.Stdout, currentRunWriter{run: run}))
+	duration := time.Since(startedAt).Milliseconds()
+	if err != nil {
+		if validationErr, ok := err.(lab.ValidationError); ok {
+			run.finish("failed", validationErr.Items, duration)
+			return
+		}
+		run.finish("failed", []string{err.Error()}, duration)
+		return
+	}
+	run.finish("success", nil, duration)
+}
+
 func (w currentRunWriter) Write(payload []byte) (int, error) {
 	w.run.appendLog(string(payload))
 	return len(payload), nil
@@ -585,21 +625,33 @@ func firstNonEmpty(values ...string) string {
 }
 
 func pipelineActions(actions []lab.Action) []lab.Action {
-	visible := map[string]bool{
-		"create-env":          true,
-		"configure-gedix-cfg": true,
-		"start-maquette":      true,
-		"update-env":          true,
-	}
 	items := []lab.Action{}
 	for _, action := range actions {
-		if !visible[action.ID] {
+		if action.Kind != lab.KindAPI {
 			continue
-		}
-		if action.ID == "create-env" || action.ID == "start-maquette" {
-			action.Fields = nil
 		}
 		items = append(items, action)
 	}
 	return items
+}
+
+func apiPipelineSteps(steps []lab.PipelineStep, product string) []lab.PipelineStep {
+	items := []lab.PipelineStep{}
+	for _, step := range steps {
+		action, ok := lab.FindAction(step.Action)
+		if !ok || action.Kind != lab.KindAPI || !action.SupportsProduct(product) {
+			continue
+		}
+		items = append(items, step)
+	}
+	return items
+}
+
+func isRunnableSystemAction(actionID string) bool {
+	switch actionID {
+	case "create-env", "configure-gedix-cfg", "start-maquette", "update-env":
+		return true
+	default:
+		return false
+	}
 }

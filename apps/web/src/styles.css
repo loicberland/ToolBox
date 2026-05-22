@@ -1644,6 +1644,28 @@ textarea {
   gap: 12px;
 }
 
+.v10-execution-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.v10-execution-section h4 {
+  margin: 0;
+}
+
+.readonly-notice.warning {
+  display: grid;
+  gap: 8px;
+}
+
+.readonly-notice.warning p {
+  margin: 0;
+}
+
 .v10-output {
   min-height: 120px;
   max-height: 420px;

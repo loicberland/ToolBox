@@ -43,6 +43,7 @@ L'installation cree cette architecture :
 
 ```text
 ToolBox/
+├─ ToolBox Start.bat
 ├─ api-toolbox.exe
 ├─ web-server-toolbox.exe
 ├─ toolbox.cfg
@@ -61,6 +62,16 @@ ToolBox/
 ```
 
 Lors d'une mise a jour, l'installeur remplace les exe et conserve `toolbox.cfg`, `data/` et `files/`. `toolbox.cfg` est cree uniquement s'il n'existe pas, sauf avec `--force-config`. Les donnees utilisateur sont dans `modules/*/data` et `modules/*/files`.
+
+Apres installation, lancer `ToolBox Start.bat` dans le dossier `ToolBox`. Ce script demarre l'API, le serveur web, puis ouvre l'interface dans le navigateur.
+
+L'URL par defaut est :
+
+```text
+http://localhost:20251
+```
+
+Si le port est modifie dans `toolbox.cfg`, ouvrez l'URL correspondante manuellement.
 
 ## API
 

@@ -48,7 +48,7 @@
   "v10Lab": {
     "title": "V10 Lab",
     "subtitle": "Générateur de maquettes V10",
-    "description": "Gérez les maquettes, leur configuration Gedix et les pipelines système existants.",
+    "description": "Gérez les maquettes, leur configuration Gedix et les futurs pipelines API métier.",
     "newMaquette": "Nouvelle maquette",
     "registeredMaquettes": "Maquettes enregistrées",
     "noMaquette": "Aucune maquette enregistrée.",
@@ -134,7 +134,28 @@
     "addDebugTarget": "Ajouter en debug",
     "removeDebugTarget": "Retirer",
     "noStartActionNoDebug": "La sélection debug est disponible uniquement si le pipeline démarre la maquette.",
-    "startMaquetteLabel": "Démarrer la maquette",
+    "execution": {
+      "actionsTitle": "Actions maquette",
+      "debugTitle": "Services/connecteurs en debug",
+      "apiPipelineTitle": "Pipeline API",
+      "maintenanceTitle": "Maintenance",
+      "createMaquette": "Créer maquette",
+      "updateMaquette": "Mettre à jour maquette",
+      "configureCfg": "Modifier gedix.cfg",
+      "startMaquette": "Démarrer maquette",
+      "runApiPipeline": "Lancer pipeline API",
+      "refreshLogs": "Rafraîchir les logs",
+      "updateNotImplemented": "Fonctionnalité pas encore implémentée"
+    },
+    "pipeline": {
+      "help": "Le pipeline sert à préparer des scénarios métier Gedix : création de machines, groupes, dossiers CN, imports/exports de données, etc. Les actions système de maquette sont disponibles dans l’onglet Exécution / logs.",
+      "noApiActions": "Aucune action API Gedix disponible pour le moment.",
+      "legacySystemActions": "Ce pipeline contient d’anciennes actions système. Elles sont maintenant disponibles dans Exécution / logs.",
+      "cleanSystemActions": "Nettoyer le pipeline"
+    },
+    "json": {
+      "validateConfig": "Valider la configuration"
+    },
     "killFinished": "Commande taskkill terminée.",
     "killNoProcess": "Aucun processus gx-* à arrêter.",
     "errors": {

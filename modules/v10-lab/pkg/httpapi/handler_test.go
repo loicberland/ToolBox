@@ -73,6 +73,40 @@ func TestActionsByProduct(t *testing.T) {
 	if len(actions) == 0 {
 		t.Fatal("expected actions")
 	}
+	for _, action := range actions {
+		if action.Kind != lab.KindAPI {
+			t.Fatalf("expected only API actions in pipeline builder, got %#v", action)
+		}
+	}
+}
+
+func TestAPIPipelineStepsDropsSystemActions(t *testing.T) {
+	steps := apiPipelineSteps([]lab.PipelineStep{
+		{Action: "create-env"},
+		{Action: "create-machine-group"},
+		{Action: "configure-gedix-cfg"},
+	}, lab.GedixProdV10)
+	if len(steps) != 1 || steps[0].Action != "create-machine-group" {
+		t.Fatalf("expected only API steps, got %#v", steps)
+	}
+}
+
+func TestRunMaquetteActionStartsSingleSystemAction(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	mustWrite(t, filepath.Join(root, "maquette", "gedix.cfg"), "fqdn=\"old\"\n# port=80\n")
+	config.Maquette.TargetPath = filepath.Join(root, "maquette")
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	var started ExecutionResponse
+	postJSONInto(t, router, "/api/v10-lab/maquettes/ticket-T5808/actions/configure-gedix-cfg/run", nil, &started, http.StatusAccepted)
+	if started.Status != "running" {
+		t.Fatalf("expected running action, got %#v", started)
+	}
 }
 
 func TestCurrentRunTracksLiveLogsAndConflict(t *testing.T) {
@@ -224,5 +258,15 @@ func postMultipart(t *testing.T, router http.Handler, path string, filename stri
 		if err := json.NewDecoder(response.Body).Decode(target); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func mustWrite(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
