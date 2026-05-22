@@ -64,7 +64,7 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 			return fmt.Errorf("section connecteur introuvable dans gedix.cfg: [%s]", section)
 		}
 		fmt.Fprintf(writer, "[INFO] Section connecteur trouvée : [%s]\n", section)
-		content = appendRawConfigToSection(content, section, connector.RawConfig)
+		content = applyConnectorRawConfig(content, section, connector.RawConfig)
 	}
 	if err := os.WriteFile(paths.CfgPath, []byte(content), 0644); err != nil {
 		return err
@@ -167,23 +167,56 @@ func removeOrCommentKey(content string, section string, key string) string {
 }
 
 func appendRawConfigToSection(content string, section string, raw string) string {
+	return applyConnectorRawConfig(content, section, raw)
+}
+
+func applyConnectorRawConfig(content string, section string, raw string) string {
 	raw = strings.TrimRight(raw, "\r\n")
 	if raw == "" {
 		return content
 	}
+	rawLines := strings.Split(raw, "\n")
+	for _, line := range rawLines {
+		key, value, ok := parseRawKeyValue(line)
+		if !ok || strings.EqualFold(key, "type") || strings.EqualFold(key, "host") {
+			continue
+		}
+		content = setSectionRawKey(content, section, key, value)
+	}
+	return content
+}
+
+func setSectionRawKey(content string, section string, key string, rawValue string) string {
 	lines := splitLines(content)
 	start, end := sectionRange(lines, section)
 	if start == -1 {
 		return content
 	}
-	rawLines := strings.Split(raw, "\n")
-	for index := range rawLines {
-		rawLines[index] = strings.TrimRight(rawLines[index], "\r")
+	rendered := fmt.Sprintf("%s=%s", key, rawValue)
+	for index := start + 1; index < end; index++ {
+		if activeKeyMatches(lines[index], key) {
+			lines[index] = rendered
+			return joinLines(lines)
+		}
 	}
-	next := append([]string{}, lines[:end]...)
-	next = append(next, rawLines...)
-	next = append(next, lines[end:]...)
-	return joinLines(next)
+	return joinLines(insertLine(lines, end, rendered))
+}
+
+func parseRawKeyValue(line string) (string, string, bool) {
+	trimmed := strings.TrimSpace(strings.TrimRight(line, "\r"))
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+		return "", "", false
+	}
+	index := strings.Index(trimmed, "=")
+	if index <= 0 {
+		return "", "", false
+	}
+	key := strings.TrimSpace(trimmed[:index])
+	value := strings.TrimSpace(trimmed[index+1:])
+	if key == "" {
+		return "", "", false
+	}
+	return key, value, true
 }
 
 func sectionRange(lines []string, section string) (int, int) {

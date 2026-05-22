@@ -202,11 +202,22 @@ func TestCfgConnectorExistingAndMissing(t *testing.T) {
 	content := minimalGedixCfg()
 	section := "environments.demo.applications.prod.connectors.connector-focas-01"
 	content = appendRawConfigToSection(content, section, "key1=\"value1\"\nkey2=\"value2\"")
+	content = appendRawConfigToSection(content, section, "key1=\"value1\"\nkey2=\"value2\"")
 	if !strings.Contains(content, `type="focas"`) || !strings.Contains(content, `host="127.0.0.1"`) {
 		t.Fatalf("connector type/host should remain:\n%s", content)
 	}
 	if !strings.Contains(content, `key1="value1"`) || !strings.Contains(content, `key2="value2"`) {
 		t.Fatalf("raw config not inserted:\n%s", content)
+	}
+	if strings.Count(content, `key1="value1"`) != 1 || strings.Count(content, `key2="value2"`) != 1 {
+		t.Fatalf("connector raw config should be idempotent:\n%s", content)
+	}
+	content = appendRawConfigToSection(content, section, "type=\"ignored\"\nhost=\"ignored\"\nkey1=\"new\"")
+	if strings.Contains(content, `type="ignored"`) || strings.Contains(content, `host="ignored"`) {
+		t.Fatalf("connector type/host should not be overwritten:\n%s", content)
+	}
+	if !strings.Contains(content, `key1="new"`) || strings.Contains(content, `key1="value1"`) {
+		t.Fatalf("connector raw config should update existing keys:\n%s", content)
 	}
 	missing := appendRawConfigToSection(content, "environments.demo.applications.prod.connectors.connector-unknown", `x="y"`)
 	if missing != content {

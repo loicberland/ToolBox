@@ -23,12 +23,12 @@ import (
 )
 
 type Handler struct {
-	mu      sync.Mutex
-	running map[string]bool
+	mu   sync.Mutex
+	runs map[string]*currentRun
 }
 
 func NewHandler() *Handler {
-	return &Handler{running: map[string]bool{}}
+	return &Handler{runs: map[string]*currentRun{}}
 }
 
 func (h *Handler) Register(r *mux.Router) {
@@ -44,6 +44,8 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.deleteMaquette).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/validate", h.validateMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run", h.runMaquette).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current", h.currentRun).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current/logs", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/scan-cfg", h.scanCfg).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/logs", h.logs).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/logs/{logFile}", h.logFile).Methods(http.MethodGet)
@@ -61,10 +63,28 @@ type MaquetteSummary struct {
 }
 
 type ExecutionResponse struct {
+	Running    bool     `json:"running,omitempty"`
 	Status     string   `json:"status"`
+	Log        string   `json:"log,omitempty"`
 	Output     string   `json:"output,omitempty"`
 	Errors     []string `json:"errors,omitempty"`
 	DurationMs int64    `json:"durationMs,omitempty"`
+}
+
+type currentRun struct {
+	mu         sync.Mutex
+	name       string
+	running    bool
+	status     string
+	log        strings.Builder
+	errors     []string
+	startedAt  time.Time
+	finishedAt time.Time
+	durationMs int64
+}
+
+type currentRunWriter struct {
+	run *currentRun
 }
 
 type LogSummary struct {
@@ -216,30 +236,28 @@ func (h *Handler) validateMaquette(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) runMaquette(w http.ResponseWriter, r *http.Request) {
 	name := mux.Vars(r)["name"]
-	if !h.acquireRun(name) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Une execution est deja en cours pour cette maquette."})
-		return
-	}
-	defer h.releaseRun(name)
-
 	config, _, err := lab.LoadRegisteredConfig(name)
 	if err != nil {
 		respondError(w, err)
 		return
 	}
-	startedAt := time.Now()
-	var output bytes.Buffer
-	err = lab.RunPipeline(context.Background(), config, &output)
-	duration := time.Since(startedAt).Milliseconds()
-	if err != nil {
-		if validationErr, ok := err.(lab.ValidationError); ok {
-			writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "failed", Output: output.String(), Errors: validationErr.Items, DurationMs: duration})
-			return
-		}
-		writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "failed", Output: output.String(), Errors: []string{err.Error()}, DurationMs: duration})
+	run, ok := h.acquireRun(name)
+	if !ok {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Une execution est deja en cours pour cette maquette."})
 		return
 	}
-	writeJSON(w, http.StatusOK, ExecutionResponse{Status: "success", Output: output.String(), DurationMs: duration})
+
+	go h.executeRun(run, config)
+	writeJSON(w, http.StatusAccepted, run.snapshot())
+}
+
+func (h *Handler) currentRun(w http.ResponseWriter, r *http.Request) {
+	run := h.getRun(mux.Vars(r)["name"])
+	if run == nil {
+		writeJSON(w, http.StatusOK, ExecutionResponse{Status: "idle", Running: false})
+		return
+	}
+	writeJSON(w, http.StatusOK, run.snapshot())
 }
 
 func (h *Handler) scanCfg(w http.ResponseWriter, r *http.Request) {
@@ -430,22 +448,79 @@ func safeName(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
-func (h *Handler) acquireRun(name string) bool {
+func (h *Handler) acquireRun(name string) (*currentRun, bool) {
 	key := safeName(name)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.running[key] {
-		return false
+	if existing := h.runs[key]; existing != nil && existing.isRunning() {
+		return nil, false
 	}
-	h.running[key] = true
-	return true
+	run := &currentRun{name: name, running: true, status: "running", startedAt: time.Now()}
+	h.runs[key] = run
+	return run, true
 }
 
-func (h *Handler) releaseRun(name string) {
+func (h *Handler) getRun(name string) *currentRun {
 	key := safeName(name)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	delete(h.running, key)
+	return h.runs[key]
+}
+
+func (h *Handler) executeRun(run *currentRun, config lab.Config) {
+	startedAt := time.Now()
+	err := lab.RunPipeline(context.Background(), config, io.MultiWriter(os.Stdout, currentRunWriter{run: run}))
+	duration := time.Since(startedAt).Milliseconds()
+	if err != nil {
+		if validationErr, ok := err.(lab.ValidationError); ok {
+			run.finish("failed", validationErr.Items, duration)
+			return
+		}
+		run.finish("failed", []string{err.Error()}, duration)
+		return
+	}
+	run.finish("success", nil, duration)
+}
+
+func (w currentRunWriter) Write(payload []byte) (int, error) {
+	w.run.appendLog(string(payload))
+	return len(payload), nil
+}
+
+func (r *currentRun) appendLog(value string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, _ = r.log.WriteString(value)
+}
+
+func (r *currentRun) isRunning() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.running
+}
+
+func (r *currentRun) finish(status string, errors []string, durationMs int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.running = false
+	r.status = status
+	r.errors = errors
+	r.durationMs = durationMs
+	r.finishedAt = time.Now()
+}
+
+func (r *currentRun) snapshot() ExecutionResponse {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	log := r.log.String()
+	return ExecutionResponse{
+		Running:    r.running,
+		Status:     r.status,
+		Log:        log,
+		Output:     log,
+		Errors:     append([]string{}, r.errors...),
+		DurationMs: r.durationMs,
+	}
 }
 
 func scanConnectors(content string, envName string, appName string) (ScanCfgResponse, error) {

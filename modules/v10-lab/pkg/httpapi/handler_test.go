@@ -3,11 +3,13 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"toolBox/modules/v10-lab/internal/lab"
@@ -70,6 +72,35 @@ func TestActionsByProduct(t *testing.T) {
 	getJSON(t, router, "/api/v10-lab/actions?product="+lab.GedixProdV10, &actions, http.StatusOK)
 	if len(actions) == 0 {
 		t.Fatal("expected actions")
+	}
+}
+
+func TestCurrentRunTracksLiveLogsAndConflict(t *testing.T) {
+	handler := NewHandler()
+	run, ok := handler.acquireRun("ticket-T5808")
+	if !ok {
+		t.Fatal("expected run acquisition")
+	}
+	if _, ok := handler.acquireRun("ticket-T5808"); ok {
+		t.Fatal("expected second run to be rejected")
+	}
+
+	writer := io.MultiWriter(currentRunWriter{run: run})
+	if _, err := writer.Write([]byte("[INFO] step 1\n")); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := run.snapshot()
+	if !snapshot.Running || snapshot.Status != "running" || !strings.Contains(snapshot.Log, "step 1") {
+		t.Fatalf("unexpected running snapshot: %#v", snapshot)
+	}
+
+	run.finish("success", nil, 42)
+	snapshot = run.snapshot()
+	if snapshot.Running || snapshot.Status != "success" || snapshot.DurationMs != 42 {
+		t.Fatalf("unexpected finished snapshot: %#v", snapshot)
+	}
+	if _, ok := handler.acquireRun("ticket-T5808"); !ok {
+		t.Fatal("expected a new run after finish")
 	}
 }
 

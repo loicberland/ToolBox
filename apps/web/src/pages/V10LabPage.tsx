@@ -180,15 +180,27 @@ export function V10LabPage() {
       return;
     }
     setRunState('running');
-    setExecution({ status: 'running', output: m.running });
+    setExecution({ status: 'running', running: true, output: m.executionRunning });
     await run(async () => {
-      const result = await v10LabApi.runMaquette(name);
-      setExecution(result);
+      const started = await v10LabApi.runMaquette(name);
+      setExecution(started);
+      const result = await pollCurrentRun(name);
       await reloadList();
       await refreshLogs(name);
-      setRunState('success');
-      setMessage(m.runFinished);
+      setRunState(result.status === 'success' ? 'success' : 'failed');
+      setMessage(result.status === 'success' ? m.executionFinished : m.executionFailed);
     }, () => setRunState('failed'));
+  }
+
+  async function pollCurrentRun(name: string): Promise<ExecutionResponse> {
+    let result = await v10LabApi.currentRun(name);
+    setExecution(result);
+    while (result.running) {
+      await delay(1500);
+      result = await v10LabApi.currentRun(name);
+      setExecution(result);
+    }
+    return result;
   }
 
   async function refreshLogs(name = selectedName) {
@@ -423,11 +435,13 @@ export function V10LabPage() {
           )}
           {activeTab === m.tabs.execution && (
             <ExecutionPanel
+              config={config}
               busy={busy}
               runState={runState}
               execution={execution}
               logs={logs}
               selectedLog={selectedLog}
+              onConfigChange={updateConfig}
               onValidate={() => void validateCurrent()}
               onRun={() => void runCurrent()}
               onKill={() => setConfirmKill(true)}
@@ -507,7 +521,6 @@ function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, on
         {m.overwriteLabel}
       </label>
       <p className="muted v10-help-text">{m.overwriteHelp}</p>
-      {!creating && <DebugTargetsEditor config={config} onChange={onChange} />}
       {creating && <GedixForm config={config} onChange={onChange} compact />}
     </div>
   );
@@ -542,7 +555,7 @@ function DebugTargetsEditor({ config, onChange }: { config: V10Config; onChange:
       <div className="button-row">
         {config.runtime.debugTargets.map((target) => (
           <Button key={target} type="button" size="sm" variant="secondary" onClick={() => onChange({ ...config, runtime: { ...config.runtime, debugTargets: config.runtime.debugTargets.filter((item) => item !== target) } })}>
-            {target} x
+            {target} - {m.removeDebugTarget}
           </Button>
         ))}
       </div>
@@ -618,7 +631,7 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
                 )}
               </>
             )}
-            <ExtraKeysEditor service={service} onChange={(next) => updateService(name, next)} />
+            <ExtraKeysEditor serviceKey={`${config.name}:${name}`} service={service} onChange={(next) => updateService(name, next)} />
           </div>
         );
       })}
@@ -626,12 +639,12 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
   );
 }
 
-function ExtraKeysEditor({ service, onChange }: { service: ServiceDBConfig; onChange: (service: ServiceDBConfig) => void }) {
+function ExtraKeysEditor({ serviceKey, service, onChange }: { serviceKey: string; service: ServiceDBConfig; onChange: (service: ServiceDBConfig) => void }) {
   const [rows, setRows] = useState<ExtraKeyRow[]>(() => extraKeyRowsFromService(service));
 
   useEffect(() => {
     setRows(extraKeyRowsFromService(service));
-  }, [service.extraKeys]);
+  }, [serviceKey]);
 
   const commitRows = (nextRows: ExtraKeyRow[]) => {
     setRows(nextRows);
@@ -802,29 +815,35 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function ExecutionPanel({ busy, runState, execution, logs, selectedLog, onValidate, onRun, onKill, onRefreshLogs, onReadLog }: {
+function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, onConfigChange, onValidate, onRun, onKill, onRefreshLogs, onReadLog }: {
+  config: V10Config;
   busy: boolean;
   runState: RunState;
   execution: ExecutionResponse | null;
   logs: LogSummary[];
   selectedLog: string;
+  onConfigChange: (config: V10Config) => void;
   onValidate: () => void;
   onRun: () => void;
   onKill: () => void;
   onRefreshLogs: () => void;
   onReadLog: (logFile: string) => void;
 }) {
+  const hasDebugTargets = pipelineStartsMaquette(config.pipeline);
+  const currentLog = execution?.log || execution?.output || execution?.status || '';
   return (
     <div className="v10-execution">
+      {hasDebugTargets && <DebugTargetsEditor config={config} onChange={onConfigChange} />}
       <div className="button-row">
         <Button type="button" variant="secondary" onClick={onValidate} disabled={busy || runState === 'running'}>{m.validate}</Button>
         <Button type="button" onClick={onRun} disabled={busy || runState === 'running'}>{runState === 'running' ? m.running : m.run}</Button>
         <Button type="button" variant="danger" onClick={onKill} disabled={busy || runState === 'running'}>{m.taskkill}</Button>
         <Button type="button" variant="secondary" onClick={onRefreshLogs} disabled={busy}>{m.refreshLogs}</Button>
       </div>
-      {execution && (
-        <pre className="v10-output">{execution.errors?.length ? execution.errors.join('\n') : execution.output || execution.status}</pre>
-      )}
+      <h4>{m.currentExecutionLogs}</h4>
+      {execution?.errors?.length ? <p className="error whitespace">{execution.errors.join('\n')}</p> : null}
+      <pre className="v10-output">{currentLog || m.noLog}</pre>
+      <h4>{m.previousLogs}</h4>
       <div className="v10-log-layout">
         <div className="v10-log-list">
           {logs.length === 0 ? <p className="muted">{m.noLog}</p> : logs.map((log) => (
@@ -966,6 +985,16 @@ function hasDuplicateConnector(rows: ConnectorFormRow[]) {
     seen.add(name);
   }
   return false;
+}
+
+function pipelineStartsMaquette(pipeline: PipelineStep[]) {
+  return (pipeline ?? []).some((step) => step.action === 'start-maquette' || stringsEqual(step.label, m.startMaquetteLabel));
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 class LocalErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: string }> {

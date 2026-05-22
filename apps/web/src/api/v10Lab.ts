@@ -92,7 +92,9 @@ export type MaquetteSummary = {
 };
 
 export type ExecutionResponse = {
+  running?: boolean;
   status: string;
+  log?: string;
   output?: string;
   errors?: string[];
   durationMs?: number;
@@ -163,6 +165,7 @@ export const v10LabApi = {
   deleteMaquette: (name: string) => request<void>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   validateMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/validate`, { method: 'POST' }),
   runMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run`, { method: 'POST' }),
+  currentRun: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run/current`),
   logs: (name: string) => request<LogSummary[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/logs`),
   scanCfg: (name: string, file: File, envName: string, appName: string) => scanCfg(name, file, envName, appName),
   logFile: async (name: string, logFile: string) => {
