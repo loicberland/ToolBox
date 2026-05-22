@@ -283,7 +283,8 @@ Phase 3 - Interface V10 Lab :
 
 Notes phase 3 :
 
-- le chemin ZIP release est saisi manuellement pour le moment
+- le ZIP de release reste a son emplacement d'origine ; l'interface memorise uniquement son chemin
+- le bouton Parcourir ouvre une selection de fichier locale cote API Windows
 - la suppression d'une maquette supprime seulement l'enregistrement V10 Lab, pas le dossier Gedix physique
 - `taskkill gx-*` reste une action manuelle avec confirmation
 

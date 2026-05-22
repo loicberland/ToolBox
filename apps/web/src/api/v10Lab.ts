@@ -104,9 +104,9 @@ export type LogSummary = {
   modifiedAt: string;
 };
 
-export type UploadReleaseResponse = {
-  fileName: string;
-  storedPath: string;
+export type SelectReleasePathResponse = {
+  path?: string;
+  cancelled: boolean;
 };
 
 export type ScanCfgResponse = {
@@ -155,7 +155,7 @@ export const v10LabApi = {
   actions: (product: string) => request<V10Action[]>(`/v10-lab/actions?product=${encodeURIComponent(product)}`),
   dbTemplates: () => request<DBTemplate[]>('/v10-lab/db-templates'),
   defaultTarget: (name: string) => request<{ targetPath: string }>(`/v10-lab/default-target?name=${encodeURIComponent(name)}`),
-  uploadRelease: (maquetteName: string, file: File) => uploadRelease(maquetteName, file),
+  selectReleasePath: () => request<SelectReleasePathResponse>('/v10-lab/releases/select-path', { method: 'POST' }),
   listMaquettes: () => request<MaquetteSummary[]>('/v10-lab/maquettes'),
   createMaquette: (config: V10Config) => request('/v10-lab/maquettes', jsonRequest('POST', config)),
   getMaquette: (name: string) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`),
@@ -174,20 +174,6 @@ export const v10LabApi = {
   },
   killGXProcesses: () => request<ExecutionResponse>('/v10-lab/kill-gx-processes', jsonRequest('POST', { force: true })),
 };
-
-async function uploadRelease(maquetteName: string, file: File): Promise<UploadReleaseResponse> {
-  const formData = new FormData();
-  formData.append('maquetteName', maquetteName);
-  formData.append('file', file);
-  const response = await fetch(`${API_BASE_URL}/v10-lab/releases/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!response.ok) {
-    await throwResponseError(response);
-  }
-  return response.json();
-}
 
 async function scanCfg(name: string, file: File, envName: string, appName: string): Promise<ScanCfgResponse> {
   const formData = new FormData();

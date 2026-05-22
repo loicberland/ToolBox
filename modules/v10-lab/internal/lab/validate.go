@@ -2,6 +2,8 @@ package lab
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,6 +26,15 @@ func ValidateConfig(config Config) error {
 		errors = append(errors, "product: champ requis manquant")
 	} else if !ProductExists(config.Product) {
 		errors = append(errors, fmt.Sprintf("product: produit inconnu %q", config.Product))
+	}
+	if strings.TrimSpace(config.Release.ZipPath) != "" {
+		if !strings.EqualFold(filepath.Ext(config.Release.ZipPath), ".zip") {
+			errors = append(errors, "release.zipPath: le fichier doit etre un ZIP .zip")
+		} else if info, err := os.Stat(config.Release.ZipPath); err != nil {
+			errors = append(errors, fmt.Sprintf("release.zipPath: fichier introuvable %q", config.Release.ZipPath))
+		} else if info.IsDir() {
+			errors = append(errors, fmt.Sprintf("release.zipPath: chemin vers un dossier %q", config.Release.ZipPath))
+		}
 	}
 	if config.GedixConfig.Port < 0 || config.GedixConfig.Port > 65535 {
 		errors = append(errors, "gedixConfig.port: port invalide")

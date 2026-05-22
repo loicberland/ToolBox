@@ -8,8 +8,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -34,7 +36,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/actions", h.actions).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/db-templates", h.dbTemplates).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/default-target", h.defaultTarget).Methods(http.MethodGet)
-	r.HandleFunc("/api/v10-lab/releases/upload", h.uploadRelease).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/releases/select-path", h.selectReleasePath).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes", h.listMaquettes).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes", h.createMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.getMaquette).Methods(http.MethodGet)
@@ -71,9 +73,9 @@ type LogSummary struct {
 	ModifiedAt string `json:"modifiedAt"`
 }
 
-type UploadReleaseResponse struct {
-	FileName   string `json:"fileName"`
-	StoredPath string `json:"storedPath"`
+type SelectReleasePathResponse struct {
+	Path      string `json:"path,omitempty"`
+	Cancelled bool   `json:"cancelled"`
 }
 
 type ScanConnector struct {
@@ -114,43 +116,17 @@ func (h *Handler) defaultTarget(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"targetPath": lab.DefaultMaquetteTargetPath(config)})
 }
 
-func (h *Handler) uploadRelease(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(512 << 20); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fichier ZIP requis"})
+func (h *Handler) selectReleasePath(w http.ResponseWriter, _ *http.Request) {
+	if runtime.GOOS != "windows" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "la selection graphique de fichier est disponible uniquement sous Windows; saisissez le chemin manuellement"})
 		return
 	}
-	maquetteName := strings.TrimSpace(r.FormValue("maquetteName"))
-	if maquetteName == "" {
-		maquetteName = "sans-nom"
-	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fichier ZIP requis"})
-		return
-	}
-	defer file.Close()
-	if !strings.EqualFold(filepath.Ext(header.Filename), ".zip") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "seuls les fichiers .zip sont acceptes"})
-		return
-	}
-	dir := lab.ReleasesDir(maquetteName)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		respondError(w, err)
-		return
-	}
-	filename := uniqueFilename(dir, filepath.Base(header.Filename))
-	targetPath := filepath.Join(dir, filename)
-	target, err := os.OpenFile(targetPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	path, cancelled, err := openWindowsZipDialog()
 	if err != nil {
 		respondError(w, err)
 		return
 	}
-	defer target.Close()
-	if _, err := io.Copy(target, file); err != nil {
-		respondError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, UploadReleaseResponse{FileName: filename, StoredPath: targetPath})
+	writeJSON(w, http.StatusOK, SelectReleasePathResponse{Path: path, Cancelled: cancelled})
 }
 
 func (h *Handler) listMaquettes(w http.ResponseWriter, _ *http.Request) {
@@ -468,18 +444,6 @@ func (h *Handler) releaseRun(name string) {
 	delete(h.running, key)
 }
 
-func uniqueFilename(dir string, filename string) string {
-	base := strings.TrimSuffix(filename, filepath.Ext(filename))
-	ext := filepath.Ext(filename)
-	candidate := filename
-	for index := 1; ; index++ {
-		if _, err := os.Stat(filepath.Join(dir, candidate)); os.IsNotExist(err) {
-			return candidate
-		}
-		candidate = fmt.Sprintf("%s-%d%s", base, index, ext)
-	}
-}
-
 func scanConnectors(content string, envName string, appName string) (ScanCfgResponse, error) {
 	sectionPattern := regexp.MustCompile(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.connectors\.([^\]]+)\]\s*$`)
 	envs := map[string]bool{}
@@ -508,6 +472,28 @@ func scanConnectors(content string, envName string, appName string) (ScanCfgResp
 		}
 	}
 	return ScanCfgResponse{EnvName: envName, AppName: appName, Connectors: connectors}, nil
+}
+
+func openWindowsZipDialog() (string, bool, error) {
+	script := `Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Filter = "Archives ZIP (*.zip)|*.zip"
+$dialog.Title = "Selectionner une release Gedix V10"
+$dialog.CheckFileExists = $true
+$dialog.Multiselect = $false
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $dialog.FileName
+}`
+	cmd := exec.Command("powershell", "-NoProfile", "-STA", "-Command", script)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", false, err
+	}
+	path := strings.TrimSpace(string(output))
+	if path == "" {
+		return "", true, nil
+	}
+	return path, false, nil
 }
 
 func firstNonEmpty(values ...string) string {

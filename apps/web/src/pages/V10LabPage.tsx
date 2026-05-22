@@ -227,15 +227,12 @@ export function V10LabPage() {
     }
   }
 
-  async function uploadReleaseZip(file: File, target: V10Config, onChange: (config: V10Config) => void) {
-    if (!stringsEqual(filepathExt(file.name), '.zip')) {
-      setError(m.errors.zipOnly);
-      return;
-    }
+  async function selectReleaseZip(target: V10Config, onChange: (config: V10Config) => void) {
     await run(async () => {
-      const result = await v10LabApi.uploadRelease(target.name || 'sans-nom', file);
-      onChange({ ...target, release: { ...target.release, zipPath: result.storedPath } });
-      setMessage(m.selectedZip.replace('{{name}}', result.fileName));
+      const result = await v10LabApi.selectReleasePath();
+      if (!result.cancelled && result.path) {
+        onChange({ ...target, release: { ...target.release, zipPath: result.path } });
+      }
     });
   }
 
@@ -316,7 +313,7 @@ export function V10LabPage() {
           <div className="ui-card-header">
             <h3>{m.newMaquette}</h3>
           </div>
-          <MaquetteGeneralForm config={draft} products={products} defaultTargetPath={defaultTargetPath} onChange={setDraft} onUploadZip={uploadReleaseZip} creating />
+          <MaquetteGeneralForm config={draft} products={products} defaultTargetPath={defaultTargetPath} onChange={setDraft} onSelectZip={selectReleaseZip} creating />
           <div className="button-row end">
             <Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>{messages.common.cancel}</Button>
             <Button type="button" onClick={() => void createMaquette()} disabled={busy}>{m.create}</Button>
@@ -380,7 +377,7 @@ export function V10LabPage() {
             ))}
           </div>
 
-          {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} defaultTargetPath={defaultTargetPath} onChange={setConfig} onUploadZip={uploadReleaseZip} />}
+          {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} defaultTargetPath={defaultTargetPath} onChange={setConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={setConfig} />}
           {activeTab === m.tabs.services && <ServicesForm config={config} templates={templates} onChange={setConfig} />}
           {activeTab === m.tabs.connectors && <ConnectorsForm config={config} onChange={setConfig} onScanCfg={(file) => void scanCfg(file)} />}
@@ -435,12 +432,12 @@ export function V10LabPage() {
   );
 }
 
-function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, onUploadZip, creating = false }: {
+function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, onSelectZip, creating = false }: {
   config: V10Config;
   products: V10Product[];
   defaultTargetPath: string;
   onChange: (config: V10Config) => void;
-  onUploadZip: (file: File, config: V10Config, onChange: (config: V10Config) => void) => void;
+  onSelectZip: (config: V10Config, onChange: (config: V10Config) => void) => void;
   creating?: boolean;
 }) {
   return (
@@ -455,20 +452,9 @@ function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, on
       </label>
       <label>{m.releaseZip}
         <div className="v10-file-row">
-          <label className="ui-button secondary sm v10-file-button">
+          <Button type="button" variant="secondary" size="sm" onClick={() => onSelectZip(config, onChange)}>
             {m.selectZip}
-            <input
-              type="file"
-              accept=".zip,application/zip"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  onUploadZip(file, config, onChange);
-                }
-                event.currentTarget.value = '';
-              }}
-            />
-          </label>
+          </Button>
           <input placeholder={m.manualZip} value={config.release.zipPath} onChange={(event) => onChange({ ...config, release: { ...config.release, zipPath: event.target.value } })} />
         </div>
       </label>

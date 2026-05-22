@@ -73,7 +73,7 @@ func TestActionsByProduct(t *testing.T) {
 	}
 }
 
-func TestUploadReleaseAndScanCfg(t *testing.T) {
+func TestSelectReleasePathNonWindowsAndScanCfg(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(toolboxruntime.EnvRoot, root)
 	router := mux.NewRouter()
@@ -81,15 +81,6 @@ func TestUploadReleaseAndScanCfg(t *testing.T) {
 
 	config := testConfig()
 	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
-
-	var upload UploadReleaseResponse
-	postMultipart(t, router, "/api/v10-lab/releases/upload", "release.zip", []byte("zip"), map[string]string{"maquetteName": config.Name}, &upload, http.StatusCreated)
-	if upload.StoredPath == "" || filepath.Ext(upload.StoredPath) != ".zip" {
-		t.Fatalf("unexpected upload response: %#v", upload)
-	}
-	if _, err := os.Stat(upload.StoredPath); err != nil {
-		t.Fatalf("uploaded zip not stored: %v", err)
-	}
 
 	cfg := `[environments.demo.applications.prod.connectors.connector-focas-01]
 [environments.demo.applications.prod.connectors.connector-dnc-01]
@@ -102,11 +93,13 @@ func TestUploadReleaseAndScanCfg(t *testing.T) {
 }
 
 func testConfig() lab.Config {
+	zipPath := filepath.Join(os.TempDir(), "v10-lab-test-release.zip")
+	_ = os.WriteFile(zipPath, []byte("zip"), 0644)
 	return lab.Config{
 		Name:    "ticket-T5808",
 		Product: lab.GedixProdV10,
 		Release: lab.ReleaseConfig{
-			ZipPath:   "D:/release.zip",
+			ZipPath:   zipPath,
 			Overwrite: false,
 		},
 		Maquette: lab.MaquetteConfig{

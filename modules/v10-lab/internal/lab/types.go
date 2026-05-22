@@ -243,14 +243,6 @@ func RegisteredLogsDir(name string) string {
 	return filepath.Join(MaquettesDir(), safeDirName(name), "logs")
 }
 
-func ReleasesDir(name string) string {
-	layout, err := toolboxruntime.ForModule(ModuleID)
-	if err != nil {
-		return filepath.Join("files", ModuleID, "releases", safeDirName(name))
-	}
-	return filepath.Join(layout.FilesDir, "releases", safeDirName(name))
-}
-
 func NormalizeConfigForSave(config *Config) {
 	ApplyDefaults(config)
 	for serviceName, service := range config.GedixConfig.Services {

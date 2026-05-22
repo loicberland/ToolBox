@@ -8,11 +8,13 @@ import (
 )
 
 func TestValidateConfigAcceptsSystemShape(t *testing.T) {
+	zipPath := filepath.Join(t.TempDir(), "release.zip")
+	mustWrite(t, zipPath, "")
 	config := Config{
 		Name:    "ticket-T5808",
 		Product: GedixProdV10,
 		Release: ReleaseConfig{
-			ZipPath: "D:/release.zip",
+			ZipPath: zipPath,
 		},
 		Pipeline: []PipelineStep{
 			{Action: "create-env"},
