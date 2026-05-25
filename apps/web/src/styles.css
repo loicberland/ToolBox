@@ -1525,7 +1525,7 @@ textarea {
 .v10-table-head,
 .v10-table-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(120px, 0.8fr) 90px minmax(150px, 1fr) minmax(120px, auto);
+  grid-template-columns: minmax(140px, 1fr) minmax(120px, 0.8fr) 90px minmax(120px, auto);
   gap: 12px;
   align-items: center;
 }

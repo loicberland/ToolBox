@@ -466,7 +466,6 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               <span>{m.name}</span>
               <span>{m.product}</span>
               <span>{m.installed}</span>
-              <span>{m.latestRun}</span>
               <span>{m.actions}</span>
             </div>
             {maquettes.map((item) => (
@@ -474,7 +473,6 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
                 <strong>{item.name}</strong>
                 <span>{item.product}</span>
                 <span>{item.existsOnDisk ? m.yes : m.no}</span>
-                <span>{item.lastRunAt ? `${formatDate(item.lastRunAt)} (${item.lastStatus ?? 'unknown'})` : '-'}</span>
                 <div className="button-row">
                   <Button type="button" size="sm" variant="secondary" onClick={() => void toggleMaquette(item.name)}>{item.name === selectedName ? m.close : m.open}</Button>
                 </div>
