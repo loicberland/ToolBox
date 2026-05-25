@@ -2,6 +2,7 @@ package lab
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -55,6 +56,7 @@ type Config struct {
 	Maquette     MaquetteConfig         `json:"maquette"`
 	GedixConfig  GedixConfig            `json:"gedixConfig"`
 	Runtime      RuntimeConfig          `json:"runtime"`
+	GroupName    string                 `json:"groupName,omitempty"`
 	API          APIConfig              `json:"api"`
 	Database     DatabaseConfig         `json:"database"`
 	Services     []ServiceSpec          `json:"services"`
@@ -99,8 +101,9 @@ type ProductUnitConfig struct {
 type ConnectorConfig = ProductUnitConfig
 
 type RuntimeConfig struct {
-	DebugTargets []string `json:"debugTargets"`
-	OpenConsole  bool     `json:"openConsole"`
+	DebugTargets     []string            `json:"debugTargets"`
+	DebugTargetFlags map[string][]string `json:"debugTargetFlags,omitempty"`
+	OpenConsole      bool                `json:"openConsole"`
 }
 
 type APIConfig struct {
@@ -129,9 +132,18 @@ type PipelineStep struct {
 }
 
 type RegisteredMaquette struct {
-	Name    string `json:"name"`
-	Product string `json:"product"`
-	Path    string `json:"path"`
+	Name      string `json:"name"`
+	Product   string `json:"product"`
+	Path      string `json:"path"`
+	GroupName string `json:"groupName,omitempty"`
+}
+
+type MaquetteGroup struct {
+	Name string `json:"name"`
+}
+
+type groupRegistry struct {
+	Groups []MaquetteGroup `json:"groups"`
 }
 
 type DBTemplate struct {
@@ -211,7 +223,75 @@ func SaveRegisteredConfig(config Config) (RegisteredMaquette, error) {
 	if err := os.WriteFile(targetPath, append(payload, '\n'), 0644); err != nil {
 		return RegisteredMaquette{}, err
 	}
-	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath}, nil
+	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath, GroupName: config.GroupName}, nil
+}
+
+func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaquette, error) {
+	ApplyDefaults(&config)
+	NormalizeConfigForSave(&config)
+	if err := ValidateConfig(config); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	oldSafe := safeDirName(oldName)
+	newSafe := safeDirName(config.Name)
+	oldDir := filepath.Join(MaquettesDir(), oldSafe)
+	newDir := filepath.Join(MaquettesDir(), newSafe)
+	if oldSafe != newSafe {
+		if _, err := os.Stat(oldDir); err != nil {
+			return RegisteredMaquette{}, err
+		}
+		if _, err := os.Stat(newDir); err == nil {
+			return RegisteredMaquette{}, fmt.Errorf("maquette deja enregistree: %s", config.Name)
+		} else if !os.IsNotExist(err) {
+			return RegisteredMaquette{}, err
+		}
+		oldConfig, err := LoadConfig(filepath.Join(oldDir, "maquette.json"))
+		if err != nil {
+			return RegisteredMaquette{}, err
+		}
+		oldDefaultTarget := DefaultMaquetteTargetPath(oldConfig)
+		newDefaultTarget := DefaultMaquetteTargetPath(config)
+		targetPath := strings.TrimSpace(config.Maquette.TargetPath)
+		shouldRenameTarget := targetPath == "" || sameCleanPath(targetPath, oldDefaultTarget)
+		if shouldRenameTarget {
+			config.Maquette.TargetPath = newDefaultTarget
+			if _, err := os.Stat(newDefaultTarget); err == nil {
+				return RegisteredMaquette{}, fmt.Errorf("dossier Gedix cible deja existant: %s", newDefaultTarget)
+			} else if !os.IsNotExist(err) {
+				return RegisteredMaquette{}, err
+			}
+		}
+		if err := os.Rename(oldDir, newDir); err != nil {
+			return RegisteredMaquette{}, err
+		}
+		targetRenamed := false
+		if shouldRenameTarget {
+			if _, err := os.Stat(oldDefaultTarget); err == nil {
+				if err := os.MkdirAll(filepath.Dir(newDefaultTarget), 0755); err != nil {
+					_ = os.Rename(newDir, oldDir)
+					return RegisteredMaquette{}, err
+				}
+				if err := os.Rename(oldDefaultTarget, newDefaultTarget); err != nil {
+					_ = os.Rename(newDir, oldDir)
+					return RegisteredMaquette{}, err
+				}
+				targetRenamed = true
+			} else if !os.IsNotExist(err) {
+				_ = os.Rename(newDir, oldDir)
+				return RegisteredMaquette{}, err
+			}
+		}
+		item, err := saveRegisteredConfigIntoDir(config, newDir)
+		if err != nil {
+			if targetRenamed {
+				_ = os.Rename(newDefaultTarget, oldDefaultTarget)
+			}
+			_ = os.Rename(newDir, oldDir)
+			return RegisteredMaquette{}, err
+		}
+		return item, nil
+	}
+	return saveRegisteredConfigIntoDir(config, newDir)
 }
 
 func DeleteRegisteredConfig(name string) error {
@@ -220,6 +300,24 @@ func DeleteRegisteredConfig(name string) error {
 		return err
 	}
 	return nil
+}
+
+func saveRegisteredConfigIntoDir(config Config, targetDir string) (RegisteredMaquette, error) {
+	if err := os.MkdirAll(filepath.Join(targetDir, "data"), 0755); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	if err := os.MkdirAll(filepath.Join(targetDir, "logs"), 0755); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	payload, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return RegisteredMaquette{}, err
+	}
+	targetPath := filepath.Join(targetDir, "maquette.json")
+	if err := os.WriteFile(targetPath, append(payload, '\n'), 0644); err != nil {
+		return RegisteredMaquette{}, err
+	}
+	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath, GroupName: config.GroupName}, nil
 }
 
 func RegisteredLogsDir(name string) string {
@@ -266,6 +364,9 @@ func ApplyDefaults(config *Config) {
 	}
 	if config.GedixConfig.Units == nil {
 		config.GedixConfig.Units = map[string]ProductUnitConfig{}
+	}
+	if config.Runtime.DebugTargetFlags == nil {
+		config.Runtime.DebugTargetFlags = map[string][]string{}
 	}
 }
 
@@ -340,7 +441,7 @@ func RegisterConfig(configPath string) (RegisteredMaquette, error) {
 	if err := os.WriteFile(targetPath, source, 0644); err != nil {
 		return RegisteredMaquette{}, err
 	}
-	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath}, nil
+	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath, GroupName: config.GroupName}, nil
 }
 
 func LoadRegisteredConfig(name string) (Config, string, error) {
@@ -368,7 +469,7 @@ func ListMaquettes() ([]RegisteredMaquette, error) {
 		if err != nil {
 			continue
 		}
-		items = append(items, RegisteredMaquette{Name: config.Name, Product: config.Product, Path: path})
+		items = append(items, RegisteredMaquette{Name: config.Name, Product: config.Product, Path: path, GroupName: config.GroupName})
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
@@ -376,18 +477,175 @@ func ListMaquettes() ([]RegisteredMaquette, error) {
 	return items, nil
 }
 
+func ListMaquetteGroups() ([]MaquetteGroup, error) {
+	registry, err := loadGroupRegistry()
+	if err != nil {
+		return nil, err
+	}
+	sortGroups(registry.Groups)
+	return registry.Groups, nil
+}
+
+func CreateMaquetteGroup(name string) (MaquetteGroup, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return MaquetteGroup{}, fmt.Errorf("nom de groupe requis")
+	}
+	if safeDirName(name) == "sans-nom" {
+		return MaquetteGroup{}, fmt.Errorf("nom de groupe invalide")
+	}
+	registry, err := loadGroupRegistry()
+	if err != nil {
+		return MaquetteGroup{}, err
+	}
+	for _, group := range registry.Groups {
+		if strings.EqualFold(group.Name, name) {
+			return MaquetteGroup{}, fmt.Errorf("groupe deja existant: %s", name)
+		}
+	}
+	group := MaquetteGroup{Name: name}
+	registry.Groups = append(registry.Groups, group)
+	sortGroups(registry.Groups)
+	return group, saveGroupRegistry(registry)
+}
+
+func RenameMaquetteGroup(oldName string, newName string) (MaquetteGroup, error) {
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" || newName == "" {
+		return MaquetteGroup{}, fmt.Errorf("nom de groupe requis")
+	}
+	registry, err := loadGroupRegistry()
+	if err != nil {
+		return MaquetteGroup{}, err
+	}
+	found := false
+	for index, group := range registry.Groups {
+		if strings.EqualFold(group.Name, newName) && !strings.EqualFold(group.Name, oldName) {
+			return MaquetteGroup{}, fmt.Errorf("groupe deja existant: %s", newName)
+		}
+		if strings.EqualFold(group.Name, oldName) {
+			registry.Groups[index].Name = newName
+			found = true
+		}
+	}
+	if !found {
+		return MaquetteGroup{}, os.ErrNotExist
+	}
+	maquettes, err := ListMaquettes()
+	if err != nil {
+		return MaquetteGroup{}, err
+	}
+	for _, item := range maquettes {
+		config, _, err := LoadRegisteredConfig(item.Name)
+		if err != nil {
+			return MaquetteGroup{}, err
+		}
+		if strings.EqualFold(config.GroupName, oldName) {
+			config.GroupName = newName
+			if _, err := SaveRegisteredConfig(config); err != nil {
+				return MaquetteGroup{}, err
+			}
+		}
+	}
+	sortGroups(registry.Groups)
+	return MaquetteGroup{Name: newName}, saveGroupRegistry(registry)
+}
+
+func DeleteMaquetteGroup(name string) error {
+	name = strings.TrimSpace(name)
+	maquettes, err := ListMaquettes()
+	if err != nil {
+		return err
+	}
+	for _, item := range maquettes {
+		if strings.EqualFold(item.GroupName, name) {
+			return fmt.Errorf("groupe non vide: retirez ou deplacez les maquettes avant suppression")
+		}
+	}
+	registry, err := loadGroupRegistry()
+	if err != nil {
+		return err
+	}
+	next := registry.Groups[:0]
+	found := false
+	for _, group := range registry.Groups {
+		if strings.EqualFold(group.Name, name) {
+			found = true
+			continue
+		}
+		next = append(next, group)
+	}
+	if !found {
+		return os.ErrNotExist
+	}
+	registry.Groups = next
+	return saveGroupRegistry(registry)
+}
+
+func GroupRegistryPath() string {
+	return filepath.Join(MaquettesDir(), "groups.json")
+}
+
+func loadGroupRegistry() (groupRegistry, error) {
+	path := GroupRegistryPath()
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return groupRegistry{Groups: []MaquetteGroup{}}, nil
+	}
+	if err != nil {
+		return groupRegistry{}, err
+	}
+	var registry groupRegistry
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return groupRegistry{}, err
+	}
+	if registry.Groups == nil {
+		registry.Groups = []MaquetteGroup{}
+	}
+	return registry, nil
+}
+
+func saveGroupRegistry(registry groupRegistry) error {
+	if err := os.MkdirAll(MaquettesDir(), 0755); err != nil {
+		return err
+	}
+	sortGroups(registry.Groups)
+	payload, err := json.MarshalIndent(registry, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(GroupRegistryPath(), append(payload, '\n'), 0644)
+}
+
+func sortGroups(groups []MaquetteGroup) {
+	sort.Slice(groups, func(i, j int) bool {
+		return strings.ToLower(groups[i].Name) < strings.ToLower(groups[j].Name)
+	})
+}
+
 func safeDirName(value string) string {
 	name := strings.TrimSpace(value)
 	name = strings.NewReplacer("\\", "-", "/", "-", ":", "", "*", "", "?", "", `"`, "", "<", "", ">", "", "|", "").Replace(name)
-	name = strings.Join(strings.Fields(name), "-")
-	for strings.Contains(name, "--") {
-		name = strings.ReplaceAll(name, "--", "-")
-	}
-	name = strings.Trim(name, "-.")
+	name = strings.Join(strings.Fields(name), "_")
+	name = strings.TrimRight(name, ". ")
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return "sans-nom"
 	}
 	return name
+}
+
+func sameCleanPath(left string, right string) bool {
+	leftAbs, leftErr := filepath.Abs(filepath.Clean(left))
+	rightAbs, rightErr := filepath.Abs(filepath.Clean(right))
+	if leftErr == nil {
+		left = leftAbs
+	}
+	if rightErr == nil {
+		right = rightAbs
+	}
+	return strings.EqualFold(left, right)
 }
 
 func stringParam(params map[string]any, key string) string {

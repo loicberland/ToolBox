@@ -87,8 +87,10 @@ export type V10Config = {
   };
   runtime: {
     debugTargets: string[];
+    debugTargetFlags?: Record<string, string[]>;
     openConsole: boolean;
   };
+  groupName?: string;
   api?: {
     baseUrl: string;
     tokenRef: string;
@@ -106,6 +108,11 @@ export type MaquetteSummary = {
   existsOnDisk: boolean;
   lastRunAt?: string;
   lastStatus?: string;
+  groupName?: string;
+};
+
+export type MaquetteGroup = {
+  name: string;
 };
 
 export type ExecutionResponse = {
@@ -180,6 +187,10 @@ export const v10LabApi = {
   defaultTarget: (name: string) => request<{ targetPath: string }>(`/v10-lab/default-target?name=${encodeURIComponent(name)}`),
   selectReleasePath: () => request<SelectReleasePathResponse>('/v10-lab/releases/select-path', { method: 'POST' }),
   listMaquettes: () => request<MaquetteSummary[]>('/v10-lab/maquettes'),
+  listMaquetteGroups: () => request<MaquetteGroup[]>('/v10-lab/maquette-groups'),
+  createMaquetteGroup: (name: string) => request<MaquetteGroup>('/v10-lab/maquette-groups', jsonRequest('POST', { name })),
+  updateMaquetteGroup: (name: string, nextName: string) => request<MaquetteGroup>(`/v10-lab/maquette-groups/${encodeURIComponent(name)}`, jsonRequest('PUT', { name: nextName })),
+  deleteMaquetteGroup: (name: string) => request<void>(`/v10-lab/maquette-groups/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   createMaquette: (config: V10Config) => request('/v10-lab/maquettes', jsonRequest('POST', config)),
   getMaquette: (name: string) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`),
   updateMaquette: (name: string, config: V10Config) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, jsonRequest('PUT', config)),

@@ -4,6 +4,7 @@ import {
   ExecutionResponse,
   ConnectorConfig,
   LogSummary,
+  MaquetteGroup,
   MaquetteSummary,
   PipelineStep,
   ServiceDBConfig,
@@ -40,6 +41,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [actions, setActions] = useState<V10Action[]>([]);
   const [templates, setTemplates] = useState<DBTemplate[]>([]);
   const [maquettes, setMaquettes] = useState<MaquetteSummary[]>([]);
+  const [groups, setGroups] = useState<MaquetteGroup[]>([]);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [newGroupName, setNewGroupName] = useState('');
   const [selectedName, setSelectedName] = useState('');
   const [config, setConfig] = useState<V10Config | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>(m.tabs.general);
@@ -102,14 +106,16 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
   async function loadInitial() {
     await run(async () => {
-      const [productItems, templateItems, maquetteItems] = await Promise.all([
+      const [productItems, templateItems, maquetteItems, groupItems] = await Promise.all([
         v10LabApi.products(),
         v10LabApi.dbTemplates(),
         v10LabApi.listMaquettes(),
+        v10LabApi.listMaquetteGroups(),
       ]);
       setProducts(productItems);
       setTemplates(templateItems);
       setMaquettes(maquetteItems);
+      setGroups(groupItems);
       const product = productItems.find((item) => item.id === DEFAULT_V10_PRODUCT_ID) ?? productItems[0];
       setDraft(defaultConfig(product?.id, product));
       await loadActions(product?.id ?? DEFAULT_V10_PRODUCT_ID);
@@ -131,8 +137,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   }
 
   async function reloadList() {
-    const items = await v10LabApi.listMaquettes();
+    const [items, groupItems] = await Promise.all([v10LabApi.listMaquettes(), v10LabApi.listMaquetteGroups()]);
     setMaquettes(items);
+    setGroups(groupItems);
   }
 
   async function openMaquette(name: string) {
@@ -148,19 +155,22 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
-  async function createMaquette() {
+  async function createMaquette(groupName = draft.groupName ?? '') {
     const validation = validateConfig(draft);
     if (validation) {
       setError(validation);
       return;
     }
     await run(async () => {
-      const next = normalizeConfig(draft);
+      const next = normalizeConfig({ ...draft, groupName });
       await v10LabApi.createMaquette(next);
       setShowCreate(false);
       const product = productFor(DEFAULT_V10_PRODUCT_ID, products);
       setDraft(defaultConfig(product.id, product));
       await reloadList();
+      if (next.groupName) {
+        setOpenGroups((current) => ({ ...current, [next.groupName!]: true }));
+      }
       await openMaquette(next.name);
       setMessage(m.created);
     });
@@ -177,8 +187,10 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }
     let saved = false;
     await run(async () => {
-      const next = normalizeConfig(await v10LabApi.updateMaquette(config.name, normalizeConfig(config)));
+      const oldName = config.name;
+      const next = normalizeConfig(await v10LabApi.updateMaquette(selectedName || oldName, normalizeConfig(config)));
       setConfig(next);
+      setSelectedName(next.name);
       setIsDirty(false);
       await reloadList();
       setMessage(m.saved);
@@ -358,8 +370,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }
     try {
       const parsed = normalizeConfig(JSON.parse(jsonText) as V10Config);
-      const saved = normalizeConfig(await v10LabApi.updateMaquette(config.name, parsed));
+      const saved = normalizeConfig(await v10LabApi.updateMaquette(selectedName || config.name, parsed));
       setConfig(saved);
+      setSelectedName(saved.name);
       setIsDirty(false);
       await reloadList();
       setMessage(m.jsonSaved);
@@ -405,6 +418,29 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       }
     }
     await openMaquette(name);
+  }
+
+  async function createGroup() {
+    const name = newGroupName.trim();
+    if (!name) {
+      setError('Nom de groupe obligatoire.');
+      return;
+    }
+    await run(async () => {
+      const group = await v10LabApi.createMaquetteGroup(name);
+      setNewGroupName('');
+      await reloadList();
+      setOpenGroups((current) => ({ ...current, [group.name]: true }));
+      setMessage('Groupe créé.');
+    });
+  }
+
+  async function deleteGroup(name: string) {
+    await run(async () => {
+      await v10LabApi.deleteMaquetteGroup(name);
+      await reloadList();
+      setMessage('Groupe supprimé.');
+    });
   }
 
   async function scanCfg(file: File) {
@@ -457,6 +493,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     setIsDirty(true);
   }
 
+  const groupedMaquettes = groups.map((group) => ({
+    ...group,
+    items: maquettes.filter((item) => item.groupName === group.name),
+  }));
+  const ungroupedMaquettes = maquettes.filter((item) => !item.groupName || !groups.some((group) => group.name === item.groupName));
+
   return (
     <div className="workspace v10-lab-workspace">
       <header className="page-header">
@@ -478,7 +520,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <div className="ui-card-header">
             <h3>{m.newMaquette}</h3>
           </div>
-          <MaquetteGeneralForm config={draft} products={products} defaultTargetPath={defaultTargetPath} onChange={setDraft} onSelectZip={selectReleaseZip} creating />
+          <MaquetteGeneralForm config={draft} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={setDraft} onSelectZip={selectReleaseZip} creating />
           <div className="button-row end">
             <Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>{messages.common.cancel}</Button>
             <Button type="button" onClick={() => void createMaquette()} disabled={busy}>{m.create}</Button>
@@ -491,29 +533,33 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <h3>{m.registeredMaquettes}</h3>
           <Button type="button" variant="secondary" size="sm" onClick={() => void reloadList()} disabled={busy}>{m.refreshLogs}</Button>
         </div>
-        {maquettes.length === 0 ? (
+        <div className="v10-file-row">
+          <input placeholder="Nom du groupe" value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} />
+          <Button type="button" variant="secondary" size="sm" onClick={() => void createGroup()} disabled={busy || !newGroupName.trim()}>Créer un groupe</Button>
+        </div>
+        {maquettes.length === 0 && groups.length === 0 ? (
           <div className="empty-state">
             <h3>{m.noMaquette}</h3>
           </div>
         ) : (
-          <div className="v10-table">
-            <div className="v10-table-head">
-              <span>{m.name}</span>
-              <span>{m.product}</span>
-              <span>{m.installed}</span>
-              <span>{m.actions}</span>
-            </div>
-            {maquettes.map((item) => (
-              <div className={`v10-table-row ${item.name === selectedName ? 'active' : ''}`} key={item.name}>
-                <strong>{item.name}</strong>
-                <span>{item.product}</span>
-                <span>{item.existsOnDisk ? m.yes : m.no}</span>
-                <div className="button-row">
-                  <Button type="button" size="sm" variant="secondary" onClick={() => void toggleMaquette(item.name)}>{item.name === selectedName ? m.close : m.open}</Button>
+          <>
+            <div className="v10-group-list">
+              {groupedMaquettes.map((group) => (
+                <div className="v10-group" key={group.name}>
+                  <div className="v10-group-header">
+                    <button type="button" onClick={() => setOpenGroups((current) => ({ ...current, [group.name]: !current[group.name] }))}>{openGroups[group.name] ? '▾' : '▸'}</button>
+                    <strong>{group.name}</strong>
+                    <span className="muted">{group.items.length}</span>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => { setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: group.name }); setShowCreate(true); setOpenGroups((current) => ({ ...current, [group.name]: true })); }}>Ajouter une maquette</Button>
+                    <Button type="button" size="sm" variant="danger" onClick={() => void deleteGroup(group.name)} disabled={group.items.length > 0}>Supprimer</Button>
+                  </div>
+                  {openGroups[group.name] && <MaquetteList items={group.items} selectedName={selectedName} onToggle={toggleMaquette} />}
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            <h4>Sans groupe</h4>
+            <MaquetteList items={ungroupedMaquettes} selectedName={selectedName} onToggle={toggleMaquette} />
+          </>
         )}
       </section>
 
@@ -540,7 +586,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
             ))}
           </div>
 
-          {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
+          {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
           {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
           {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file) => void scanCfg(file)} />}
@@ -613,9 +659,36 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   );
 }
 
-function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, onSelectZip, creating = false }: {
+function MaquetteList({ items, selectedName, onToggle }: { items: MaquetteSummary[]; selectedName: string; onToggle: (name: string) => Promise<void> }) {
+  if (items.length === 0) {
+    return <p className="muted">Aucune maquette.</p>;
+  }
+  return (
+    <div className="v10-table">
+      <div className="v10-table-head">
+        <span>{m.name}</span>
+        <span>{m.product}</span>
+        <span>{m.installed}</span>
+        <span>{m.actions}</span>
+      </div>
+      {items.map((item) => (
+        <div className={`v10-table-row ${item.name === selectedName ? 'active' : ''}`} key={item.name}>
+          <strong>{item.name}</strong>
+          <span>{item.product}</span>
+          <span>{item.existsOnDisk ? m.yes : m.no}</span>
+          <div className="button-row">
+            <Button type="button" size="sm" variant="secondary" onClick={() => void onToggle(item.name)}>{item.name === selectedName ? m.close : m.open}</Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onChange, onSelectZip, creating = false }: {
   config: V10Config;
   products: V10Product[];
+  groups: MaquetteGroup[];
   defaultTargetPath: string;
   onChange: (config: V10Config) => void;
   onSelectZip: (config: V10Config, onChange: (config: V10Config) => void) => void;
@@ -639,7 +712,13 @@ function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, on
   return (
     <div className="form-grid v10-form-grid">
       <label>{m.name}
-        <input value={config.name} disabled={!creating} onChange={(event) => onChange({ ...config, name: event.target.value })} />
+        <input value={config.name} onChange={(event) => onChange({ ...config, name: event.target.value })} />
+      </label>
+      <label>Groupe
+        <select value={config.groupName ?? ''} onChange={(event) => onChange({ ...config, groupName: event.target.value })}>
+          <option value="">Sans groupe</option>
+          {groups.map((group) => <option value={group.name} key={group.name}>{group.name}</option>)}
+        </select>
       </label>
       <label>{m.product}
         <select value={config.product} onChange={(event) => changeProduct(event.target.value)}>
@@ -675,9 +754,43 @@ function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, on
 
 function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void }) {
   const [selected, setSelected] = useState('');
+  const [customTarget, setCustomTarget] = useState('');
+  const [customFlag, setCustomFlag] = useState('');
+  const [customError, setCustomError] = useState('');
   const options = [...product.services.map((service) => service.name), ...Object.keys(unitsForConfig(config, product))]
     .filter((item, index, items) => items.indexOf(item) === index)
     .filter((item) => !config.runtime.debugTargets.includes(item));
+  const allTargets = [...product.services.map((service) => service.name), ...Object.keys(unitsForConfig(config, product))]
+    .filter((item, index, items) => items.indexOf(item) === index);
+  const debugTargetFlags = config.runtime.debugTargetFlags ?? {};
+  const addCustomFlag = () => {
+    const target = customTarget.trim();
+    const flag = normalizeDebugFlag(customFlag);
+    if (!target || !flag) {
+      setCustomError('Cible et flag requis.');
+      return;
+    }
+    if (debugFlagHasUnsafeCharacters(customFlag)) {
+      setCustomError('Flag invalide.');
+      return;
+    }
+    const current = debugTargetFlags[target] ?? [];
+    if (!current.includes(flag)) {
+      onChange({ ...config, runtime: { ...config.runtime, debugTargetFlags: { ...debugTargetFlags, [target]: [...current, flag] } } });
+    }
+    setCustomFlag('');
+    setCustomError('');
+  };
+  const removeCustomFlag = (target: string, flag: string) => {
+    const next = { ...debugTargetFlags };
+    const flags = (next[target] ?? []).filter((item) => item !== flag);
+    if (flags.length > 0) {
+      next[target] = flags;
+    } else {
+      delete next[target];
+    }
+    onChange({ ...config, runtime: { ...config.runtime, debugTargetFlags: next } });
+  };
   return (
     <div className="v10-debug-targets">
       <div className="v10-file-row">
@@ -704,6 +817,22 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
             {target} - {m.removeDebugTarget}
           </Button>
         ))}
+      </div>
+      <div className="v10-file-row">
+        <select value={customTarget} onChange={(event) => setCustomTarget(event.target.value)}>
+          <option value="">Cible debug sur mesure</option>
+          {allTargets.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+        <input value={customFlag} placeholder="clef ou --clef" onChange={(event) => setCustomFlag(event.target.value)} />
+        <Button type="button" variant="secondary" size="sm" disabled={!customTarget || !customFlag.trim()} onClick={addCustomFlag}>Ajouter</Button>
+      </div>
+      {customError && <p className="error">{customError}</p>}
+      <div className="button-row">
+        {Object.entries(debugTargetFlags).flatMap(([target, flags]) => flags.map((flag) => (
+          <Button key={`${target}:${flag}`} type="button" size="sm" variant="secondary" onClick={() => removeCustomFlag(target, flag)}>
+            {target} {flag} - {m.removeDebugTarget}
+          </Button>
+        )))}
       </div>
     </div>
   );
@@ -1104,6 +1233,7 @@ function defaultConfig(product = DEFAULT_V10_PRODUCT_ID, productDefinition?: V10
     maquette: { targetPath: '', envName: 'demo', appName: productDefinition?.defaultAppName ?? 'prod' },
     gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {}, agents: {} },
     runtime: { debugTargets: [], openConsole: true },
+    groupName: '',
     pipeline: [],
   } as V10Config);
 }
@@ -1140,8 +1270,10 @@ function normalizeConfig(config: V10Config): V10Config {
     runtime: {
       ...runtime,
       debugTargets: runtime.debugTargets ?? [],
+      debugTargetFlags: runtime.debugTargetFlags ?? {},
       openConsole: runtime.openConsole ?? true,
     },
+    groupName: config.groupName ?? '',
     pipeline: config.pipeline ?? [],
   };
 }
@@ -1247,6 +1379,19 @@ function unitHelp(product: V10Product) {
 
 function moduleCommandHasUnsafeCharacters(command: string) {
   return /[&|><]/.test(command);
+}
+
+function normalizeDebugFlag(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+  return trimmed.startsWith('--') ? trimmed : `--${trimmed}`;
+}
+
+function debugFlagHasUnsafeCharacters(value: string) {
+  const normalized = normalizeDebugFlag(value);
+  return !normalized || /[\s"'&|;<>]/.test(normalized) || !/^--[A-Za-z0-9._=-]+$/.test(normalized);
 }
 
 function normalizeModuleType(value: string) {

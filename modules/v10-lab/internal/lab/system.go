@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -164,35 +165,37 @@ func StartMaquette(config Config, writer io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(config.Runtime.DebugTargets) > 0 {
-		fmt.Fprintf(writer, "[INFO] Cibles debug : %s\n", strings.Join(config.Runtime.DebugTargets, ", "))
+	debugTargets := RuntimeDebugLaunchTargets(config.Runtime)
+	if len(debugTargets) > 0 {
+		fmt.Fprintf(writer, "[INFO] Cibles debug : %s\n", strings.Join(debugTargets, ", "))
 	}
 	fmt.Fprintf(writer, "Démarrage gx-front : %s\n", consoleCommandLine(paths.FrontExePath, "listen"))
 	if err := openConsole(paths.GedixRoot, "V10 Lab gx-front", paths.FrontExePath, "listen"); err != nil {
 		return err
 	}
 	appArgs := []string{"run"}
-	if len(config.Runtime.DebugTargets) > 0 {
+	if len(debugTargets) > 0 {
 		appArgs = append(appArgs, "-e")
-		appArgs = append(appArgs, debugExclusionArg(config.Runtime.DebugTargets))
+		appArgs = append(appArgs, debugExclusionArg(debugTargets))
 		fmt.Fprintf(writer, "[INFO] Lancement gx-app avec exclusions : gx-app.exe %s\n", strings.Join(appArgs, " "))
 	}
 	fmt.Fprintf(writer, "Démarrage gx-app : %s\n", consoleCommandLine(paths.AppExePath, appArgs...))
 	if err := openConsole(paths.AppPath, "V10 Lab gx-app", paths.AppExePath, appArgs...); err != nil {
 		return err
 	}
-	for _, target := range config.Runtime.DebugTargets {
+	for _, target := range debugTargets {
 		debugTarget, err := DetectDebugTargetForProduct(paths, target, product)
 		if err != nil {
 			return err
 		}
+		debugArgs := debugArgsForTarget(config.Runtime, target)
 		if debugTarget.Kind == DebugTargetConnector || debugTarget.Kind == DebugTargetAgent {
-			fmt.Fprintf(writer, "[INFO] Lancement %s debug %s : %s listen --debug -v2\n", product.UnitSingularLabel, debugTarget.Name, filepath.Base(debugTarget.ExePath))
+			fmt.Fprintf(writer, "[INFO] Lancement %s debug %s : %s %s\n", product.UnitSingularLabel, debugTarget.Name, filepath.Base(debugTarget.ExePath), strings.Join(debugArgs, " "))
 		} else {
-			fmt.Fprintf(writer, "[INFO] Lancement service debug %s : %s listen --debug -v2\n", debugTarget.Name, filepath.Base(debugTarget.ExePath))
+			fmt.Fprintf(writer, "[INFO] Lancement service debug %s : %s %s\n", debugTarget.Name, filepath.Base(debugTarget.ExePath), strings.Join(debugArgs, " "))
 		}
 		fmt.Fprintf(writer, "Démarrage debug %s (%s) : %s\n", debugTarget.Name, debugTarget.Kind, consoleCommandLine(debugTarget.ExePath, "listen", "--debug", "-v2"))
-		if err := openConsole(debugTarget.WorkDir, "V10 Lab debug "+debugTarget.Name, debugTarget.ExePath, "listen", "--debug", "-v2"); err != nil {
+		if err := openConsole(debugTarget.WorkDir, "V10 Lab debug "+debugTarget.Name, debugTarget.ExePath, debugArgs...); err != nil {
 			return err
 		}
 	}
@@ -257,6 +260,67 @@ func productUnitArticle(product ProductDefinition) string {
 		return "de l’agent"
 	}
 	return "du connecteur"
+}
+
+func RuntimeDebugLaunchTargets(runtime RuntimeConfig) []string {
+	seen := map[string]bool{}
+	targets := []string{}
+	for _, target := range runtime.DebugTargets {
+		target = strings.TrimSpace(target)
+		key := strings.ToLower(target)
+		if target == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		targets = append(targets, target)
+	}
+	for target, flags := range runtime.DebugTargetFlags {
+		target = strings.TrimSpace(target)
+		key := strings.ToLower(target)
+		if target == "" || len(flags) == 0 || seen[key] {
+			continue
+		}
+		seen[key] = true
+		targets = append(targets, target)
+	}
+	sort.SliceStable(targets, func(i, j int) bool {
+		return strings.ToLower(targets[i]) < strings.ToLower(targets[j])
+	})
+	return targets
+}
+
+func debugArgsForTarget(runtime RuntimeConfig, target string) []string {
+	args := []string{"listen", "--debug", "-v2"}
+	for _, flag := range runtime.DebugTargetFlags[target] {
+		normalized, err := NormalizeDebugFlag(flag)
+		if err == nil {
+			args = append(args, normalized)
+		}
+	}
+	return args
+}
+
+func NormalizeDebugFlag(value string) (string, error) {
+	flag := strings.TrimSpace(value)
+	if flag == "" {
+		return "", fmt.Errorf("flag vide")
+	}
+	if strings.ContainsAny(flag, " \t\r\n\"'&|;<>") {
+		return "", fmt.Errorf("flag debug invalide %q", value)
+	}
+	if !strings.HasPrefix(flag, "--") {
+		flag = "--" + flag
+	}
+	if flag == "--" {
+		return "", fmt.Errorf("flag debug invalide %q", value)
+	}
+	for _, char := range strings.TrimPrefix(flag, "--") {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '-' || char == '_' || char == '.' || char == '=' {
+			continue
+		}
+		return "", fmt.Errorf("flag debug invalide %q", value)
+	}
+	return flag, nil
 }
 
 func DetectModuleCommandTarget(paths GedixPaths, product ProductDefinition, unitName string, moduleName string) (DebugTarget, error) {

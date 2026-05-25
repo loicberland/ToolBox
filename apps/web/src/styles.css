@@ -1550,6 +1550,33 @@ textarea {
   background: #eff6ff;
 }
 
+.v10-group-list {
+  display: grid;
+  gap: 12px;
+}
+
+.v10-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.v10-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.v10-group-header > button:first-child {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
 .truncate {
   min-width: 0;
   overflow: hidden;

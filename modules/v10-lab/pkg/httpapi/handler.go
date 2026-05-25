@@ -39,6 +39,10 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/releases/select-path", h.selectReleasePath).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes", h.listMaquettes).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes", h.createMaquette).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquette-groups", h.listMaquetteGroups).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/maquette-groups", h.createMaquetteGroup).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquette-groups/{name}", h.updateMaquetteGroup).Methods(http.MethodPut)
+	r.HandleFunc("/api/v10-lab/maquette-groups/{name}", h.deleteMaquetteGroup).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.getMaquette).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.updateMaquette).Methods(http.MethodPut)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.deleteMaquette).Methods(http.MethodDelete)
@@ -62,6 +66,7 @@ type MaquetteSummary struct {
 	ExistsOnDisk bool    `json:"existsOnDisk"`
 	LastRunAt    *string `json:"lastRunAt,omitempty"`
 	LastStatus   *string `json:"lastStatus,omitempty"`
+	GroupName    string  `json:"groupName,omitempty"`
 }
 
 type ExecutionResponse struct {
@@ -119,6 +124,10 @@ type ScanCfgResponse struct {
 type ModuleCommandRunRequest struct {
 	UnitName string `json:"unitName"`
 	Command  string `json:"command"`
+}
+
+type MaquetteGroupRequest struct {
+	Name string `json:"name"`
 }
 
 func (h *Handler) products(w http.ResponseWriter, _ *http.Request) {
@@ -195,6 +204,41 @@ func (h *Handler) createMaquette(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
+func (h *Handler) listMaquetteGroups(w http.ResponseWriter, _ *http.Request) {
+	groups, err := lab.ListMaquetteGroups()
+	respond(w, groups, err)
+}
+
+func (h *Handler) createMaquetteGroup(w http.ResponseWriter, r *http.Request) {
+	var request MaquetteGroupRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	group, err := lab.CreateMaquetteGroup(request.Name)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, group)
+}
+
+func (h *Handler) updateMaquetteGroup(w http.ResponseWriter, r *http.Request) {
+	var request MaquetteGroupRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	group, err := lab.RenameMaquetteGroup(mux.Vars(r)["name"], request.Name)
+	respond(w, group, err)
+}
+
+func (h *Handler) deleteMaquetteGroup(w http.ResponseWriter, r *http.Request) {
+	if err := lab.DeleteMaquetteGroup(mux.Vars(r)["name"]); err != nil {
+		respondError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) getMaquette(w http.ResponseWriter, r *http.Request) {
 	config, _, err := lab.LoadRegisteredConfig(mux.Vars(r)["name"])
 	respond(w, config, err)
@@ -209,11 +253,7 @@ func (h *Handler) updateMaquette(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(config.Name) == "" {
 		config.Name = name
 	}
-	if !strings.EqualFold(safeName(config.Name), safeName(name)) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "le renommage de maquette n'est pas disponible dans cette phase"})
-		return
-	}
-	if _, err := lab.SaveRegisteredConfig(config); err != nil {
+	if _, err := lab.SaveRegisteredConfigReplacing(name, config); err != nil {
 		respondError(w, err)
 		return
 	}
@@ -433,6 +473,7 @@ func summaryFor(config lab.Config) MaquetteSummary {
 		ExistsOnDisk: statErr == nil,
 		LastRunAt:    lastRunAt,
 		LastStatus:   lastStatus,
+		GroupName:    config.GroupName,
 	}
 }
 

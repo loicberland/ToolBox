@@ -363,6 +363,38 @@ func TestDebugTargetsUseCommaSeparatedExclusionArg(t *testing.T) {
 	}
 }
 
+func TestSafeDirNameKeepsUnicodeAndRemovesWindowsForbiddenCharacters(t *testing.T) {
+	got := safeDirName(`Gedix V10 Démo:*?"<>|`)
+	if got != "Gedix_V10_Démo" {
+		t.Fatalf("unexpected safe dir name %q", got)
+	}
+}
+
+func TestNormalizeDebugFlagAndLaunchTargets(t *testing.T) {
+	flag, err := NormalizeDebugFlag("v2")
+	if err != nil || flag != "--v2" {
+		t.Fatalf("unexpected normalized flag %q err=%v", flag, err)
+	}
+	if _, err := NormalizeDebugFlag("bad flag"); err == nil {
+		t.Fatal("expected flag with space to be rejected")
+	}
+	runtimeConfig := RuntimeConfig{
+		DebugTargets: []string{"auth"},
+		DebugTargetFlags: map[string][]string{
+			"auth":                 {"--trace"},
+			"connector-filesystem": {"v2"},
+		},
+	}
+	targets := RuntimeDebugLaunchTargets(runtimeConfig)
+	if strings.Join(targets, ",") != "auth,connector-filesystem" {
+		t.Fatalf("unexpected debug launch targets: %#v", targets)
+	}
+	args := debugArgsForTarget(runtimeConfig, "auth")
+	if strings.Join(args, " ") != "listen --debug -v2 --trace" {
+		t.Fatalf("unexpected debug args: %#v", args)
+	}
+}
+
 func TestRunActionKeepsInternalUTF8Logs(t *testing.T) {
 	var output bytes.Buffer
 	config := Config{

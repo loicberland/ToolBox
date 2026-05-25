@@ -64,6 +64,60 @@ func TestMaquetteCRUDAndValidate(t *testing.T) {
 	}
 }
 
+func TestMaquetteRenameAndUnicodeName(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	config.Name = "Gedix V10 Démo"
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+	if _, err := os.Stat(filepath.Join(root, "modules", "v10-lab", "data", "maquettes", "Gedix_V10_Démo", "maquette.json")); err != nil {
+		t.Fatalf("expected unicode registration path, got %v", err)
+	}
+
+	config.Name = "Gedix Démo"
+	postJSON(t, router, http.MethodPut, "/api/v10-lab/maquettes/Gedix%20V10%20D%C3%A9mo", config, http.StatusOK)
+	var summaries []MaquetteSummary
+	getJSON(t, router, "/api/v10-lab/maquettes", &summaries, http.StatusOK)
+	if len(summaries) != 1 || summaries[0].Name != "Gedix Démo" {
+		t.Fatalf("unexpected summaries after rename: %#v", summaries)
+	}
+	if _, err := os.Stat(filepath.Join(root, "modules", "v10-lab", "data", "maquettes", "Gedix_Démo", "maquette.json")); err != nil {
+		t.Fatalf("expected renamed unicode registration path, got %v", err)
+	}
+}
+
+func TestMaquetteGroups(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	var group lab.MaquetteGroup
+	postJSONInto(t, router, "/api/v10-lab/maquette-groups", MaquetteGroupRequest{Name: "Démo client"}, &group, http.StatusCreated)
+	if group.Name != "Démo client" {
+		t.Fatalf("unexpected group: %#v", group)
+	}
+	config := testConfig()
+	config.Name = "Client A"
+	config.GroupName = group.Name
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	var summaries []MaquetteSummary
+	getJSON(t, router, "/api/v10-lab/maquettes", &summaries, http.StatusOK)
+	if len(summaries) != 1 || summaries[0].GroupName != group.Name {
+		t.Fatalf("expected grouped maquette, got %#v", summaries)
+	}
+	request := httptest.NewRequest(http.MethodDelete, "/api/v10-lab/maquette-groups/D%C3%A9mo%20client", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected non-empty group delete to fail, got %d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestActionsByProduct(t *testing.T) {
 	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
 	router := mux.NewRouter()

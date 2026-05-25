@@ -21,6 +21,8 @@ func ValidateConfig(config Config) error {
 	errors := []string{}
 	if strings.TrimSpace(config.Name) == "" {
 		errors = append(errors, "name: champ requis manquant")
+	} else if safeDirName(config.Name) == "sans-nom" {
+		errors = append(errors, "name: nom invalide")
 	}
 	if strings.TrimSpace(config.Product) == "" {
 		errors = append(errors, "product: champ requis manquant")
@@ -49,6 +51,24 @@ func ValidateConfig(config Config) error {
 			errors = append(errors, fmt.Sprintf("runtime.debugTargets: doublon %q", target))
 		}
 		seenDebugTargets[target] = true
+	}
+	for target, flags := range config.Runtime.DebugTargetFlags {
+		if strings.TrimSpace(target) == "" {
+			errors = append(errors, "runtime.debugTargetFlags: cible vide")
+			continue
+		}
+		seenFlags := map[string]bool{}
+		for _, flag := range flags {
+			normalized, err := NormalizeDebugFlag(flag)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("runtime.debugTargetFlags.%s: %v", target, err))
+				continue
+			}
+			if seenFlags[normalized] {
+				errors = append(errors, fmt.Sprintf("runtime.debugTargetFlags.%s: doublon %q", target, normalized))
+			}
+			seenFlags[normalized] = true
+		}
 	}
 	for serviceName, service := range config.GedixConfig.Services {
 		dbType := strings.ToLower(strings.TrimSpace(service.DBType))
