@@ -140,12 +140,31 @@ func TestConsoleCommandLineQuotesExecutablePathWithSpaces(t *testing.T) {
 		t.Fatalf("unexpected console command:\ngot:  %s\nwant: %s", got, want)
 	}
 
-	cmdArgs := openConsoleArgs(workDir, "V10 Lab gx-front", got)
-	if len(cmdArgs) != 8 || cmdArgs[4] != workDir {
-		t.Fatalf("workDir should be passed as a separate /D argument, got %#v", cmdArgs)
+	cmdArgs := openConsoleArgs("V10 Lab gx-front", `C:\Temp\v10-lab-run-1.cmd`)
+	if len(cmdArgs) != 7 || cmdArgs[5] != "call" || cmdArgs[6] != `C:\Temp\v10-lab-run-1.cmd` {
+		t.Fatalf("console should launch the generated script via call, got %#v", cmdArgs)
 	}
-	if cmdArgs[7] != want {
-		t.Fatalf("cmd /K command should contain quoted executable, got %#v", cmdArgs)
+}
+
+func TestConsoleLauncherScriptQuotesPathsWithoutBackslashEscapedQuotes(t *testing.T) {
+	content := consoleLauncherScriptContent(
+		`D:\Data\Gedix10\01_Clients\GMP Industrie`,
+		`D:\Data\Gedix10\01_Clients\GMP Industrie\gx-front.exe`,
+		"listen",
+	)
+	for _, expected := range []string{
+		`cd /d "D:\Data\Gedix10\01_Clients\GMP Industrie"`,
+		`"D:\Data\Gedix10\01_Clients\GMP Industrie\gx-front.exe" listen`,
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected script to contain %q, got:\n%s", expected, content)
+		}
+	}
+	if strings.Contains(content, `\"`) {
+		t.Fatalf("batch script must not contain backslash-escaped quotes:\n%s", content)
+	}
+	if !strings.Contains(content, "\r\n") {
+		t.Fatalf("batch script should use CRLF line endings, got %q", content)
 	}
 }
 
@@ -159,6 +178,29 @@ func TestConsoleCommandLineKeepsDebugTargetsAsSingleArgument(t *testing.T) {
 	want := `"D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01`
 	if got != want {
 		t.Fatalf("unexpected debug console command:\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestConsoleLauncherScriptQuotesArgumentsWithSpaces(t *testing.T) {
+	content := consoleLauncherScriptContent(
+		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod`,
+		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`,
+		"run",
+		"-e",
+		"auth,connector-focas-01",
+		"--some-path",
+		`D:\A B\file.txt`,
+	)
+	for _, expected := range []string{
+		`"D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01 --some-path "D:\A B\file.txt"`,
+		`-e auth,connector-focas-01`,
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("expected script to contain %q, got:\n%s", expected, content)
+		}
+	}
+	if strings.Contains(content, `-e auth connector-focas-01`) {
+		t.Fatalf("debug target list should stay a single argument:\n%s", content)
 	}
 }
 

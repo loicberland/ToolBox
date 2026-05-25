@@ -285,32 +285,66 @@ func openConsole(dir string, title string, exe string, args ...string) error {
 		fmt.Printf("[DRY-RUN non-windows] cd %s && %s\n", quoteCmdArg(dir), commandLine)
 		return nil
 	}
-	cmd := exec.Command("cmd", openConsoleArgs(dir, title, commandLine)...)
+	scriptPath, err := createConsoleLauncherScript(dir, exe, args...)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("cmd", openConsoleArgs(title, scriptPath)...)
 	return cmd.Start()
 }
 
-func openConsoleArgs(dir string, title string, commandLine string) []string {
-	return []string{"/C", "start", title, "/D", dir, "cmd", "/K", commandLine}
+func openConsoleArgs(title string, scriptPath string) []string {
+	return []string{"/C", "start", title, "cmd", "/K", "call", scriptPath}
+}
+
+func createConsoleLauncherScript(dir string, exe string, args ...string) (string, error) {
+	file, err := os.CreateTemp("", "v10-lab-run-*.cmd")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	content := consoleLauncherScriptContent(dir, exe, args...)
+	if _, err := file.WriteString(content); err != nil {
+		_ = file.Close()
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func consoleLauncherScriptContent(dir string, exe string, args ...string) string {
+	return strings.Join([]string{
+		"@echo off",
+		"cd /d " + quoteBatchPath(dir),
+		consoleCommandLine(exe, args...),
+		"",
+	}, "\r\n")
 }
 
 func consoleCommandLine(exe string, args ...string) string {
-	parts := []string{quoteWindowsPath(exe)}
+	parts := []string{quoteBatchPath(exe)}
 	for _, arg := range args {
-		parts = append(parts, quoteCmdArg(arg))
+		parts = append(parts, quoteBatchArg(arg))
 	}
 	return strings.Join(parts, " ")
 }
 
-func quoteWindowsPath(path string) string {
+func quoteBatchPath(path string) string {
 	if strings.HasPrefix(path, `"`) && strings.HasSuffix(path, `"`) {
 		return path
 	}
-	return `"` + strings.ReplaceAll(path, `"`, `\"`) + `"`
+	return `"` + strings.ReplaceAll(path, `"`, `""`) + `"`
 }
 
 func quoteCmdArg(value string) string {
+	return quoteBatchArg(value)
+}
+
+func quoteBatchArg(value string) string {
 	if strings.ContainsAny(value, " \t&()[]{}^=;!'`~") {
-		return quoteWindowsPath(value)
+		return quoteBatchPath(value)
 	}
 	return value
 }
