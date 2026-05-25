@@ -10,6 +10,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 func CreateEnv(ctx ActionContext, params map[string]any) error {
@@ -215,14 +218,15 @@ func KillGXProcesses(writer io.Writer, force bool, interactive bool) error {
 	}
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", `[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); taskkill /f /t /im gx-* 2>&1`)
 	output, err := cmd.CombinedOutput()
+	outputText := decodeCommandOutput(output)
 	if len(output) > 0 {
-		fmt.Fprintln(writer, strings.TrimSpace(string(output)))
+		fmt.Fprintln(writer, strings.TrimSpace(outputText))
 	}
-	if err != nil && strings.Contains(strings.ToLower(string(output)), "not found") {
+	if err != nil && strings.Contains(strings.ToLower(outputText), "not found") {
 		fmt.Fprintln(writer, "Aucun service GX à couper.")
 		return nil
 	}
-	if err != nil && strings.Contains(strings.ToLower(string(output)), "introuvable") {
+	if err != nil && strings.Contains(strings.ToLower(outputText), "introuvable") {
 		fmt.Fprintln(writer, "Aucun service GX à couper.")
 		return nil
 	}
@@ -247,7 +251,7 @@ type prefixedWriter struct {
 }
 
 func (w prefixedWriter) Write(payload []byte) (int, error) {
-	text := strings.TrimRight(string(payload), "\r\n")
+	text := strings.TrimRight(decodeCommandOutput(payload), "\r\n")
 	if text != "" {
 		for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
 			if strings.TrimSpace(line) != "" {
@@ -256,6 +260,23 @@ func (w prefixedWriter) Write(payload []byte) (int, error) {
 		}
 	}
 	return len(payload), nil
+}
+
+func decodeCommandOutput(payload []byte) string {
+	if utf8.Valid(payload) {
+		return string(payload)
+	}
+	for _, decoder := range []*charmap.Charmap{
+		charmap.CodePage850,
+		charmap.CodePage437,
+		charmap.Windows1252,
+	} {
+		text, err := decoder.NewDecoder().String(string(payload))
+		if err == nil {
+			return text
+		}
+	}
+	return string(payload)
 }
 
 func openConsole(dir string, title string, exe string, args ...string) error {

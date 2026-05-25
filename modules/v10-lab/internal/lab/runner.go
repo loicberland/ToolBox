@@ -93,7 +93,7 @@ func RunAction(ctx context.Context, config Config, actionID string, writer io.Wr
 		return err
 	}
 	fmt.Fprintln(logWriter)
-	fmt.Fprintln(logWriter, "ExÃ©cution terminÃ©e.")
+	fmt.Fprintln(logWriter, "Exécution terminée.")
 	return nil
 }
 

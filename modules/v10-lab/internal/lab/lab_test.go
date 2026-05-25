@@ -136,6 +136,37 @@ func TestDebugTargetsUseCommaSeparatedExclusionArg(t *testing.T) {
 	}
 }
 
+func TestRunActionKeepsInternalUTF8Logs(t *testing.T) {
+	var output bytes.Buffer
+	config := Config{
+		Name:    "ticket-T5808",
+		Product: GedixProdV10,
+	}
+
+	if err := RunAction(t.Context(), config, "stop-maquette", &output); err != nil {
+		t.Fatal(err)
+	}
+	text := output.String()
+	if !strings.Contains(text, "Exécution terminée.") {
+		t.Fatalf("expected UTF-8 internal log, got:\n%s", text)
+	}
+	if strings.Contains(text, "ExÃ") {
+		t.Fatalf("internal log was mojibaked:\n%s", text)
+	}
+}
+
+func TestDecodeCommandOutputKeepsUTF8AndDecodesWindowsCodePages(t *testing.T) {
+	utf8Text := "Exécution terminée."
+	if got := decodeCommandOutput([]byte(utf8Text)); got != utf8Text {
+		t.Fatalf("UTF-8 command output should not be converted, got %q", got)
+	}
+
+	cp850OperationReussie := []byte{'O', 'p', 0x82, 'r', 'a', 't', 'i', 'o', 'n', ' ', 'r', 0x82, 'u', 's', 's', 'i', 'e'}
+	if got := decodeCommandOutput(cp850OperationReussie); got != "Opération réussie" {
+		t.Fatalf("expected CP850 output to be decoded, got %q", got)
+	}
+}
+
 func TestCfgUpdatesRootPortDBAndSQLite(t *testing.T) {
 	content := minimalGedixCfg()
 	section := "environments.demo.applications.prod.services.auth"

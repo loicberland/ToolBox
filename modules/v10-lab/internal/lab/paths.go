@@ -144,7 +144,7 @@ func runCommand(dir string, exe string, args ...string) error {
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s %s: %w: %s", exe, strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("%s %s: %w: %s", exe, strings.Join(args, " "), err, strings.TrimSpace(decodeCommandOutput(output)))
 	}
 	return nil
 }
