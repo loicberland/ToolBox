@@ -181,24 +181,40 @@ func TestDetectDebugTargetUsesProductUnitExecutable(t *testing.T) {
 
 func TestDetectModuleCommandTargetUsesProductUnitModuleExecutable(t *testing.T) {
 	root := t.TempDir()
-	mustMkdir(t, filepath.Join(root, "env_demo", "app_prod", "connector-focas-01"))
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_prod", "connector-filesystem01"))
 	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
 	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
 	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "gx-app.exe"), "")
-	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "connector-focas-01", "gx-module-connector-focas-01.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "connector-filesystem01", "gx-module-filesystem.exe"), "")
 	paths, err := DetectGedixPaths(Config{Name: "prod", Product: GedixProdV10, Maquette: MaquetteConfig{TargetPath: root, AppName: "prod"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	product, _ := ProductDefinitionByID(GedixProdV10)
-	target, err := DetectModuleCommandTarget(paths, product, "connector-focas-01")
-	if err != nil || target.Kind != DebugTargetConnector || !strings.HasSuffix(target.ExePath, filepath.Join("connector-focas-01", "gx-module-connector-focas-01.exe")) {
+	target, err := DetectModuleCommandTarget(paths, product, "connector-filesystem01", "module-filesystem")
+	if err != nil || target.Kind != DebugTargetConnector || !strings.HasSuffix(target.ExePath, filepath.Join("connector-filesystem01", "gx-module-filesystem.exe")) {
 		t.Fatalf("expected connector module target, got %#v err=%v", target, err)
 	}
 
 	watchProduct, _ := ProductDefinitionByID(GedixWatchV10)
-	if got := watchProduct.UnitModuleExecutableName("agent-watch-01"); got != "gx-module-agent-watch-01.exe" {
+	if got := watchProduct.UnitModuleExecutableName("module-watch"); got != "gx-module-watch.exe" {
 		t.Fatalf("unexpected agent module executable: %s", got)
+	}
+}
+
+func TestNormalizeModuleType(t *testing.T) {
+	tests := map[string]string{
+		`"module-filesystem"`: "filesystem",
+		`module-filesystem`:   "filesystem",
+		`"module-smb"`:        "smb",
+		`module-focas`:        "focas",
+		`"filesystem"`:        "filesystem",
+		` filesystem `:        "filesystem",
+	}
+	for input, expected := range tests {
+		if got := NormalizeModuleType(input); got != expected {
+			t.Fatalf("NormalizeModuleType(%q)=%q, want %q", input, got, expected)
+		}
 	}
 }
 
@@ -210,6 +226,22 @@ func TestModuleCommandRejectsUnsafeCharacters(t *testing.T) {
 	}
 	if !isSafeModuleCommand(`import --file "test file.json"`) {
 		t.Fatal("expected simple quoted arguments to be accepted")
+	}
+}
+
+func TestRunModuleCommandRequiresConfiguredModule(t *testing.T) {
+	var output bytes.Buffer
+	err := RunModuleCommand(Config{
+		Name:    "prod",
+		Product: GedixProdV10,
+		GedixConfig: GedixConfig{
+			Connectors: map[string]ProductUnitConfig{
+				"connector-filesystem01": {RawConfig: ""},
+			},
+		},
+	}, ModuleCommandRequest{UnitName: "connector-filesystem01", Command: "status"}, &output)
+	if err == nil || !strings.Contains(err.Error(), "Le module du connecteur connector-filesystem01") {
+		t.Fatalf("expected missing module error, got %v", err)
 	}
 }
 
@@ -230,11 +262,11 @@ func TestGXFrontDetectionPowerShellTargetsExactExecutable(t *testing.T) {
 
 func TestConsoleLauncherScriptRawKeepsUserCommand(t *testing.T) {
 	content := consoleLauncherScriptContentRaw(
-		`D:\Data\Gedix\env_demo\app_prod\connector-focas-01`,
-		`D:\Data\Gedix\env_demo\app_prod\connector-focas-01\gx-module-connector-focas-01.exe`,
+		`D:\Data\Gedix\env_demo\app_prod\connector-filesystem01`,
+		`D:\Data\Gedix\env_demo\app_prod\connector-filesystem01\gx-module-filesystem.exe`,
 		`import --file "test file.json"`,
 	)
-	expected := `"D:\Data\Gedix\env_demo\app_prod\connector-focas-01\gx-module-connector-focas-01.exe" import --file "test file.json"`
+	expected := `"D:\Data\Gedix\env_demo\app_prod\connector-filesystem01\gx-module-filesystem.exe" import --file "test file.json"`
 	if !strings.Contains(content, expected) {
 		t.Fatalf("expected raw module command in script, got:\n%s", content)
 	}

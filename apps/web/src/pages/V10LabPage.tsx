@@ -25,6 +25,7 @@ type RunState = 'idle' | 'running' | 'success' | 'failed';
 type ConnectorFormRow = {
   id: string;
   name: string;
+  module: string;
   rawConfig: string;
 };
 type ExtraKeyRow = {
@@ -421,16 +422,19 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       const unitKey = product.unitKind === 'agent' ? 'agents' : 'connectors';
       const units = { ...(config.gedixConfig[unitKey] ?? {}) };
       for (const unit of scannedUnits) {
-        if (!units[unit.name]) {
-          units[unit.name] = { rawConfig: unit.rawConfig };
-        }
+        const existing = units[unit.name];
+        units[unit.name] = {
+          module: unit.module ? unit.module : (existing?.module ?? ''),
+          rawConfig: existing?.rawConfig ?? unit.rawConfig,
+        };
       }
       updateConfig({
         ...config,
         maquette: { ...config.maquette, envName: result.envName || config.maquette.envName, appName: result.appName || config.maquette.appName },
         gedixConfig: { ...config.gedixConfig, [unitKey]: units },
       });
-      setMessage(`${scannedUnits.length} ${product.unitPluralLabel} détecté(s).`);
+      const warnings = result.warnings?.length ? ` ${result.warnings.join(' ')}` : '';
+      setMessage(`${scannedUnits.length} ${product.unitPluralLabel} détecté(s).${warnings}`);
     });
   }
 
@@ -831,18 +835,18 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
       const existing = new Set(current.map((row) => row.name));
       const missing = Object.entries(unitsForConfig(config, product))
         .filter(([name]) => !existing.has(name))
-        .map(([name, connector]) => ({ id: makeID(), name, rawConfig: connector.rawConfig }));
+        .map(([name, connector]) => ({ id: makeID(), name, module: connector.module ?? '', rawConfig: connector.rawConfig }));
       return missing.length > 0 ? [...current, ...missing] : current;
     });
   }, [config.gedixConfig.connectors, config.gedixConfig.agents, config.gedixConfig.units, product.id]);
 
   const commitRows = (nextRows: ConnectorFormRow[]) => {
     setRows(nextRows);
-    const units: Record<string, { rawConfig: string }> = {};
+    const units: Record<string, { module: string; rawConfig: string }> = {};
     for (const row of nextRows) {
       const name = row.name.trim();
       if (name) {
-        units[name] = { rawConfig: row.rawConfig };
+        units[name] = { module: normalizeModuleType(row.module), rawConfig: row.rawConfig };
       }
     }
     const unitKey = product.unitKind === 'agent' ? 'agents' : 'connectors';
@@ -854,6 +858,7 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
   return (
     <div className="v10-connector-list">
       <p className="readonly-notice">{unitHelp(product)}</p>
+      <p className="readonly-notice">{m.units.moduleHelp}</p>
       <p className="muted">{m.scanCfgHelp}</p>
       <div className="button-row">
         <label className="ui-button secondary sm v10-file-button">
@@ -874,12 +879,21 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
       {duplicate && <p className="error">{m.duplicateConnector}</p>}
       {rows.map((row) => (
         <div className="v10-connector-row" key={row.id}>
-          <input value={row.name} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} />
-          <textarea value={row.rawConfig} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, rawConfig: event.target.value } : item))} />
+          <div>
+            <label>{product.unitKind === 'agent' ? m.units.agentName : m.units.connectorName}
+              <input value={row.name} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} />
+            </label>
+            <label>{m.units.module}
+              <input value={row.module} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, module: event.target.value } : item))} />
+            </label>
+          </div>
+          <label>{m.units.rawConfig}
+            <textarea value={row.rawConfig} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, rawConfig: event.target.value } : item))} />
+          </label>
           <Button type="button" variant="danger" size="sm" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `${product.unitFolderPrefix || 'connector-'}${rows.length + 1}`, rawConfig: '' }])}>{product.unitKind === 'agent' ? m.units.addAgent : m.units.addConnector}</Button>
+      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `${product.unitFolderPrefix || 'connector-'}${rows.length + 1}`, module: '', rawConfig: '' }])}>{product.unitKind === 'agent' ? m.units.addAgent : m.units.addConnector}</Button>
     </div>
   );
 }
@@ -1155,7 +1169,7 @@ function validateConfig(config: V10Config): string {
   if (config.pipeline.some((step) => !step.action.trim())) {
     return m.errors.pipelineActionRequired;
   }
-  if (hasDuplicateConnector(Object.keys(unitsForConfig(config, productFor(config.product, []))).map((name) => ({ id: name, name, rawConfig: '' })))) {
+  if (hasDuplicateConnector(Object.keys(unitsForConfig(config, productFor(config.product, []))).map((name) => ({ id: name, name, module: '', rawConfig: '' })))) {
     return m.duplicateConnector;
   }
   return '';
@@ -1190,6 +1204,7 @@ function unitRowsFromConfig(config: V10Config, product: V10Product): ConnectorFo
   return Object.entries(unitsForConfig(config, product)).map(([name, connector]) => ({
     id: makeID(),
     name,
+    module: connector.module ?? '',
     rawConfig: connector.rawConfig,
   }));
 }
@@ -1232,6 +1247,10 @@ function unitHelp(product: V10Product) {
 
 function moduleCommandHasUnsafeCharacters(command: string) {
   return /[&|><]/.test(command);
+}
+
+function normalizeModuleType(value: string) {
+  return value.trim().replace(/^["']|["']$/g, '').trim().replace(/^module-/i, '');
 }
 
 function hasDuplicateConnector(rows: ConnectorFormRow[]) {

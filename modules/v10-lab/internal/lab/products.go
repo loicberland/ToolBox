@@ -159,10 +159,21 @@ func (p ProductDefinition) Service(name string) (ProductServiceDefinition, bool)
 	return ProductServiceDefinition{}, false
 }
 
-func (p ProductDefinition) UnitModuleExecutableName(unitName string) string {
+func (p ProductDefinition) UnitModuleExecutableName(moduleName string) string {
 	pattern := strings.TrimSpace(p.UnitModuleExecutablePattern)
 	if pattern == "" {
 		pattern = "gx-module-<unitName>.exe"
 	}
-	return strings.ReplaceAll(pattern, "<unitName>", unitName)
+	return strings.ReplaceAll(pattern, "<unitName>", NormalizeModuleType(moduleName))
+}
+
+func NormalizeModuleType(rawType string) string {
+	value := strings.TrimSpace(rawType)
+	value = strings.Trim(value, `"`)
+	value = strings.Trim(value, `'`)
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(value), "module-") {
+		value = value[len("module-"):]
+	}
+	return value
 }

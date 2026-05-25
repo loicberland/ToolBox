@@ -102,6 +102,7 @@ type SelectReleasePathResponse struct {
 
 type ScanUnit struct {
 	Name      string `json:"name"`
+	Module    string `json:"module"`
 	RawConfig string `json:"rawConfig"`
 }
 
@@ -112,6 +113,7 @@ type ScanCfgResponse struct {
 	UnitPluralLabel string     `json:"unitPluralLabel"`
 	Units           []ScanUnit `json:"units"`
 	Connectors      []ScanUnit `json:"connectors,omitempty"`
+	Warnings        []string   `json:"warnings,omitempty"`
 }
 
 type ModuleCommandRunRequest struct {
@@ -616,7 +618,9 @@ func scanUnits(content string, envName string, appName string, product lab.Produ
 	sectionPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.%s\.([^\]]+)\]\s*$`, regexp.QuoteMeta(product.UnitCfgSectionName)))
 	envs := map[string]bool{}
 	units := []ScanUnit{}
-	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+	warnings := []string{}
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	for index, line := range lines {
 		matches := sectionPattern.FindStringSubmatch(line)
 		if len(matches) != 4 {
 			continue
@@ -628,7 +632,11 @@ func scanUnits(content string, envName string, appName string, product lab.Produ
 		if !strings.EqualFold(matches[2], appName) {
 			continue
 		}
-		units = append(units, ScanUnit{Name: matches[3], RawConfig: ""})
+		module := scanUnitModule(lines, index+1)
+		if module == "" {
+			warnings = append(warnings, fmt.Sprintf("type absent pour %s %s", product.UnitSingularLabel, matches[3]))
+		}
+		units = append(units, ScanUnit{Name: matches[3], Module: module, RawConfig: ""})
 	}
 	if envName == "" {
 		if len(envs) == 1 {
@@ -646,8 +654,40 @@ func scanUnits(content string, envName string, appName string, product lab.Produ
 		UnitPluralLabel: product.UnitPluralLabel,
 		Units:           units,
 		Connectors:      units,
+		Warnings:        warnings,
 	}
 	return response, nil
+}
+
+func scanUnitModule(lines []string, start int) string {
+	typePattern := regexp.MustCompile(`(?i)^\s*type\s*=\s*"?([^"]+?)"?\s*$`)
+	for index := start; index < len(lines); index++ {
+		line := strings.TrimSpace(stripCfgComment(lines[index]))
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			return ""
+		}
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		matches := typePattern.FindStringSubmatch(line)
+		if len(matches) == 2 {
+			return lab.NormalizeModuleType(matches[1])
+		}
+	}
+	return ""
+}
+
+func stripCfgComment(line string) string {
+	inQuotes := false
+	for index, char := range line {
+		if char == '"' {
+			inQuotes = !inQuotes
+		}
+		if !inQuotes && (char == '#' || char == ';') {
+			return line[:index]
+		}
+	}
+	return line
 }
 
 func openWindowsZipDialog() (string, bool, error) {

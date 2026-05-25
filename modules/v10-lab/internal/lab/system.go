@@ -221,16 +221,26 @@ func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Wri
 	if !isSafeModuleCommand(command) {
 		return fmt.Errorf("la commande contient des caracteres non autorises")
 	}
+	unit, ok := ProductUnits(config)[unitName]
+	if !ok {
+		return fmt.Errorf("%s %s introuvable dans la configuration", product.UnitSingularLabel, unitName)
+	}
+	moduleName := NormalizeModuleType(unit.Module)
+	if moduleName == "" {
+		return fmt.Errorf("Le module %s %s n’est pas renseigné. Scannez le cfg ou renseignez le module manuellement.", productUnitArticle(product), unitName)
+	}
 	paths, err := DetectGedixPaths(config)
 	if err != nil {
 		return err
 	}
-	module, err := DetectModuleCommandTarget(paths, product, unitName)
+	module, err := DetectModuleCommandTarget(paths, product, unitName, moduleName)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(writer, "[INFO] Lancement commande module.")
 	fmt.Fprintf(writer, "[INFO] %s : %s\n", titleLabel(product.UnitSingularLabel), unitName)
+	fmt.Fprintf(writer, "[INFO] Module : %s\n", moduleName)
+	fmt.Fprintf(writer, "[INFO] Exécutable : %s\n", module.ExePath)
 	fmt.Fprintf(writer, "[INFO] Commande : %s\n", command)
 	if err := ensureGXFrontListening(paths, writer); err != nil {
 		return err
@@ -242,8 +252,19 @@ func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Wri
 	return nil
 }
 
-func DetectModuleCommandTarget(paths GedixPaths, product ProductDefinition, unitName string) (DebugTarget, error) {
-	moduleExe := filepath.Join(paths.AppPath, unitName, product.UnitModuleExecutableName(unitName))
+func productUnitArticle(product ProductDefinition) string {
+	if product.UnitKind == UnitKindAgent {
+		return "de l’agent"
+	}
+	return "du connecteur"
+}
+
+func DetectModuleCommandTarget(paths GedixPaths, product ProductDefinition, unitName string, moduleName string) (DebugTarget, error) {
+	moduleName = NormalizeModuleType(moduleName)
+	if moduleName == "" {
+		return DebugTarget{}, fmt.Errorf("module requis pour %s", unitName)
+	}
+	moduleExe := filepath.Join(paths.AppPath, unitName, product.UnitModuleExecutableName(moduleName))
 	if info, err := os.Stat(moduleExe); err == nil && !info.IsDir() {
 		kind := DebugTargetConnector
 		if product.UnitKind == UnitKindAgent {

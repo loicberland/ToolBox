@@ -176,12 +176,16 @@ func TestSelectReleasePathNonWindowsAndScanCfg(t *testing.T) {
 	config := testConfig()
 	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
 
-	cfg := `[environments.demo.applications.prod.connectors.connector-focas-01]
+	cfg := `[environments.demo.applications.prod.connectors.connector-filesystem01]
+type="module-filesystem"
+host="localhost"
+
 [environments.demo.applications.prod.connectors.connector-dnc-01]
+type = module-focas
 `
 	var scan ScanCfgResponse
 	postMultipart(t, router, "/api/v10-lab/maquettes/ticket-T5808/scan-cfg", "gedix.cfg", []byte(cfg), nil, &scan, http.StatusOK)
-	if scan.EnvName != "demo" || len(scan.Connectors) != 2 {
+	if scan.EnvName != "demo" || len(scan.Connectors) != 2 || scan.Connectors[0].Name != "connector-filesystem01" || scan.Connectors[0].Module != "filesystem" {
 		t.Fatalf("unexpected scan response: %#v", scan)
 	}
 }
@@ -199,10 +203,12 @@ func TestScanCfgUsesProductUnitSection(t *testing.T) {
 	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
 
 	cfg := `[environments.demo.applications.watch.agents.agent-watch-01]
+type = "module-watch"
+host = "localhost"
 `
 	var scan ScanCfgResponse
 	postMultipart(t, router, "/api/v10-lab/maquettes/watch/scan-cfg", "gedix.cfg", []byte(cfg), nil, &scan, http.StatusOK)
-	if scan.EnvName != "demo" || scan.UnitKind != "agent" || len(scan.Units) != 1 || scan.Units[0].Name != "agent-watch-01" {
+	if scan.EnvName != "demo" || scan.UnitKind != "agent" || len(scan.Units) != 1 || scan.Units[0].Name != "agent-watch-01" || scan.Units[0].Module != "watch" {
 		t.Fatalf("unexpected scan response: %#v", scan)
 	}
 }

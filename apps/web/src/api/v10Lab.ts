@@ -52,6 +52,7 @@ export type ServiceDBConfig = {
 };
 
 export type ConnectorConfig = {
+  module?: string;
   rawConfig: string;
 };
 
@@ -132,8 +133,9 @@ export type ScanCfgResponse = {
   appName: string;
   unitKind?: 'connector' | 'agent';
   unitPluralLabel?: string;
-  units?: Array<{ name: string; rawConfig: string }>;
-  connectors: Array<{ name: string; rawConfig: string }>;
+  units?: Array<{ name: string; module?: string; rawConfig: string }>;
+  connectors: Array<{ name: string; module?: string; rawConfig: string }>;
+  warnings?: string[];
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

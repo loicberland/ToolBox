@@ -92,6 +92,7 @@ type ServiceDBConfig struct {
 }
 
 type ProductUnitConfig struct {
+	Module    string `json:"module,omitempty"`
 	RawConfig string `json:"rawConfig"`
 }
 

@@ -139,12 +139,17 @@
     "units": {
       "connectors": "Connecteurs",
       "connector": "Connecteur",
+      "connectorName": "Nom du connecteur",
       "addConnector": "Ajouter un connecteur",
       "scanConnectors": "Scanner les connecteurs du cfg",
       "agents": "Agents",
       "agent": "Agent",
+      "agentName": "Nom de l’agent",
       "addAgent": "Ajouter un agent",
-      "scanAgents": "Scanner les agents du cfg"
+      "scanAgents": "Scanner les agents du cfg",
+      "module": "Module",
+      "rawConfig": "Configuration brute",
+      "moduleHelp": "Le module correspond à la valeur de la clé type dans le gedix.cfg, sans le préfixe module-. Exemple : type=\"module-filesystem\" donne gx-module-filesystem.exe."
     },
     "products": {
       "gedixProdV10": "Gedix Prod V10",
@@ -160,12 +165,15 @@
       "connector": "Connecteur",
       "agent": "Agent",
       "command": "Commande",
-      "commandPlaceholder": "Exemple : import --file test.json",
+      "commandPlaceholder": "Exemple : set_file --remote-filepath ...",
       "run": "Lancer la commande",
       "noConnector": "Aucun connecteur configuré.",
       "noAgent": "Aucun agent configuré.",
       "help": "La commande est exécutée localement dans le dossier du module sélectionné.",
       "invalidCommand": "La commande contient des caractères non autorisés.",
+      "missingConnectorModule": "Le module du connecteur {{name}} n’est pas renseigné. Scannez le cfg ou renseignez le module manuellement.",
+      "missingAgentModule": "Le module de l’agent {{name}} n’est pas renseigné. Scannez le cfg ou renseignez le module manuellement.",
+      "module": "Module",
       "frontAlreadyRunning": "gx-front est déjà lancé.",
       "frontStarted": "gx-front n’était pas lancé, démarrage automatique.",
       "consoleOpened": "Console de commande module ouverte."
