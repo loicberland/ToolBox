@@ -268,7 +268,7 @@ Phase 1 :
 - registre de produits
 - registre d'actions
 - validation de fichier JSON
-- execution fictive de pipeline
+- execution fictive de plan d'actions
 - base multi-maquettes
 
 Phase 2 - Actions systeme Gedix :
@@ -279,7 +279,7 @@ Phase 2 - Actions systeme Gedix :
 - demarrage standard de la maquette
 - demarrage avec exclusions pour debug
 - lancement de services/connecteurs en debug
-- commande manuelle `taskkill gx-*`
+- action manuelle "Couper les services GX"
 
 Phase 3 - Interface V10 Lab :
 
@@ -288,7 +288,7 @@ Phase 3 - Interface V10 Lab :
 - creation / edition d'une maquette
 - edition de la configuration Gedix
 - edition services/connecteurs
-- builder graphique de pipeline
+- builder graphique de plan d'actions
 - validation et lancement depuis le front
 - consultation des logs
 
@@ -297,7 +297,22 @@ Notes phase 3 :
 - le ZIP de release reste a son emplacement d'origine ; l'interface memorise uniquement son chemin
 - le bouton Parcourir ouvre une selection de fichier locale cote API Windows
 - la suppression d'une maquette supprime seulement l'enregistrement V10 Lab, pas le dossier Gedix physique
-- `taskkill gx-*` reste une action manuelle avec confirmation
+- "Couper les services GX" reste une action manuelle avec confirmation
+
+## Mise à jour d'une maquette
+
+La mise à jour utilise une nouvelle release ZIP sélectionnée dans l'onglet Général.
+
+Étapes :
+
+1. décompression de la release
+2. exécution de `gx.exe install` sans `--write-config`
+3. copie du dossier `Gedix` généré vers la maquette existante
+4. conservation du fichier `gedix.cfg`
+5. conservation des dossiers `log`
+6. nettoyage du dossier temporaire
+
+La mise à jour ne supprime pas le dossier cible et n'utilise pas de miroir `/MIR`.
 
 Exemples :
 

@@ -56,6 +56,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
+  const [confirmUpdate, setConfirmUpdate] = useState(false);
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
 
   useEffect(() => {
@@ -227,7 +228,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       }
     }
     setRunState('running');
-    setExecution({ status: 'running', running: true, output: m.executionRunning });
+    const isUpdate = actionId === 'update-env';
+    setExecution({ status: 'running', running: true, output: isUpdate ? m.execution.updateRunning : m.executionRunning });
     await run(async () => {
       const started = await v10LabApi.runAction(name, actionId);
       setExecution(started);
@@ -235,7 +237,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       await reloadList();
       await refreshLogs(name);
       setRunState(result.status === 'success' ? 'success' : 'failed');
-      setMessage(result.status === 'success' ? m.executionFinished : m.executionFailed);
+      setMessage(result.status === 'success' ? (isUpdate ? m.execution.updateFinished : m.executionFinished) : m.executionFailed);
     }, () => setRunState('failed'));
   }
 
@@ -314,6 +316,11 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       await refreshLogs();
       setMessage(m.killFinished);
     });
+  }
+
+  async function updateExistingMaquette() {
+    setConfirmUpdate(false);
+    await runSystemAction('update-env');
   }
 
   async function saveJSON() {
@@ -519,6 +526,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               selectedLog={selectedLog}
               onConfigChange={updateConfig}
               onCreate={() => void runSystemAction('create-env')}
+              onUpdate={() => setConfirmUpdate(true)}
               onConfigure={() => void runSystemAction('configure-gedix-cfg')}
               onStart={() => void runSystemAction('start-maquette')}
               onRunPipeline={() => void runCurrent()}
@@ -557,6 +565,14 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         confirmLabel="Continuer"
         onCancel={() => setConfirmKill(false)}
         onConfirm={() => void killGXProcesses()}
+      />
+      <ConfirmDialog
+        open={confirmUpdate}
+        title={m.execution.updateMaquette}
+        message={m.execution.updateMaquetteConfirm}
+        confirmLabel="Continuer"
+        onCancel={() => setConfirmUpdate(false)}
+        onConfirm={() => void updateExistingMaquette()}
       />
     </div>
   );
@@ -905,7 +921,7 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onConfigure, onStart, onRunPipeline, onKill, onRefreshLogs, onReadLog }: {
+function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onRunPipeline, onKill, onRefreshLogs, onReadLog }: {
   config: V10Config;
   busy: boolean;
   runState: RunState;
@@ -914,6 +930,7 @@ function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, 
   selectedLog: string;
   onConfigChange: (config: V10Config) => void;
   onCreate: () => void;
+  onUpdate: () => void;
   onConfigure: () => void;
   onStart: () => void;
   onRunPipeline: () => void;
@@ -933,9 +950,9 @@ function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, 
         <h4>{m.execution.actionsTitle}</h4>
         <div className="button-row">
           <Button type="button" onClick={onCreate} disabled={disabled}>{m.execution.createMaquette}</Button>
-          <Button type="button" variant="secondary" disabled title={m.execution.updateNotImplemented}>{m.execution.updateMaquette}</Button>
+          <Button type="button" variant="secondary" onClick={onUpdate} disabled={disabled}>{m.execution.updateMaquette}</Button>
           <Button type="button" variant="secondary" onClick={onConfigure} disabled={disabled}>{m.execution.configureCfg}</Button>
-          <Button type="button" variant="secondary" onClick={onStart} disabled={disabled}>{m.execution.startMaquette}</Button>
+          <Button type="button" variant="success" onClick={onStart} disabled={disabled}>{m.execution.startMaquette}</Button>
         </div>
       </section>
       <section className="v10-execution-section">

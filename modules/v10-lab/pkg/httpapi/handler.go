@@ -372,7 +372,7 @@ func (h *Handler) killGXProcesses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !request.Force {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "force=true est requis pour taskkill gx-*"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "force=true est requis pour couper les services GX"})
 		return
 	}
 	var output bytes.Buffer

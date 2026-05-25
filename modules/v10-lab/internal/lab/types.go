@@ -174,10 +174,10 @@ func Info() modulecontract.ModuleInfo {
 			{ID: "actions", Name: "Actions", Description: "Liste les actions disponibles"},
 			{ID: "db-templates", Name: "Templates DB", Description: "Liste les templates de DSN"},
 			{ID: "validate", Name: "Valider", Description: "Valide une configuration JSON"},
-			{ID: "run", Name: "Executer", Description: "Execute un pipeline de maquette"},
+			{ID: "run", Name: "Executer", Description: "Execute un plan d'actions de maquette"},
 			{ID: "register", Name: "Enregistrer", Description: "Enregistre une maquette localement"},
 			{ID: "list", Name: "Lister", Description: "Liste les maquettes enregistrees"},
-			{ID: "kill-gx-processes", Name: "Taskkill gx-*", Description: "Tue manuellement les processus gx-*"},
+			{ID: "kill-gx-processes", Name: "Couper les services GX", Description: "Coupe manuellement les processus GX"},
 		},
 	}
 }

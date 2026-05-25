@@ -1,6 +1,8 @@
 package lab
 
 import (
+	"archive/zip"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -323,6 +325,87 @@ func TestSafeRemoveTempDir(t *testing.T) {
 	}
 }
 
+func TestUpdateEnvValidation(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "Gedix_Test")
+	makeValidMaquetteTarget(t, target)
+	zipPath := filepath.Join(root, "release.zip")
+	mustZip(t, zipPath, map[string]string{})
+
+	tests := []struct {
+		name    string
+		zipPath string
+		target  string
+		want    string
+	}{
+		{name: "empty release", zipPath: "", target: target, want: "release.zipPath est requis"},
+		{name: "missing release", zipPath: filepath.Join(root, "missing.zip"), target: target, want: "ZIP release introuvable"},
+		{name: "not zip", zipPath: mustFile(t, filepath.Join(root, "release.txt"), ""), target: target, want: "fichier .zip"},
+		{name: "missing target", zipPath: zipPath, target: filepath.Join(root, "missing-target"), want: "dossier cible de maquette introuvable"},
+		{name: "dangerous target", zipPath: zipPath, target: filepath.VolumeName(os.TempDir()) + string(os.PathSeparator), want: "chemin cible dangereux"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateUpdateEnvInputs(tt.zipPath, tt.target)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q, got %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestUpdateEnvReportsMissingGXInZip(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "Gedix_Test")
+	makeValidMaquetteTarget(t, target)
+	zipPath := filepath.Join(root, "release.zip")
+	mustZip(t, zipPath, map[string]string{"README.txt": "no gx here"})
+	var output bytes.Buffer
+
+	err := UpdateEnv(ActionContext{
+		Writer: &output,
+		Config: Config{
+			Name:    "Test",
+			Product: GedixProdV10,
+			Release: ReleaseConfig{
+				ZipPath: zipPath,
+				WorkDir: filepath.Join(root, "work"),
+			},
+			Maquette: MaquetteConfig{TargetPath: target, AppName: "prod"},
+		},
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "gx.exe introuvable") {
+		t.Fatalf("expected missing gx.exe, got %v\nlogs:\n%s", err, output.String())
+	}
+}
+
+func TestCopyDirForUpdatePreservesConfigLogsAndExistingFiles(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "Gedix")
+	target := filepath.Join(root, "Gedix_Test")
+	mustWrite(t, filepath.Join(source, "gx.exe"), "new gx")
+	mustWrite(t, filepath.Join(source, "gx-front.exe"), "new front")
+	mustWrite(t, filepath.Join(source, "gedix.cfg"), "source cfg")
+	mustWrite(t, filepath.Join(source, "env_demo", "app_prod", "gx-app.exe"), "new app")
+	mustWrite(t, filepath.Join(source, "log", "old.log"), "source log")
+	mustWrite(t, filepath.Join(target, "gedix.cfg"), "target cfg")
+	mustWrite(t, filepath.Join(target, "log", "keep.log"), "target log")
+	mustWrite(t, filepath.Join(target, "env_demo", "app_prod", "old.exe"), "keep me")
+
+	if err := copyDirForUpdate(source, target); err != nil {
+		t.Fatal(err)
+	}
+	assertFileContent(t, filepath.Join(target, "gx.exe"), "new gx")
+	assertFileContent(t, filepath.Join(target, "gx-front.exe"), "new front")
+	assertFileContent(t, filepath.Join(target, "env_demo", "app_prod", "gx-app.exe"), "new app")
+	assertFileContent(t, filepath.Join(target, "gedix.cfg"), "target cfg")
+	assertFileContent(t, filepath.Join(target, "log", "keep.log"), "target log")
+	assertFileContent(t, filepath.Join(target, "env_demo", "app_prod", "old.exe"), "keep me")
+	if _, err := os.Stat(filepath.Join(target, "log", "old.log")); !os.IsNotExist(err) {
+		t.Fatalf("source log should not be copied, stat err=%v", err)
+	}
+}
+
 func connectorMultilineRawConfig() string {
 	return `filesystem-delete-remote-after-unload=true
 filesystem-header-content = """
@@ -376,5 +459,55 @@ func mustWrite(t *testing.T, path string, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func mustFile(t *testing.T, path string, content string) string {
+	t.Helper()
+	mustWrite(t, path, content)
+	return path
+}
+
+func mustZip(t *testing.T, path string, files map[string]string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	out, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := zip.NewWriter(out)
+	for name, content := range files {
+		writer, err := archive.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writer.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func makeValidMaquetteTarget(t *testing.T, target string) {
+	t.Helper()
+	mustWrite(t, filepath.Join(target, "gx-front.exe"), "")
+	mustMkdir(t, filepath.Join(target, "env_demo"))
+}
+
+func assertFileContent(t *testing.T, path string, expected string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != expected {
+		t.Fatalf("unexpected content for %s: got %q want %q", path, string(data), expected)
 	}
 }

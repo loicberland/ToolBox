@@ -67,7 +67,7 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	fmt.Fprintf(ctx.Writer, "[INFO] Lancement : %s install --write-config\n", gxPath)
 	fmt.Fprintf(ctx.Writer, "[INFO] Répertoire de travail : %s\n", releaseRoot)
 	fmt.Fprintln(ctx.Writer, "[INFO] Installation Gedix en cours, cette étape peut durer plusieurs minutes...")
-	if err := runInstallCommand(releaseRoot, gxPath, ctx.Writer); err != nil {
+	if err := runInstallCommand(releaseRoot, gxPath, true, ctx.Writer); err != nil {
 		return err
 	}
 	fmt.Fprintln(ctx.Writer, "[INFO] Installation terminée.")
@@ -85,6 +85,68 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	}
 	fmt.Fprintln(ctx.Writer, "[INFO] Copie terminée.")
 	fmt.Fprintf(ctx.Writer, "Maquette créée: %s\n", target)
+	success = true
+	return nil
+}
+
+func UpdateEnv(ctx ActionContext, params map[string]any) error {
+	config := ctx.Config
+	ApplyDefaults(&config)
+	zipPath := firstNonEmpty(stringParam(params, "zipPath"), config.Release.ZipPath)
+	workDir := config.Release.WorkDir
+	target := ResolveMaquetteTargetPath(config)
+	if err := validateUpdateEnvInputs(zipPath, target); err != nil {
+		return err
+	}
+	tempRoot, err := makeUpdateTempDir(workDir, config.Name)
+	if err != nil {
+		return err
+	}
+	success := false
+	defer func() {
+		if success {
+			fmt.Fprintln(ctx.Writer, "[INFO] Nettoyage du dossier temporaire.")
+			if err := safeRemoveTempDir(tempRoot, workDir, target); err != nil {
+				fmt.Fprintf(ctx.Writer, "[WARN] Nettoyage impossible : %v\n", err)
+			}
+			fmt.Fprintln(ctx.Writer, "[INFO] Mise à jour terminée.")
+			return
+		}
+		fmt.Fprintf(ctx.Writer, "[WARN] Mise à jour interrompue, dossier temporaire conservé pour diagnostic : %s\n", tempRoot)
+	}()
+	fmt.Fprintf(ctx.Writer, "[INFO] Préparation de la mise à jour de la maquette %s.\n", config.Name)
+	fmt.Fprintf(ctx.Writer, "[INFO] Release utilisée : %s\n", zipPath)
+	fmt.Fprintf(ctx.Writer, "[INFO] Dossier cible : %s\n", target)
+	extractDir := filepath.Join(tempRoot, "release")
+	if err := os.MkdirAll(extractDir, 0755); err != nil {
+		return err
+	}
+	fmt.Fprintln(ctx.Writer, "[INFO] Décompression de la release...")
+	if err := unzip(zipPath, extractDir); err != nil {
+		return err
+	}
+	fmt.Fprintln(ctx.Writer, "[INFO] Décompression terminée.")
+	releaseRoot, err := findReleaseRoot(extractDir)
+	if err != nil {
+		return err
+	}
+	gxPath := filepath.Join(releaseRoot, "gx.exe")
+	fmt.Fprintln(ctx.Writer, "[INFO] Lancement : gx.exe install")
+	fmt.Fprintln(ctx.Writer, "[INFO] Installation Gedix en cours, cette étape peut durer plusieurs minutes...")
+	if err := runInstallCommand(releaseRoot, gxPath, false, ctx.Writer); err != nil {
+		return err
+	}
+	fmt.Fprintln(ctx.Writer, "[INFO] Installation terminée.")
+	gedixDir, err := findGedixDirectory(releaseRoot)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(ctx.Writer, "[INFO] Copie des fichiers applicatifs vers la maquette...")
+	fmt.Fprintln(ctx.Writer, "[INFO] Exclusions : gedix.cfg")
+	if err := copyDirForUpdate(gedixDir, target); err != nil {
+		return err
+	}
+	fmt.Fprintln(ctx.Writer, "[INFO] Copie terminée.")
 	success = true
 	return nil
 }
@@ -134,7 +196,8 @@ func debugExclusionArg(targets []string) string {
 }
 
 func KillGXProcesses(writer io.Writer, force bool, interactive bool) error {
-	fmt.Fprintln(writer, "WARNING: cette commande tue tous les processus gx-* avec taskkill.")
+	fmt.Fprintln(writer, "[INFO] Coupure des services GX demandée.")
+	fmt.Fprintln(writer, "[INFO] Commande exécutée : taskkill -f -t -im gx-*")
 	if !force && interactive {
 		fmt.Fprint(writer, "Confirmer ? tapez OUI: ")
 		var answer string
@@ -156,18 +219,22 @@ func KillGXProcesses(writer io.Writer, force bool, interactive bool) error {
 		fmt.Fprintln(writer, strings.TrimSpace(string(output)))
 	}
 	if err != nil && strings.Contains(strings.ToLower(string(output)), "not found") {
-		fmt.Fprintln(writer, "Aucun processus gx-* à arrêter.")
+		fmt.Fprintln(writer, "Aucun service GX à couper.")
 		return nil
 	}
 	if err != nil && strings.Contains(strings.ToLower(string(output)), "introuvable") {
-		fmt.Fprintln(writer, "Aucun processus gx-* à arrêter.")
+		fmt.Fprintln(writer, "Aucun service GX à couper.")
 		return nil
 	}
 	return err
 }
 
-func runInstallCommand(dir string, gxPath string, writer io.Writer) error {
-	cmd := exec.Command(gxPath, "install", "--write-config")
+func runInstallCommand(dir string, gxPath string, writeConfig bool, writer io.Writer) error {
+	args := []string{"install"}
+	if writeConfig {
+		args = append(args, "--write-config")
+	}
+	cmd := exec.Command(gxPath, args...)
 	cmd.Dir = dir
 	cmd.Stdout = prefixedWriter{writer: writer, prefix: "[GX] "}
 	cmd.Stderr = prefixedWriter{writer: writer, prefix: "[GX] "}
@@ -293,7 +360,7 @@ func findGedixDirectory(releaseRoot string) (string, error) {
 		}
 	}
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("dossier Gedix créé introuvable après gx.exe install --write-config")
+		return "", fmt.Errorf("dossier Gedix créé introuvable après gx.exe install")
 	}
 	return candidates[0], nil
 }
@@ -317,6 +384,82 @@ func prepareTargetDirectory(target string, overwrite bool) error {
 		return err
 	}
 	return os.MkdirAll(filepath.Dir(target), 0755)
+}
+
+func validateUpdateEnvInputs(zipPath string, target string) error {
+	if strings.TrimSpace(zipPath) == "" {
+		return fmt.Errorf("release.zipPath est requis pour mettre à jour la maquette")
+	}
+	info, err := os.Stat(zipPath)
+	if err != nil {
+		return fmt.Errorf("ZIP release introuvable %s: %w", zipPath, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("release.zipPath doit pointer vers un fichier ZIP: %s", zipPath)
+	}
+	if !strings.EqualFold(filepath.Ext(zipPath), ".zip") {
+		return fmt.Errorf("release.zipPath doit pointer vers un fichier .zip: %s", zipPath)
+	}
+	if err := ensureSafeExistingTargetPath(target); err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(target, "gx-front.exe")); err != nil {
+		return fmt.Errorf("maquette Gedix invalide: gx-front.exe introuvable dans %s: %w", target, err)
+	}
+	if !hasEnvDirectory(target) {
+		return fmt.Errorf("maquette Gedix invalide: aucun dossier env_* trouvé dans %s", target)
+	}
+	return nil
+}
+
+func ensureSafeExistingTargetPath(target string) error {
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("dossier cible de maquette requis")
+	}
+	clean, err := filepath.Abs(filepath.Clean(target))
+	if err != nil {
+		return err
+	}
+	volume := filepath.VolumeName(clean)
+	root := volume + string(os.PathSeparator)
+	if clean == root || clean == volume || clean == string(os.PathSeparator) {
+		return fmt.Errorf("chemin cible dangereux refusé: %s", target)
+	}
+	if len(strings.Trim(clean, `\/ `)) < 6 {
+		return fmt.Errorf("chemin cible dangereux refusé: %s", target)
+	}
+	info, err := os.Stat(clean)
+	if err != nil {
+		return fmt.Errorf("dossier cible de maquette introuvable %s: %w", target, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("dossier cible de maquette invalide %s: ce n'est pas un dossier", target)
+	}
+	return nil
+}
+
+func hasEnvDirectory(target string) bool {
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(strings.ToLower(entry.Name()), "env_") {
+			return true
+		}
+	}
+	return false
+}
+
+func makeUpdateTempDir(workDir string, maquetteName string) (string, error) {
+	prefix := "v10-lab-update-" + safeDirName(maquetteName) + "-" + time.Now().Format("20060102-150405")
+	if strings.TrimSpace(workDir) == "" {
+		return os.MkdirTemp("", prefix+"-")
+	}
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(workDir, prefix+"-")
 }
 
 func ensureSafeDeletePath(target string) error {
@@ -376,6 +519,40 @@ func copyDir(source string, target string) error {
 		}
 		return copyFile(path, dest)
 	})
+}
+
+func copyDirForUpdate(source string, target string) error {
+	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if entry.IsDir() && isUpdateExcludedDir(entry.Name()) {
+			return filepath.SkipDir
+		}
+		if !entry.IsDir() && isUpdateExcludedFile(entry.Name()) {
+			return nil
+		}
+		dest := filepath.Join(target, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(dest, 0755)
+		}
+		return copyFile(path, dest)
+	})
+}
+
+func isUpdateExcludedDir(name string) bool {
+	return strings.EqualFold(name, "log")
+}
+
+func isUpdateExcludedFile(name string) bool {
+	return strings.EqualFold(name, "gedix.cfg")
 }
 
 func copyFile(source string, target string) error {

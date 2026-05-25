@@ -53,8 +53,8 @@ func Actions() []Action {
 		},
 		{
 			ID:          "kill-gx-processes",
-			Label:       "Taskkill gx-*",
-			Description: "Tue manuellement tous les processus gx-*.",
+			Label:       "Couper les services GX",
+			Description: "Coupe manuellement tous les processus GX en cours sur cette machine.",
 			Kind:        KindSystem,
 			Products:    []string{},
 			Fields: []ActionField{
@@ -67,16 +67,14 @@ func Actions() []Action {
 		{
 			ID:          "update-env",
 			Label:       "Mettre à jour maquette",
-			Description: "Prépare la future mise à jour depuis une nouvelle release sans écraser gedix.cfg.",
+			Description: "Met à jour les fichiers applicatifs de la maquette depuis une nouvelle release, sans écraser la configuration ni les logs.",
 			Kind:        KindSystem,
 			Products:    []string{},
 			Fields: []ActionField{
 				{Name: "zipPath", Label: "ZIP release", Type: "string"},
 			},
 			Execute: func(ctx ActionContext, params map[string]any) error {
-				fmt.Fprintln(ctx.Writer, "[DRY-RUN] update-env est préparé pour une prochaine phase.")
-				fmt.Fprintln(ctx.Writer, `[TODO] Dézipper la release, lancer "gx.exe install", puis copier avec exclusion de gedix.cfg et log.`)
-				return nil
+				return UpdateEnv(ctx, params)
 			},
 		},
 		{
@@ -101,7 +99,7 @@ func Actions() []Action {
 			Kind:        KindSystem,
 			Products:    []string{},
 			Fields: []ActionField{
-				{Name: "taskkill", Label: "Forcer taskkill", Type: "bool", Default: false},
+				{Name: "taskkill", Label: "Forcer la coupure GX", Type: "bool", Default: false},
 			},
 			Execute: func(ctx ActionContext, params map[string]any) error {
 				fmt.Fprintln(ctx.Writer, "[ALIAS] stop-services redirige vers stop-maquette.")
