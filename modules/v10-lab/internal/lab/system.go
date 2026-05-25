@@ -199,6 +199,110 @@ func StartMaquette(config Config, writer io.Writer) error {
 	return nil
 }
 
+type ModuleCommandRequest struct {
+	UnitName string
+	Command  string
+}
+
+func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Writer) error {
+	ApplyDefaults(&config)
+	product, err := ProductDefinitionByID(config.Product)
+	if err != nil {
+		return err
+	}
+	unitName := strings.TrimSpace(request.UnitName)
+	command := strings.TrimSpace(request.Command)
+	if unitName == "" {
+		return fmt.Errorf("%s requis", product.UnitSingularLabel)
+	}
+	if command == "" {
+		return fmt.Errorf("commande module requise")
+	}
+	if !isSafeModuleCommand(command) {
+		return fmt.Errorf("la commande contient des caracteres non autorises")
+	}
+	paths, err := DetectGedixPaths(config)
+	if err != nil {
+		return err
+	}
+	module, err := DetectModuleCommandTarget(paths, product, unitName)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(writer, "[INFO] Lancement commande module.")
+	fmt.Fprintf(writer, "[INFO] %s : %s\n", titleLabel(product.UnitSingularLabel), unitName)
+	fmt.Fprintf(writer, "[INFO] Commande : %s\n", command)
+	if err := ensureGXFrontListening(paths, writer); err != nil {
+		return err
+	}
+	if err := openConsoleRaw(module.WorkDir, "V10 Lab - module "+unitName, module.ExePath, command); err != nil {
+		return err
+	}
+	fmt.Fprintln(writer, "[INFO] Console ouverte.")
+	return nil
+}
+
+func DetectModuleCommandTarget(paths GedixPaths, product ProductDefinition, unitName string) (DebugTarget, error) {
+	moduleExe := filepath.Join(paths.AppPath, unitName, product.UnitModuleExecutableName(unitName))
+	if info, err := os.Stat(moduleExe); err == nil && !info.IsDir() {
+		kind := DebugTargetConnector
+		if product.UnitKind == UnitKindAgent {
+			kind = DebugTargetAgent
+		}
+		return DebugTarget{Name: unitName, Kind: kind, WorkDir: filepath.Join(paths.AppPath, unitName), ExePath: moduleExe}, nil
+	}
+	return DebugTarget{}, fmt.Errorf("Module introuvable : %s", moduleExe)
+}
+
+func isSafeModuleCommand(command string) bool {
+	command = strings.TrimSpace(command)
+	return command != "" && !strings.ContainsAny(command, "&|><")
+}
+
+func ensureGXFrontListening(paths GedixPaths, writer io.Writer) error {
+	fmt.Fprintln(writer, "[INFO] Vérification gx-front pour la maquette.")
+	running, err := isGXFrontRunning(paths.FrontExePath)
+	if err != nil {
+		fmt.Fprintf(writer, "[WARN] Détection gx-front impossible : %v\n", err)
+	}
+	if running {
+		fmt.Fprintln(writer, "[INFO] gx-front déjà lancé.")
+		return nil
+	}
+	fmt.Fprintln(writer, "[INFO] gx-front non détecté, démarrage de gx-front.")
+	fmt.Fprintf(writer, "[INFO] Démarrage gx-front : %s\n", consoleCommandLine(paths.FrontExePath, "listen"))
+	if err := openConsole(paths.GedixRoot, "V10 Lab gx-front", paths.FrontExePath, "listen"); err != nil {
+		return err
+	}
+	time.Sleep(2 * time.Second)
+	return nil
+}
+
+func isGXFrontRunning(frontExePath string) (bool, error) {
+	if runtime.GOOS != "windows" {
+		return false, nil
+	}
+	script := gxFrontDetectionPowerShell(frontExePath)
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
+	output, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(strings.TrimSpace(string(output)), "true"), nil
+}
+
+func gxFrontDetectionPowerShell(frontExePath string) string {
+	escaped := strings.ReplaceAll(frontExePath, "'", "''")
+	return fmt.Sprintf(`$target = '%s'; $found = $false; Get-CimInstance Win32_Process -Filter "Name = 'gx-front.exe'" | ForEach-Object { if ($_.ExecutablePath -eq $target -or ($_.CommandLine -like ('*' + $target + '*'))) { $found = $true } }; if ($found) { 'true' } else { 'false' }`, escaped)
+}
+
+func titleLabel(value string) string {
+	if value == "" {
+		return value
+	}
+	return strings.ToUpper(value[:1]) + value[1:]
+}
+
 func debugExclusionArg(targets []string) string {
 	return strings.Join(targets, ",")
 }
@@ -298,6 +402,20 @@ func openConsole(dir string, title string, exe string, args ...string) error {
 	return cmd.Start()
 }
 
+func openConsoleRaw(dir string, title string, exe string, rawArgs string) error {
+	commandLine := consoleCommandLineRaw(exe, rawArgs)
+	if runtime.GOOS != "windows" {
+		fmt.Printf("[DRY-RUN non-windows] cd %s && %s\n", quoteCmdArg(dir), commandLine)
+		return nil
+	}
+	scriptPath, err := createConsoleLauncherScriptRaw(dir, exe, rawArgs)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("cmd", openConsoleArgs(title, scriptPath)...)
+	return cmd.Start()
+}
+
 func openConsoleArgs(title string, scriptPath string) []string {
 	return []string{"/C", "start", title, "cmd", "/K", "call", scriptPath}
 }
@@ -319,11 +437,37 @@ func createConsoleLauncherScript(dir string, exe string, args ...string) (string
 	return path, nil
 }
 
+func createConsoleLauncherScriptRaw(dir string, exe string, rawArgs string) (string, error) {
+	file, err := os.CreateTemp("", "v10-lab-run-*.cmd")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	content := consoleLauncherScriptContentRaw(dir, exe, rawArgs)
+	if _, err := file.WriteString(content); err != nil {
+		_ = file.Close()
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 func consoleLauncherScriptContent(dir string, exe string, args ...string) string {
 	return strings.Join([]string{
 		"@echo off",
 		"cd /d " + quoteBatchPath(dir),
 		consoleCommandLine(exe, args...),
+		"",
+	}, "\r\n")
+}
+
+func consoleLauncherScriptContentRaw(dir string, exe string, rawArgs string) string {
+	return strings.Join([]string{
+		"@echo off",
+		"cd /d " + quoteBatchPath(dir),
+		consoleCommandLineRaw(exe, rawArgs),
 		"",
 	}, "\r\n")
 }
@@ -334,6 +478,15 @@ func consoleCommandLine(exe string, args ...string) string {
 		parts = append(parts, quoteBatchArg(arg))
 	}
 	return strings.Join(parts, " ")
+}
+
+func consoleCommandLineRaw(exe string, rawArgs string) string {
+	commandLine := quoteBatchPath(exe)
+	rawArgs = strings.TrimSpace(rawArgs)
+	if rawArgs != "" {
+		commandLine += " " + rawArgs
+	}
+	return commandLine
 }
 
 func quoteBatchPath(path string) string {

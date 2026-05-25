@@ -154,6 +154,22 @@
     "actionPlan": {
       "noActionsForProduct": "Aucune action disponible pour ce produit."
     },
+    "moduleCommand": {
+      "titleConnector": "Commande module connecteur",
+      "titleAgent": "Commande module agent",
+      "connector": "Connecteur",
+      "agent": "Agent",
+      "command": "Commande",
+      "commandPlaceholder": "Exemple : import --file test.json",
+      "run": "Lancer la commande",
+      "noConnector": "Aucun connecteur configuré.",
+      "noAgent": "Aucun agent configuré.",
+      "help": "La commande est exécutée localement dans le dossier du module sélectionné.",
+      "invalidCommand": "La commande contient des caractères non autorisés.",
+      "frontAlreadyRunning": "gx-front est déjà lancé.",
+      "frontStarted": "gx-front n’était pas lancé, démarrage automatique.",
+      "consoleOpened": "Console de commande module ouverte."
+    },
     "execution": {
       "actionsTitle": "Actions maquette",
       "debugTitle": "Services/connecteurs en debug",

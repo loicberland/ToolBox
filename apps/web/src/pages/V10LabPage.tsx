@@ -270,6 +270,33 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }, () => setRunState('failed'));
   }
 
+  async function runModuleCommand(unitName: string, command: string, name = selectedName) {
+    if (!name || runState === 'running') {
+      return;
+    }
+    if (moduleCommandHasUnsafeCharacters(command)) {
+      setError(m.moduleCommand.invalidCommand);
+      return;
+    }
+    if (config && isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
+    }
+    setRunState('running');
+    setExecution({ status: 'running', running: true, output: m.executionRunning });
+    await run(async () => {
+      const started = await v10LabApi.runModuleCommand(name, unitName, command);
+      setExecution(started);
+      const result = await pollCurrentRun(name);
+      await reloadList();
+      await refreshLogs(name);
+      setRunState(result.status === 'success' ? 'success' : 'failed');
+      setMessage(result.status === 'success' ? m.moduleCommand.consoleOpened : m.executionFailed);
+    }, () => setRunState('failed'));
+  }
+
   async function pollCurrentRun(name: string): Promise<ExecutionResponse> {
     let result = await v10LabApi.currentRun(name);
     setExecution(result);
@@ -533,6 +560,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               onConfigure={() => void runSystemAction('configure-gedix-cfg')}
               onStart={() => void runSystemAction('start-maquette')}
               onRunPipeline={() => void runCurrent()}
+              onRunModuleCommand={(unitName, command) => void runModuleCommand(unitName, command)}
               onKill={() => setConfirmKill(true)}
               onRefreshLogs={() => void refreshLogs()}
               onReadLog={(logFile) => void readLog(logFile)}
@@ -942,7 +970,48 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onRunPipeline, onKill, onRefreshLogs, onReadLog }: {
+function ModuleCommandPanel({ config, product, disabled, onRun }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void }) {
+  const unitNames = Object.keys(unitsForConfig(config, product)).sort((left, right) => left.localeCompare(right));
+  const [unitName, setUnitName] = useState(unitNames[0] ?? '');
+  const [command, setCommand] = useState('');
+  const invalid = moduleCommandHasUnsafeCharacters(command);
+  const isAgent = product.unitKind === 'agent';
+
+  useEffect(() => {
+    if (!unitName || !unitNames.includes(unitName)) {
+      setUnitName(unitNames[0] ?? '');
+    }
+  }, [unitNames.join('|'), unitName]);
+
+  return (
+    <div className="v10-module-command">
+      <h4>{isAgent ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</h4>
+      <p className="muted">{m.moduleCommand.help}</p>
+      {unitNames.length === 0 ? (
+        <p className="muted">{isAgent ? m.moduleCommand.noAgent : m.moduleCommand.noConnector}</p>
+      ) : (
+        <div className="form-grid v10-form-grid">
+          <label>{isAgent ? m.moduleCommand.agent : m.moduleCommand.connector}
+            <select value={unitName} onChange={(event) => setUnitName(event.target.value)}>
+              {unitNames.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+          <label>{m.moduleCommand.command}
+            <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.target.value)} />
+          </label>
+        </div>
+      )}
+      {invalid && <p className="error">{m.moduleCommand.invalidCommand}</p>}
+      <div className="button-row">
+        <Button type="button" variant="secondary" disabled={disabled || !unitName || !command.trim() || invalid} onClick={() => onRun(unitName, command)}>
+          {m.moduleCommand.run}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onRunPipeline, onRunModuleCommand, onKill, onRefreshLogs, onReadLog }: {
   config: V10Config;
   product: V10Product;
   busy: boolean;
@@ -956,6 +1025,7 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
   onConfigure: () => void;
   onStart: () => void;
   onRunPipeline: () => void;
+  onRunModuleCommand: (unitName: string, command: string) => void;
   onKill: () => void;
   onRefreshLogs: () => void;
   onReadLog: (logFile: string) => void;
@@ -967,6 +1037,9 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
       <section className="v10-execution-section">
         <h4>{m.execution.debugTitle.replace('connecteurs', product.unitPluralLabel)}</h4>
         <DebugTargetsEditor config={config} product={product} onChange={onConfigChange} />
+      </section>
+      <section className="v10-execution-section">
+        <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunModuleCommand} />
       </section>
       <section className="v10-execution-section">
         <h4>{m.execution.actionsTitle}</h4>
@@ -1155,6 +1228,10 @@ function productFor(productId: string | undefined, products: V10Product[]): V10P
 
 function unitHelp(product: V10Product) {
   return `Le nom du ${product.unitSingularLabel} doit correspondre exactement à la section du gedix.cfg : [environments.<env>.applications.<app>.${product.unitCfgSectionName}.<nom${product.unitSingularLabel}>]`;
+}
+
+function moduleCommandHasUnsafeCharacters(command: string) {
+  return /[&|><]/.test(command);
 }
 
 function hasDuplicateConnector(rows: ConnectorFormRow[]) {

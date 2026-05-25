@@ -63,7 +63,7 @@ ToolBox/
 
 Lors d'une mise a jour, l'installeur remplace les exe et conserve `toolbox.cfg`, `data/` et `files/`. `toolbox.cfg` est cree uniquement s'il n'existe pas, sauf avec `--force-config`. Les donnees utilisateur sont dans `modules/*/data` et `modules/*/files`.
 
-Apres installation, lancer `ToolBox Start.bat` dans le dossier `ToolBox`. Ce script demarre l'API, le serveur web, puis ouvre l'interface dans le navigateur.
+Apres installation, lancer `ToolBox Start.bat` dans le dossier `ToolBox`. Ce script demarre l'API et le serveur web avec `toolbox.cfg`, puis ouvre l'interface dans le navigateur.
 
 L'URL par defaut est :
 
@@ -71,7 +71,7 @@ L'URL par defaut est :
 http://localhost:20251
 ```
 
-Si le port est modifie dans `toolbox.cfg`, ouvrez l'URL correspondante manuellement.
+`ToolBox Start.bat` lit maintenant `[platform] fqdn`, `port` et `tls` dans `toolbox.cfg`. L'URL ouverte est construite sous la forme `http(s)://<fqdn>:<port>`. Si `toolbox.cfg` est absent ou illisible, le script revient a `http://localhost:20251`.
 
 ## API
 
@@ -293,6 +293,7 @@ Pour ajouter un produit, ajouter une entree dans le registre produit avec :
 - `UnitCfgSectionName`
 - `UnitFolderPrefix`
 - `UnitExecutableName`
+- `UnitModuleExecutablePattern`
 
 Phase 1 :
 
@@ -329,6 +330,23 @@ Notes phase 3 :
 - le bouton Parcourir ouvre une selection de fichier locale cote API Windows
 - la suppression d'une maquette supprime seulement l'enregistrement V10 Lab, pas le dossier Gedix physique
 - "Couper les services GX" reste une action manuelle avec confirmation
+
+## Commande module connecteur/agent
+
+V10 Lab permet de lancer une commande sur un module Gedix sans demarrer toute la maquette.
+
+La commande :
+
+- utilise le connecteur ou l'agent selectionne
+- lance automatiquement `gx-front.exe listen` si necessaire
+- execute `gx-module-<nom>.exe` dans le dossier du connecteur/agent
+- ouvre une console Windows dediee
+
+Exemple :
+
+```bat
+gx-module-connector-focas-01.exe import --file test.json
+```
 
 ## Mise à jour d'une maquette
 

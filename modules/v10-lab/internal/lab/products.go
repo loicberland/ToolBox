@@ -28,18 +28,19 @@ type ProductServiceDefinition struct {
 }
 
 type ProductDefinition struct {
-	ID                 string                     `json:"id"`
-	Name               string                     `json:"name"`
-	Label              string                     `json:"label"`
-	Description        string                     `json:"description"`
-	DefaultAppName     string                     `json:"defaultAppName"`
-	Services           []ProductServiceDefinition `json:"services"`
-	UnitKind           UnitKind                   `json:"unitKind"`
-	UnitSingularLabel  string                     `json:"unitSingularLabel"`
-	UnitPluralLabel    string                     `json:"unitPluralLabel"`
-	UnitCfgSectionName string                     `json:"unitCfgSectionName"`
-	UnitFolderPrefix   string                     `json:"unitFolderPrefix"`
-	UnitExecutableName string                     `json:"unitExecutableName"`
+	ID                          string                     `json:"id"`
+	Name                        string                     `json:"name"`
+	Label                       string                     `json:"label"`
+	Description                 string                     `json:"description"`
+	DefaultAppName              string                     `json:"defaultAppName"`
+	Services                    []ProductServiceDefinition `json:"services"`
+	UnitKind                    UnitKind                   `json:"unitKind"`
+	UnitSingularLabel           string                     `json:"unitSingularLabel"`
+	UnitPluralLabel             string                     `json:"unitPluralLabel"`
+	UnitCfgSectionName          string                     `json:"unitCfgSectionName"`
+	UnitFolderPrefix            string                     `json:"unitFolderPrefix"`
+	UnitExecutableName          string                     `json:"unitExecutableName"`
+	UnitModuleExecutablePattern string                     `json:"unitModuleExecutablePattern"`
 }
 
 type Product = ProductDefinition
@@ -61,12 +62,13 @@ var productRegistry = []ProductDefinition{
 			{Name: "reactor", Label: "reactor", HasDatabase: false, SupportsExtraKeys: true},
 			{Name: "config", Label: "config", HasDatabase: true, SupportsExtraKeys: true},
 		},
-		UnitKind:           UnitKindConnector,
-		UnitSingularLabel:  "connecteur",
-		UnitPluralLabel:    "connecteurs",
-		UnitCfgSectionName: "connectors",
-		UnitFolderPrefix:   "connector-",
-		UnitExecutableName: "gx-connector.exe",
+		UnitKind:                    UnitKindConnector,
+		UnitSingularLabel:           "connecteur",
+		UnitPluralLabel:             "connecteurs",
+		UnitCfgSectionName:          "connectors",
+		UnitFolderPrefix:            "connector-",
+		UnitExecutableName:          "gx-connector.exe",
+		UnitModuleExecutablePattern: "gx-module-<unitName>.exe",
 	},
 	{
 		ID:             GedixToolStockV10,
@@ -82,12 +84,13 @@ var productRegistry = []ProductDefinition{
 			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "config", Label: "config", HasDatabase: true, SupportsExtraKeys: true},
 		},
-		UnitKind:           UnitKindConnector,
-		UnitSingularLabel:  "connecteur",
-		UnitPluralLabel:    "connecteurs",
-		UnitCfgSectionName: "connectors",
-		UnitFolderPrefix:   "connector-",
-		UnitExecutableName: "gx-connector.exe",
+		UnitKind:                    UnitKindConnector,
+		UnitSingularLabel:           "connecteur",
+		UnitPluralLabel:             "connecteurs",
+		UnitCfgSectionName:          "connectors",
+		UnitFolderPrefix:            "connector-",
+		UnitExecutableName:          "gx-connector.exe",
+		UnitModuleExecutablePattern: "gx-module-<unitName>.exe",
 	},
 	{
 		ID:             GedixWatchV10,
@@ -103,12 +106,13 @@ var productRegistry = []ProductDefinition{
 			{Name: "m2m", Label: "m2m", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true}},
-		UnitKind:           UnitKindAgent,
-		UnitSingularLabel:  "agent",
-		UnitPluralLabel:    "agents",
-		UnitCfgSectionName: "agents",
-		UnitFolderPrefix:   "agent-",
-		UnitExecutableName: "gx-agent.exe",
+		UnitKind:                    UnitKindAgent,
+		UnitSingularLabel:           "agent",
+		UnitPluralLabel:             "agents",
+		UnitCfgSectionName:          "agents",
+		UnitFolderPrefix:            "agent-",
+		UnitExecutableName:          "gx-agent.exe",
+		UnitModuleExecutablePattern: "gx-module-<unitName>.exe",
 	},
 }
 
@@ -153,4 +157,12 @@ func (p ProductDefinition) Service(name string) (ProductServiceDefinition, bool)
 		}
 	}
 	return ProductServiceDefinition{}, false
+}
+
+func (p ProductDefinition) UnitModuleExecutableName(unitName string) string {
+	pattern := strings.TrimSpace(p.UnitModuleExecutablePattern)
+	if pattern == "" {
+		pattern = "gx-module-<unitName>.exe"
+	}
+	return strings.ReplaceAll(pattern, "<unitName>", unitName)
 }

@@ -45,6 +45,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/validate", h.validateMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run", h.runMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/actions/{actionId}/run", h.runMaquetteAction).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/module-command/run", h.runModuleCommand).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current/logs", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/scan-cfg", h.scanCfg).Methods(http.MethodPost)
@@ -111,6 +112,11 @@ type ScanCfgResponse struct {
 	UnitPluralLabel string     `json:"unitPluralLabel"`
 	Units           []ScanUnit `json:"units"`
 	Connectors      []ScanUnit `json:"connectors,omitempty"`
+}
+
+type ModuleCommandRunRequest struct {
+	UnitName string `json:"unitName"`
+	Command  string `json:"command"`
 }
 
 func (h *Handler) products(w http.ResponseWriter, _ *http.Request) {
@@ -276,6 +282,27 @@ func (h *Handler) runMaquetteAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go h.executeActionRun(run, config, actionID)
+	writeJSON(w, http.StatusAccepted, run.snapshot())
+}
+
+func (h *Handler) runModuleCommand(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	var request ModuleCommandRunRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	config, _, err := lab.LoadRegisteredConfig(name)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	run, ok := h.acquireRun(name)
+	if !ok {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Une execution est deja en cours pour cette maquette."})
+		return
+	}
+
+	go h.executeModuleCommandRun(run, config, request)
 	writeJSON(w, http.StatusAccepted, run.snapshot())
 }
 
@@ -524,6 +551,20 @@ func (h *Handler) executeActionRun(run *currentRun, config lab.Config, actionID 
 			run.finish("failed", validationErr.Items, duration)
 			return
 		}
+		run.finish("failed", []string{err.Error()}, duration)
+		return
+	}
+	run.finish("success", nil, duration)
+}
+
+func (h *Handler) executeModuleCommandRun(run *currentRun, config lab.Config, request ModuleCommandRunRequest) {
+	startedAt := time.Now()
+	err := lab.RunModuleCommand(config, lab.ModuleCommandRequest{
+		UnitName: request.UnitName,
+		Command:  request.Command,
+	}, io.MultiWriter(os.Stdout, currentRunWriter{run: run}))
+	duration := time.Since(startedAt).Milliseconds()
+	if err != nil {
 		run.finish("failed", []string{err.Error()}, duration)
 		return
 	}

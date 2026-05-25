@@ -42,6 +42,71 @@ host = "127.0.0.1:20250"
 	assertEqual(t, cfg.API.Target, "http://127.0.0.1:20250")
 }
 
+func TestPlatformPublicURLExamples(t *testing.T) {
+	clearToolboxEnv(t)
+	tests := []struct {
+		name string
+		cfg  string
+		want string
+	}{
+		{
+			name: "localhost default port no tls",
+			cfg: `[platform]
+fqdn = "localhost"
+port = 20251
+tls = false
+`,
+			want: "http://localhost:20251",
+		},
+		{
+			name: "lan host no tls",
+			cfg: `[platform]
+fqdn = "192.168.1.50"
+port = 8080
+tls = false
+`,
+			want: "http://192.168.1.50:8080",
+		},
+		{
+			name: "dns tls",
+			cfg: `[platform]
+fqdn = "toolbox.local"
+port = 443
+tls = true
+`,
+			want: "https://toolbox.local:443",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(writeConfig(t, tt.cfg), Overrides{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertEqual(t, cfg.Web.PublicURL, tt.want)
+		})
+	}
+}
+
+func TestMissingConfigUsesPublicURLFallback(t *testing.T) {
+	clearToolboxEnv(t)
+	workingDir := t.TempDir()
+	currentDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(workingDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(currentDir) })
+
+	cfg, err := Load("", Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEqual(t, cfg.Web.PublicURL, "http://localhost:20251")
+}
+
 func TestEnvDerivation(t *testing.T) {
 	clearToolboxEnv(t)
 	t.Setenv("TOOLBOX_FQDN", "toolbox.local")

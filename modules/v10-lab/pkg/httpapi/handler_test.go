@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"toolBox/modules/v10-lab/internal/lab"
 	"toolBox/pkg/toolboxruntime"
@@ -106,6 +107,34 @@ func TestRunMaquetteActionStartsSingleSystemAction(t *testing.T) {
 	postJSONInto(t, router, "/api/v10-lab/maquettes/ticket-T5808/actions/configure-gedix-cfg/run", nil, &started, http.StatusAccepted)
 	if started.Status != "running" {
 		t.Fatalf("expected running action, got %#v", started)
+	}
+}
+
+func TestRunModuleCommandRejectsInvalidCommand(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	var started ExecutionResponse
+	postJSONInto(t, router, "/api/v10-lab/maquettes/ticket-T5808/module-command/run", ModuleCommandRunRequest{
+		UnitName: "connector-focas-01",
+		Command:  "status && other",
+	}, &started, http.StatusAccepted)
+
+	var current ExecutionResponse
+	for index := 0; index < 20; index++ {
+		getJSON(t, router, "/api/v10-lab/maquettes/ticket-T5808/run/current", &current, http.StatusOK)
+		if !current.Running {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if current.Status != "failed" || len(current.Errors) == 0 || !strings.Contains(current.Errors[0], "caracteres non autorises") {
+		t.Fatalf("expected invalid command failure, got %#v", current)
 	}
 }
 

@@ -112,11 +112,11 @@ func TestProductServicesAreIsolated(t *testing.T) {
 	if len(prod.Services) != 8 {
 		t.Fatalf("expected prod services, got %#v", prod.Services)
 	}
-	if len(toolStock.Services) != 0 {
-		t.Fatalf("tool stock services should remain isolated until defined, got %#v", toolStock.Services)
+	if _, ok := toolStock.Service("dnc"); ok {
+		t.Fatalf("tool stock services should not silently inherit every prod service: %#v", toolStock.Services)
 	}
-	if len(watch.Services) != 0 {
-		t.Fatalf("watch services should remain isolated until defined, got %#v", watch.Services)
+	if _, ok := watch.Service("reactor"); ok {
+		t.Fatalf("watch services should not silently inherit every prod service: %#v", watch.Services)
 	}
 }
 
@@ -176,6 +176,67 @@ func TestDetectDebugTargetUsesProductUnitExecutable(t *testing.T) {
 	agent, err := DetectDebugTargetForProduct(paths, "agent-watch-01", product)
 	if err != nil || agent.Kind != DebugTargetAgent || !strings.HasSuffix(agent.ExePath, filepath.Join("agent-watch-01", "gx-agent.exe")) {
 		t.Fatalf("expected agent target, got %#v err=%v", agent, err)
+	}
+}
+
+func TestDetectModuleCommandTargetUsesProductUnitModuleExecutable(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_prod", "connector-focas-01"))
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "connector-focas-01", "gx-module-connector-focas-01.exe"), "")
+	paths, err := DetectGedixPaths(Config{Name: "prod", Product: GedixProdV10, Maquette: MaquetteConfig{TargetPath: root, AppName: "prod"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, _ := ProductDefinitionByID(GedixProdV10)
+	target, err := DetectModuleCommandTarget(paths, product, "connector-focas-01")
+	if err != nil || target.Kind != DebugTargetConnector || !strings.HasSuffix(target.ExePath, filepath.Join("connector-focas-01", "gx-module-connector-focas-01.exe")) {
+		t.Fatalf("expected connector module target, got %#v err=%v", target, err)
+	}
+
+	watchProduct, _ := ProductDefinitionByID(GedixWatchV10)
+	if got := watchProduct.UnitModuleExecutableName("agent-watch-01"); got != "gx-module-agent-watch-01.exe" {
+		t.Fatalf("unexpected agent module executable: %s", got)
+	}
+}
+
+func TestModuleCommandRejectsUnsafeCharacters(t *testing.T) {
+	for _, command := range []string{"import & del file", "status | more", "status > out.txt", "status < in.txt", "a && b", "a || b"} {
+		if isSafeModuleCommand(command) {
+			t.Fatalf("expected command %q to be rejected", command)
+		}
+	}
+	if !isSafeModuleCommand(`import --file "test file.json"`) {
+		t.Fatal("expected simple quoted arguments to be accepted")
+	}
+}
+
+func TestGXFrontDetectionPowerShellTargetsExactExecutable(t *testing.T) {
+	script := gxFrontDetectionPowerShell(`D:\Data\Gedix\gx-front.exe`)
+	for _, expected := range []string{
+		`Get-CimInstance Win32_Process`,
+		`Name = 'gx-front.exe'`,
+		`ExecutablePath -eq $target`,
+		`CommandLine -like`,
+		`D:\Data\Gedix\gx-front.exe`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("expected PowerShell detection to contain %q, got:\n%s", expected, script)
+		}
+	}
+}
+
+func TestConsoleLauncherScriptRawKeepsUserCommand(t *testing.T) {
+	content := consoleLauncherScriptContentRaw(
+		`D:\Data\Gedix\env_demo\app_prod\connector-focas-01`,
+		`D:\Data\Gedix\env_demo\app_prod\connector-focas-01\gx-module-connector-focas-01.exe`,
+		`import --file "test file.json"`,
+	)
+	expected := `"D:\Data\Gedix\env_demo\app_prod\connector-focas-01\gx-module-connector-focas-01.exe" import --file "test file.json"`
+	if !strings.Contains(content, expected) {
+		t.Fatalf("expected raw module command in script, got:\n%s", content)
 	}
 }
 
