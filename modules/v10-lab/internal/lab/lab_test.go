@@ -129,6 +129,39 @@ func TestQuoteCmdArgDoesNotQuoteDebugTargetList(t *testing.T) {
 	}
 }
 
+func TestConsoleCommandLineQuotesExecutablePathWithSpaces(t *testing.T) {
+	workDir := `D:\Data\Gedix10\01_Clients\GMP Industrie`
+	got := consoleCommandLine(
+		workDir+`\gx-front.exe`,
+		"listen",
+	)
+	want := `"D:\Data\Gedix10\01_Clients\GMP Industrie\gx-front.exe" listen`
+	if got != want {
+		t.Fatalf("unexpected console command:\ngot:  %s\nwant: %s", got, want)
+	}
+
+	cmdArgs := openConsoleArgs(workDir, "V10 Lab gx-front", got)
+	if len(cmdArgs) != 8 || cmdArgs[4] != workDir {
+		t.Fatalf("workDir should be passed as a separate /D argument, got %#v", cmdArgs)
+	}
+	if cmdArgs[7] != want {
+		t.Fatalf("cmd /K command should contain quoted executable, got %#v", cmdArgs)
+	}
+}
+
+func TestConsoleCommandLineKeepsDebugTargetsAsSingleArgument(t *testing.T) {
+	got := consoleCommandLine(
+		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`,
+		"run",
+		"-e",
+		"auth,connector-focas-01",
+	)
+	want := `"D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01`
+	if got != want {
+		t.Fatalf("unexpected debug console command:\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
 func TestDebugTargetsUseCommaSeparatedExclusionArg(t *testing.T) {
 	got := debugExclusionArg([]string{"auth", "connector-focas-01"})
 	if got != "auth,connector-focas-01" {

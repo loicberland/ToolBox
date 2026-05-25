@@ -162,7 +162,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 	if len(config.Runtime.DebugTargets) > 0 {
 		fmt.Fprintf(writer, "[INFO] Cibles debug : %s\n", strings.Join(config.Runtime.DebugTargets, ", "))
 	}
-	fmt.Fprintf(writer, "Démarrage gx-front : %s listen\n", paths.FrontExePath)
+	fmt.Fprintf(writer, "Démarrage gx-front : %s\n", consoleCommandLine(paths.FrontExePath, "listen"))
 	if err := openConsole(paths.GedixRoot, "V10 Lab gx-front", paths.FrontExePath, "listen"); err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 		appArgs = append(appArgs, debugExclusionArg(config.Runtime.DebugTargets))
 		fmt.Fprintf(writer, "[INFO] Lancement gx-app avec exclusions : gx-app.exe %s\n", strings.Join(appArgs, " "))
 	}
-	fmt.Fprintf(writer, "Démarrage gx-app : %s %s\n", paths.AppExePath, strings.Join(appArgs, " "))
+	fmt.Fprintf(writer, "Démarrage gx-app : %s\n", consoleCommandLine(paths.AppExePath, appArgs...))
 	if err := openConsole(paths.AppPath, "V10 Lab gx-app", paths.AppExePath, appArgs...); err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 		} else {
 			fmt.Fprintf(writer, "[INFO] Lancement service debug %s : %s listen --debug -v2\n", debugTarget.Name, filepath.Base(debugTarget.ExePath))
 		}
-		fmt.Fprintf(writer, "Démarrage debug %s (%s) : %s listen --debug -v2\n", debugTarget.Name, debugTarget.Kind, debugTarget.ExePath)
+		fmt.Fprintf(writer, "Démarrage debug %s (%s) : %s\n", debugTarget.Name, debugTarget.Kind, consoleCommandLine(debugTarget.ExePath, "listen", "--debug", "-v2"))
 		if err := openConsole(debugTarget.WorkDir, "V10 Lab debug "+debugTarget.Name, debugTarget.ExePath, "listen", "--debug", "-v2"); err != nil {
 			return err
 		}
@@ -280,21 +280,37 @@ func decodeCommandOutput(payload []byte) string {
 }
 
 func openConsole(dir string, title string, exe string, args ...string) error {
+	commandLine := consoleCommandLine(exe, args...)
 	if runtime.GOOS != "windows" {
-		fmt.Printf("[DRY-RUN non-windows] cd %s && %s %s\n", dir, exe, strings.Join(args, " "))
+		fmt.Printf("[DRY-RUN non-windows] cd %s && %s\n", quoteCmdArg(dir), commandLine)
 		return nil
 	}
-	commandLine := quoteCmdArg(exe)
-	for _, arg := range args {
-		commandLine += " " + quoteCmdArg(arg)
-	}
-	cmd := exec.Command("cmd", "/C", "start", title, "/D", dir, "cmd", "/K", commandLine)
+	cmd := exec.Command("cmd", openConsoleArgs(dir, title, commandLine)...)
 	return cmd.Start()
+}
+
+func openConsoleArgs(dir string, title string, commandLine string) []string {
+	return []string{"/C", "start", title, "/D", dir, "cmd", "/K", commandLine}
+}
+
+func consoleCommandLine(exe string, args ...string) string {
+	parts := []string{quoteWindowsPath(exe)}
+	for _, arg := range args {
+		parts = append(parts, quoteCmdArg(arg))
+	}
+	return strings.Join(parts, " ")
+}
+
+func quoteWindowsPath(path string) string {
+	if strings.HasPrefix(path, `"`) && strings.HasSuffix(path, `"`) {
+		return path
+	}
+	return `"` + strings.ReplaceAll(path, `"`, `\"`) + `"`
 }
 
 func quoteCmdArg(value string) string {
 	if strings.ContainsAny(value, " \t&()[]{}^=;!'`~") {
-		return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+		return quoteWindowsPath(value)
 	}
 	return value
 }
