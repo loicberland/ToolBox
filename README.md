@@ -71,7 +71,7 @@ L'URL par defaut est :
 http://localhost:20251
 ```
 
-`ToolBox Start.bat` lit maintenant `[platform] fqdn`, `port` et `tls` dans `toolbox.cfg`. L'URL ouverte est construite sous la forme `http(s)://<fqdn>:<port>`. Si `toolbox.cfg` est absent ou illisible, le script revient a `http://localhost:20251`.
+`ToolBox Start.bat` lance `web-server-toolbox.exe start --config toolbox.cfg --open`. Le serveur web lit `[platform] fqdn`, `port` et `tls`, puis ouvre l'URL construite sous la forme `http(s)://<fqdn>:<port>`.
 
 ## API
 
@@ -235,6 +235,12 @@ Lancement :
 ```bat
 api-toolbox.exe server --config toolbox.cfg
 web-server-toolbox.exe start --config toolbox.cfg
+```
+
+Pour ouvrir automatiquement le navigateur sur l'URL publique lue depuis `toolbox.cfg` :
+
+```bat
+web-server-toolbox.exe start --config toolbox.cfg --open
 ```
 
 Depuis un autre poste, ouvrir `http://192.168.1.50:20251`. Le navigateur ne voit

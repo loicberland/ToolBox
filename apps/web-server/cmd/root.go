@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"toolBox/pkg/toolboxconfig"
 	"toolBox/pkg/toolboxruntime"
@@ -29,6 +30,7 @@ var addrFlag string
 var apiTargetFlag string
 var configOutputFlag string
 var configForceFlag bool
+var openBrowserFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:     "web-server",
@@ -82,6 +84,12 @@ var serverCmd = &cobra.Command{
 
 		fmt.Printf("Proxying /api/ to %s\n", cfg.API.Target)
 		fmt.Printf("Starting web server at %s\n", cfg.Web.PublicURL)
+		if openBrowserFlag {
+			fmt.Printf("Opening browser at %s\n", cfg.Web.PublicURL)
+			if err := openBrowser(cfg.Web.PublicURL); err != nil {
+				log.Printf("failed to open browser: %s", err)
+			}
+		}
 		if err := http.ListenAndServe(cfg.Web.Addr, mux); err != nil {
 			log.Fatalf("failed to start web server: %s", err)
 		}
@@ -149,6 +157,7 @@ func init() {
 	serverCmd.Flags().StringVar(&configPathFlag, "config", "", "path to toolbox.cfg")
 	serverCmd.Flags().StringVar(&addrFlag, "addr", "", "web server listen address")
 	serverCmd.Flags().StringVar(&apiTargetFlag, "api-target", "", "API target URL used by the /api reverse proxy")
+	serverCmd.Flags().BoolVar(&openBrowserFlag, "open", false, "open the configured public URL in the default browser")
 	configInitCmd.Flags().StringVar(&configOutputFlag, "output", "", "output path for toolbox.cfg")
 	configInitCmd.Flags().BoolVar(&configForceFlag, "force", false, "overwrite an existing toolbox.cfg")
 }
@@ -205,6 +214,27 @@ func newAPIProxy(apiTarget string) (http.Handler, error) {
 		return nil, fmt.Errorf("API target must include scheme and host: %q", apiTarget)
 	}
 	return httputil.NewSingleHostReverseProxy(target), nil
+}
+
+func openBrowser(rawURL string) error {
+	name, args := openBrowserCommand(rawURL)
+	if name == "" {
+		return fmt.Errorf("open browser is not supported on %s", runtime.GOOS)
+	}
+	return exec.Command(name, args...).Start()
+}
+
+func openBrowserCommand(rawURL string) (string, []string) {
+	switch runtime.GOOS {
+	case "windows":
+		return "cmd", []string{"/C", "start", "", rawURL}
+	case "darwin":
+		return "open", []string{rawURL}
+	case "linux":
+		return "xdg-open", []string{rawURL}
+	default:
+		return "", nil
+	}
 }
 
 func syncDist(sourceDir, targetDir string) error {

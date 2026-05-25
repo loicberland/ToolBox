@@ -173,7 +173,13 @@ func ensureConfig(root string, force bool) error {
 }
 
 func ensureStartScript(root string) error {
-	return os.WriteFile(filepath.Join(root, "ToolBox Start.bat"), []byte(startScriptContent()), 0644)
+	if err := os.WriteFile(filepath.Join(root, "ToolBox Start.bat"), []byte(startScriptContent()), 0644); err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(root, "ToolBox Url.ps1")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func startScriptContent() string {
@@ -181,14 +187,7 @@ func startScriptContent() string {
 		"cd /d \"%~dp0\"\r\n" +
 		"\r\n" +
 		"start \"ToolBox api\" cmd /k \"\"%~dp0api-toolbox.exe\" server --config \"%~dp0toolbox.cfg\"\"\r\n" +
-		"start \"ToolBox front\" cmd /k \"\"%~dp0web-server-toolbox.exe\" start --config \"%~dp0toolbox.cfg\"\"\r\n" +
-		"\r\n" +
-		"timeout /t 2 /nobreak >nul\r\n" +
-		"\r\n" +
-		"set \"TOOLBOX_URL=http://localhost:20251\"\r\n" +
-		"for /f \"usebackq delims=\" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -Command \"$cfg=Join-Path (Get-Location) 'toolbox.cfg'; $fqdn='localhost'; $port='20251'; $tls='false'; $section=''; try { if (Test-Path $cfg) { foreach ($line in Get-Content $cfg) { $l=$line.Trim(); if ($l -match '^\\[(.+)\\]$') { $section=$matches[1]; continue }; if ($section -eq 'platform' -and $l -match '^fqdn\\s*=\\s*\"\"?([^\"\"]+)\"\"?') { $fqdn=$matches[1].Trim() }; if ($section -eq 'platform' -and $l -match '^port\\s*=\\s*([0-9]+)') { $port=$matches[1].Trim() }; if ($section -eq 'platform' -and $l -match '^tls\\s*=\\s*(true|false)') { $tls=$matches[1].Trim() } } } } catch {}; $scheme = if ($tls -eq 'true') { 'https' } else { 'http' }; Write-Output ($scheme + '://' + $fqdn + ':' + $port)\"`) do set \"TOOLBOX_URL=%%U\"\r\n" +
-		"if not defined TOOLBOX_URL set \"TOOLBOX_URL=http://localhost:20251\"\r\n" +
-		"start \"\" \"%TOOLBOX_URL%\"\r\n" +
+		"start \"ToolBox front\" cmd /k \"\"%~dp0web-server-toolbox.exe\" start --config \"%~dp0toolbox.cfg\" --open\"\r\n" +
 		"\r\n" +
 		"exit\r\n"
 }
