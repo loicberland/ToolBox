@@ -99,15 +99,18 @@ type SelectReleasePathResponse struct {
 	Cancelled bool   `json:"cancelled"`
 }
 
-type ScanConnector struct {
+type ScanUnit struct {
 	Name      string `json:"name"`
 	RawConfig string `json:"rawConfig"`
 }
 
 type ScanCfgResponse struct {
-	EnvName    string          `json:"envName"`
-	AppName    string          `json:"appName"`
-	Connectors []ScanConnector `json:"connectors"`
+	EnvName         string     `json:"envName"`
+	AppName         string     `json:"appName"`
+	UnitKind        string     `json:"unitKind"`
+	UnitPluralLabel string     `json:"unitPluralLabel"`
+	Units           []ScanUnit `json:"units"`
+	Connectors      []ScanUnit `json:"connectors,omitempty"`
 }
 
 func (h *Handler) products(w http.ResponseWriter, _ *http.Request) {
@@ -311,8 +314,13 @@ func (h *Handler) scanCfg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	envName := firstNonEmpty(r.FormValue("envName"), config.Maquette.EnvName)
-	appName := firstNonEmpty(r.FormValue("appName"), config.Maquette.AppName, "prod")
-	result, err := scanConnectors(string(payload), envName, appName)
+	product, err := lab.ProductDefinitionByID(config.Product)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	appName := firstNonEmpty(r.FormValue("appName"), config.Maquette.AppName, product.DefaultAppName, "prod")
+	result, err := scanUnits(string(payload), envName, appName, product)
 	if err != nil {
 		respondError(w, err)
 		return
@@ -563,10 +571,10 @@ func (r *currentRun) snapshot() ExecutionResponse {
 	}
 }
 
-func scanConnectors(content string, envName string, appName string) (ScanCfgResponse, error) {
-	sectionPattern := regexp.MustCompile(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.connectors\.([^\]]+)\]\s*$`)
+func scanUnits(content string, envName string, appName string, product lab.ProductDefinition) (ScanCfgResponse, error) {
+	sectionPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.%s\.([^\]]+)\]\s*$`, regexp.QuoteMeta(product.UnitCfgSectionName)))
 	envs := map[string]bool{}
-	connectors := []ScanConnector{}
+	units := []ScanUnit{}
 	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
 		matches := sectionPattern.FindStringSubmatch(line)
 		if len(matches) != 4 {
@@ -579,7 +587,7 @@ func scanConnectors(content string, envName string, appName string) (ScanCfgResp
 		if !strings.EqualFold(matches[2], appName) {
 			continue
 		}
-		connectors = append(connectors, ScanConnector{Name: matches[3], RawConfig: ""})
+		units = append(units, ScanUnit{Name: matches[3], RawConfig: ""})
 	}
 	if envName == "" {
 		if len(envs) == 1 {
@@ -590,7 +598,15 @@ func scanConnectors(content string, envName string, appName string) (ScanCfgResp
 			return ScanCfgResponse{}, fmt.Errorf("plusieurs environnements detectes, renseignez l'environnement")
 		}
 	}
-	return ScanCfgResponse{EnvName: envName, AppName: appName, Connectors: connectors}, nil
+	response := ScanCfgResponse{
+		EnvName:         envName,
+		AppName:         appName,
+		UnitKind:        string(product.UnitKind),
+		UnitPluralLabel: product.UnitPluralLabel,
+		Units:           units,
+		Connectors:      units,
+	}
+	return response, nil
 }
 
 func openWindowsZipDialog() (string, bool, error) {

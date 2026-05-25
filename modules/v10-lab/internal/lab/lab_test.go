@@ -87,6 +87,39 @@ func TestActionsForProductIncludesSystemAndGedixActions(t *testing.T) {
 	}
 }
 
+func TestProductRegistryContainsV10Products(t *testing.T) {
+	for _, id := range []string{GedixProdV10, GedixToolStockV10, GedixWatchV10} {
+		product, err := ProductDefinitionByID(id)
+		if err != nil {
+			t.Fatalf("expected product %s: %v", id, err)
+		}
+		if product.ID != id || product.Label == "" {
+			t.Fatalf("unexpected product definition: %#v", product)
+		}
+	}
+	if _, err := ProductDefinitionByID("unknown-product"); err == nil || !strings.Contains(err.Error(), "produit inconnu") {
+		t.Fatalf("expected clear unknown product error, got %v", err)
+	}
+	if NormalizeProductID(LegacyGedixV10) != GedixProdV10 {
+		t.Fatalf("legacy gedix-v10 should map to %s", GedixProdV10)
+	}
+}
+
+func TestProductServicesAreIsolated(t *testing.T) {
+	prod, _ := ProductDefinitionByID(GedixProdV10)
+	toolStock, _ := ProductDefinitionByID(GedixToolStockV10)
+	watch, _ := ProductDefinitionByID(GedixWatchV10)
+	if len(prod.Services) != 8 {
+		t.Fatalf("expected prod services, got %#v", prod.Services)
+	}
+	if len(toolStock.Services) != 0 {
+		t.Fatalf("tool stock services should remain isolated until defined, got %#v", toolStock.Services)
+	}
+	if len(watch.Services) != 0 {
+		t.Fatalf("watch services should remain isolated until defined, got %#v", watch.Services)
+	}
+}
+
 func TestDetectEnvAndDebugTargets(t *testing.T) {
 	root := t.TempDir()
 	mustMkdir(t, filepath.Join(root, "env_demo", "app_prod", "connector-focas-01"))
@@ -117,6 +150,32 @@ func TestDetectEnvAndDebugTargets(t *testing.T) {
 	connector, err := DetectDebugTarget(paths, "connector-focas-01")
 	if err != nil || connector.Kind != DebugTargetConnector {
 		t.Fatalf("expected connector, got %#v err=%v", connector, err)
+	}
+}
+
+func TestDetectDebugTargetUsesProductUnitExecutable(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_watch", "agent-watch-01"))
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_watch", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_watch", "agent-watch-01", "gx-agent.exe"), "")
+
+	paths, err := DetectGedixPaths(Config{
+		Name:    "watch",
+		Product: GedixWatchV10,
+		Maquette: MaquetteConfig{
+			TargetPath: root,
+			AppName:    "watch",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, _ := ProductDefinitionByID(GedixWatchV10)
+	agent, err := DetectDebugTargetForProduct(paths, "agent-watch-01", product)
+	if err != nil || agent.Kind != DebugTargetAgent || !strings.HasSuffix(agent.ExePath, filepath.Join("agent-watch-01", "gx-agent.exe")) {
+		t.Fatalf("expected agent target, got %#v err=%v", agent, err)
 	}
 }
 
@@ -337,6 +396,42 @@ func TestCfgConnectorExistingAndMissing(t *testing.T) {
 	missing := appendRawConfigToSection(content, "environments.demo.applications.prod.connectors.connector-unknown", `x="y"`)
 	if missing != content {
 		t.Fatal("missing connector section should not be created")
+	}
+}
+
+func TestConfigureGedixCfgUsesAgentSectionForWatch(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_watch", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), `fqdn="old"
+
+[environments.demo.applications.watch.agents.agent-watch-01]
+type="watch"
+host="127.0.0.1"
+`)
+	var output bytes.Buffer
+	err := ConfigureGedixCfg(Config{
+		Name:    "watch",
+		Product: GedixWatchV10,
+		Maquette: MaquetteConfig{
+			TargetPath: root,
+			AppName:    "watch",
+		},
+		GedixConfig: GedixConfig{
+			FQDN:   "localhost",
+			Agents: map[string]ProductUnitConfig{"agent-watch-01": {RawConfig: `custom-key="value"`}},
+		},
+	}, &output)
+	if err != nil {
+		t.Fatalf("configure watch cfg failed: %v\n%s", err, output.String())
+	}
+	data, err := os.ReadFile(filepath.Join(root, "gedix.cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `[environments.demo.applications.watch.agents.agent-watch-01]`) || !strings.Contains(content, `custom-key="value"`) {
+		t.Fatalf("expected agent section update, got:\n%s", content)
 	}
 }
 

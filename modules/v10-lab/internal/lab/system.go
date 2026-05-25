@@ -155,6 +155,11 @@ func UpdateEnv(ctx ActionContext, params map[string]any) error {
 }
 
 func StartMaquette(config Config, writer io.Writer) error {
+	ApplyDefaults(&config)
+	product, err := ProductDefinitionByID(config.Product)
+	if err != nil {
+		return err
+	}
 	paths, err := DetectGedixPaths(config)
 	if err != nil {
 		return err
@@ -177,12 +182,12 @@ func StartMaquette(config Config, writer io.Writer) error {
 		return err
 	}
 	for _, target := range config.Runtime.DebugTargets {
-		debugTarget, err := DetectDebugTarget(paths, target)
+		debugTarget, err := DetectDebugTargetForProduct(paths, target, product)
 		if err != nil {
 			return err
 		}
-		if debugTarget.Kind == DebugTargetConnector {
-			fmt.Fprintf(writer, "[INFO] Lancement connecteur debug %s : gx-connector.exe listen --debug -v2\n", debugTarget.Name)
+		if debugTarget.Kind == DebugTargetConnector || debugTarget.Kind == DebugTargetAgent {
+			fmt.Fprintf(writer, "[INFO] Lancement %s debug %s : %s listen --debug -v2\n", product.UnitSingularLabel, debugTarget.Name, filepath.Base(debugTarget.ExePath))
 		} else {
 			fmt.Fprintf(writer, "[INFO] Lancement service debug %s : %s listen --debug -v2\n", debugTarget.Name, filepath.Base(debugTarget.ExePath))
 		}

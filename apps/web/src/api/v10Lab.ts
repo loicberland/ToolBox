@@ -5,7 +5,21 @@ export const DEFAULT_V10_PRODUCT_ID = 'gedix-prod-v10';
 export type V10Product = {
   id: string;
   name: string;
+  label: string;
   description: string;
+  defaultAppName: string;
+  services: Array<{
+    name: string;
+    label: string;
+    hasDatabase: boolean;
+    supportsExtraKeys: boolean;
+  }>;
+  unitKind: 'connector' | 'agent';
+  unitSingularLabel: string;
+  unitPluralLabel: string;
+  unitCfgSectionName: string;
+  unitFolderPrefix: string;
+  unitExecutableName: string;
 };
 
 export type V10ActionField = {
@@ -67,6 +81,8 @@ export type V10Config = {
     port: number;
     services: Record<string, ServiceDBConfig>;
     connectors: Record<string, ConnectorConfig>;
+    agents?: Record<string, ConnectorConfig>;
+    units?: Record<string, ConnectorConfig>;
   };
   runtime: {
     debugTargets: string[];
@@ -114,6 +130,9 @@ export type SelectReleasePathResponse = {
 export type ScanCfgResponse = {
   envName: string;
   appName: string;
+  unitKind?: 'connector' | 'agent';
+  unitPluralLabel?: string;
+  units?: Array<{ name: string; rawConfig: string }>;
   connectors: Array<{ name: string; rawConfig: string }>;
 };
 

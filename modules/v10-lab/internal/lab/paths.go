@@ -25,6 +25,7 @@ type DebugTargetKind string
 const (
 	DebugTargetService   DebugTargetKind = "service"
 	DebugTargetConnector DebugTargetKind = "connector"
+	DebugTargetAgent     DebugTargetKind = "agent"
 )
 
 type DebugTarget struct {
@@ -128,15 +129,28 @@ func detectOrCreateCfg(root string, frontExePath string) (string, error) {
 }
 
 func DetectDebugTarget(paths GedixPaths, target string) (DebugTarget, error) {
+	return DetectDebugTargetForProduct(paths, target, ProductDefinition{
+		UnitKind:           UnitKindConnector,
+		UnitSingularLabel:  "connecteur",
+		UnitExecutableName: "gx-connector.exe",
+	})
+}
+
+func DetectDebugTargetForProduct(paths GedixPaths, target string, product ProductDefinition) (DebugTarget, error) {
 	serviceExe := filepath.Join(paths.AppPath, "gx-"+target+".exe")
 	if info, err := os.Stat(serviceExe); err == nil && !info.IsDir() {
 		return DebugTarget{Name: target, Kind: DebugTargetService, WorkDir: paths.AppPath, ExePath: serviceExe}, nil
 	}
-	connectorExe := filepath.Join(paths.AppPath, target, "gx-connector.exe")
-	if info, err := os.Stat(connectorExe); err == nil && !info.IsDir() {
-		return DebugTarget{Name: target, Kind: DebugTargetConnector, WorkDir: filepath.Join(paths.AppPath, target), ExePath: connectorExe}, nil
+	unitExeName := firstNonEmpty(product.UnitExecutableName, "gx-connector.exe")
+	unitExe := filepath.Join(paths.AppPath, target, unitExeName)
+	if info, err := os.Stat(unitExe); err == nil && !info.IsDir() {
+		kind := DebugTargetConnector
+		if product.UnitKind == UnitKindAgent {
+			kind = DebugTargetAgent
+		}
+		return DebugTarget{Name: target, Kind: kind, WorkDir: filepath.Join(paths.AppPath, target), ExePath: unitExe}, nil
 	}
-	return DebugTarget{}, fmt.Errorf("cible debug %q introuvable: ni service gx-%s.exe ni connector %s/gx-connector.exe", target, target, target)
+	return DebugTarget{}, fmt.Errorf("cible debug %q introuvable: ni service gx-%s.exe ni %s %s/%s", target, target, product.UnitSingularLabel, target, unitExeName)
 }
 
 func runCommand(dir string, exe string, args ...string) error {

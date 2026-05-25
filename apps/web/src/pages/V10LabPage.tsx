@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   DBTemplate,
   ExecutionResponse,
+  ConnectorConfig,
   LogSummary,
   MaquetteSummary,
   PipelineStep,
@@ -16,8 +17,6 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { messages } from '../i18n';
 
-const serviceNames = ['webserver', 'auth', 'filestore', 'entreprise', 'etl', 'dnc', 'reactor', 'config'];
-const noDatabaseServices = new Set(['webserver', 'reactor']);
 const m = messages.v10Lab;
 const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.connectors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
 const systemPipelineActions = new Set(['create-env', 'configure-gedix-cfg', 'start-maquette', 'stop-maquette', 'start-services', 'stop-services', 'kill-gx-processes', 'update-env']);
@@ -98,6 +97,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   }, [onBeforeLeaveChange, config, isDirty]);
 
   const selectedSummary = maquettes.find((item) => item.name === selectedName);
+  const currentProduct = productFor(config?.product ?? draft.product, products);
 
   async function loadInitial() {
     await run(async () => {
@@ -109,9 +109,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setProducts(productItems);
       setTemplates(templateItems);
       setMaquettes(maquetteItems);
-      const product = productItems[0]?.id ?? DEFAULT_V10_PRODUCT_ID;
-      setDraft(defaultConfig(product));
-      await loadActions(product);
+      const product = productItems.find((item) => item.id === DEFAULT_V10_PRODUCT_ID) ?? productItems[0];
+      setDraft(defaultConfig(product?.id, product));
+      await loadActions(product?.id ?? DEFAULT_V10_PRODUCT_ID);
     });
   }
 
@@ -157,7 +157,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       const next = normalizeConfig(draft);
       await v10LabApi.createMaquette(next);
       setShowCreate(false);
-      setDraft(defaultConfig(products[0]?.id));
+      const product = productFor(DEFAULT_V10_PRODUCT_ID, products);
+      setDraft(defaultConfig(product.id, product));
       await reloadList();
       await openMaquette(next.name);
       setMessage(m.created);
@@ -387,19 +388,22 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       return;
     }
     await run(async () => {
-      const result = await v10LabApi.scanCfg(config.name, file, config.maquette.envName, config.maquette.appName || 'prod');
-      const connectors = { ...config.gedixConfig.connectors };
-      for (const connector of result.connectors) {
-        if (!connectors[connector.name]) {
-          connectors[connector.name] = { rawConfig: connector.rawConfig };
+      const product = productFor(config.product, products);
+      const result = await v10LabApi.scanCfg(config.name, file, config.maquette.envName, config.maquette.appName || product.defaultAppName || 'prod');
+      const scannedUnits = result.units ?? result.connectors ?? [];
+      const unitKey = product.unitKind === 'agent' ? 'agents' : 'connectors';
+      const units = { ...(config.gedixConfig[unitKey] ?? {}) };
+      for (const unit of scannedUnits) {
+        if (!units[unit.name]) {
+          units[unit.name] = { rawConfig: unit.rawConfig };
         }
       }
       updateConfig({
         ...config,
         maquette: { ...config.maquette, envName: result.envName || config.maquette.envName, appName: result.appName || config.maquette.appName },
-        gedixConfig: { ...config.gedixConfig, connectors },
+        gedixConfig: { ...config.gedixConfig, [unitKey]: units },
       });
-      setMessage(`${result.connectors.length} connecteur(s) détecté(s).`);
+      setMessage(`${scannedUnits.length} ${product.unitPluralLabel} détecté(s).`);
     });
   }
 
@@ -500,15 +504,15 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <div className="v10-tabs">
             {tabs.map((tab) => (
               <button type="button" key={tab} className={tab === activeTab ? 'active' : ''} onClick={() => void changeTab(tab)}>
-                {tab}
+                {tab === m.tabs.connectors ? (currentProduct.unitKind === 'agent' ? m.units.agents : m.units.connectors) : tab}
               </button>
             ))}
           </div>
 
           {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
-          {activeTab === m.tabs.services && <ServicesForm config={config} templates={templates} onChange={updateConfig} />}
-          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} onChange={updateConfig} onScanCfg={(file) => void scanCfg(file)} />}
+          {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
+          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file) => void scanCfg(file)} />}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
               <PipelineBuilder config={config} actions={actions} onChange={updateConfig} />
@@ -517,6 +521,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.execution && (
             <ExecutionPanel
               config={config}
+              product={currentProduct}
               busy={busy}
               runState={runState}
               execution={execution}
@@ -584,14 +589,29 @@ function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, on
   onSelectZip: (config: V10Config, onChange: (config: V10Config) => void) => void;
   creating?: boolean;
 }) {
+  const changeProduct = (productId: string) => {
+    if (!creating && productId !== config.product && !window.confirm(m.productChangeWarning)) {
+      return;
+    }
+    const product = productFor(productId, products);
+    const shouldSetDefaultApp = !config.maquette.appName.trim() || (creating && config.maquette.appName === productFor(config.product, products).defaultAppName);
+    onChange({
+      ...config,
+      product: product.id,
+      maquette: {
+        ...config.maquette,
+        appName: shouldSetDefaultApp ? product.defaultAppName : config.maquette.appName,
+      },
+    });
+  };
   return (
     <div className="form-grid v10-form-grid">
       <label>{m.name}
         <input value={config.name} disabled={!creating} onChange={(event) => onChange({ ...config, name: event.target.value })} />
       </label>
       <label>{m.product}
-        <select value={config.product} onChange={(event) => onChange({ ...config, product: event.target.value })}>
-          {products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}
+        <select value={config.product} onChange={(event) => changeProduct(event.target.value)}>
+          {products.map((product) => <option value={product.id} key={product.id}>{product.label || product.name}</option>)}
         </select>
       </label>
       <label>{m.releaseZip}
@@ -621,9 +641,9 @@ function MaquetteGeneralForm({ config, products, defaultTargetPath, onChange, on
   );
 }
 
-function DebugTargetsEditor({ config, onChange }: { config: V10Config; onChange: (config: V10Config) => void }) {
+function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void }) {
   const [selected, setSelected] = useState('');
-  const options = [...serviceNames, ...Object.keys(config.gedixConfig.connectors ?? {})]
+  const options = [...product.services.map((service) => service.name), ...Object.keys(unitsForConfig(config, product))]
     .filter((item, index, items) => items.indexOf(item) === index)
     .filter((item) => !config.runtime.debugTargets.includes(item));
   return (
@@ -671,7 +691,7 @@ function GedixForm({ config, onChange, compact = false }: { config: V10Config; o
   return compact ? content : <div className="form-grid v10-form-grid">{content}</div>;
 }
 
-function ServicesForm({ config, templates, onChange }: { config: V10Config; templates: DBTemplate[]; onChange: (config: V10Config) => void }) {
+function ServicesForm({ config, product, templates, onChange }: { config: V10Config; product: V10Product; templates: DBTemplate[]; onChange: (config: V10Config) => void }) {
   const updateService = (name: string, service: ServiceDBConfig | null) => {
     const services = { ...config.gedixConfig.services };
     if (service) {
@@ -684,15 +704,17 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
 
   return (
     <div className="v10-service-list">
-      {serviceNames.map((name) => {
-        const disabled = noDatabaseServices.has(name);
+      {product.services.length === 0 && <p className="muted">{m.noServicesForProduct}</p>}
+      {product.services.map((serviceDefinition) => {
+        const name = serviceDefinition.name;
+        const disabled = !serviceDefinition.hasDatabase;
         const existingService = config.gedixConfig.services[name];
         const service = existingService ?? { dbType: '', dbDsn: '', extraKeys: {} };
         const enabled = Boolean(existingService?.dbType);
         return (
           <div className="v10-service-row" key={name}>
             <div>
-              <strong>{name}</strong>
+              <strong>{serviceDefinition.label || name}</strong>
               {disabled && <p className="muted">{m.noDatabase}</p>}
             </div>
             {!disabled && (
@@ -725,7 +747,7 @@ function ServicesForm({ config, templates, onChange }: { config: V10Config; temp
                 )}
               </>
             )}
-            <ExtraKeysEditor serviceKey={`${config.name}:${name}`} service={service} onChange={(next) => updateService(name, next)} />
+            {serviceDefinition.supportsExtraKeys && <ExtraKeysEditor serviceKey={`${config.name}:${name}`} service={service} onChange={(next) => updateService(name, next)} />}
           </div>
         );
       })}
@@ -769,44 +791,45 @@ function ExtraKeysEditor({ serviceKey, service, onChange }: { serviceKey: string
   );
 }
 
-function ConnectorsForm({ config, onChange, onScanCfg }: { config: V10Config; onChange: (config: V10Config) => void; onScanCfg: (file: File) => void }) {
-  const [rows, setRows] = useState<ConnectorFormRow[]>(() => connectorRowsFromConfig(config));
+function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void; onScanCfg: (file: File) => void }) {
+  const [rows, setRows] = useState<ConnectorFormRow[]>(() => unitRowsFromConfig(config, product));
 
   useEffect(() => {
-    setRows(connectorRowsFromConfig(config));
-  }, [config.name]);
+    setRows(unitRowsFromConfig(config, product));
+  }, [config.name, product.id]);
 
   useEffect(() => {
     setRows((current) => {
       const existing = new Set(current.map((row) => row.name));
-      const missing = Object.entries(config.gedixConfig.connectors)
+      const missing = Object.entries(unitsForConfig(config, product))
         .filter(([name]) => !existing.has(name))
         .map(([name, connector]) => ({ id: makeID(), name, rawConfig: connector.rawConfig }));
       return missing.length > 0 ? [...current, ...missing] : current;
     });
-  }, [config.gedixConfig.connectors]);
+  }, [config.gedixConfig.connectors, config.gedixConfig.agents, config.gedixConfig.units, product.id]);
 
   const commitRows = (nextRows: ConnectorFormRow[]) => {
     setRows(nextRows);
-    const connectors: Record<string, { rawConfig: string }> = {};
+    const units: Record<string, { rawConfig: string }> = {};
     for (const row of nextRows) {
       const name = row.name.trim();
       if (name) {
-        connectors[name] = { rawConfig: row.rawConfig };
+        units[name] = { rawConfig: row.rawConfig };
       }
     }
-    onChange({ ...config, gedixConfig: { ...config.gedixConfig, connectors } });
+    const unitKey = product.unitKind === 'agent' ? 'agents' : 'connectors';
+    onChange({ ...config, gedixConfig: { ...config.gedixConfig, [unitKey]: units } });
   };
 
   const duplicate = hasDuplicateConnector(rows);
 
   return (
     <div className="v10-connector-list">
-      <p className="readonly-notice">{m.connectorHelp}</p>
+      <p className="readonly-notice">{unitHelp(product)}</p>
       <p className="muted">{m.scanCfgHelp}</p>
       <div className="button-row">
         <label className="ui-button secondary sm v10-file-button">
-          {m.scanCfg}
+          {product.unitKind === 'agent' ? m.units.scanAgents : m.units.scanConnectors}
           <input
             type="file"
             accept=".cfg"
@@ -828,7 +851,7 @@ function ConnectorsForm({ config, onChange, onScanCfg }: { config: V10Config; on
           <Button type="button" variant="danger" size="sm" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `connector-${rows.length + 1}`, rawConfig: '' }])}>{messages.common.add}</Button>
+      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `${product.unitFolderPrefix || 'connector-'}${rows.length + 1}`, rawConfig: '' }])}>{product.unitKind === 'agent' ? m.units.addAgent : m.units.addConnector}</Button>
     </div>
   );
 }
@@ -858,7 +881,7 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
           <Button type="button" size="sm" variant="secondary" onClick={() => onChange({ ...config, pipeline: apiSteps })}>{m.pipeline.cleanSystemActions}</Button>
         </div>
       )}
-      {actions.length === 0 && <p className="muted">{m.pipeline.noApiActions}</p>}
+      {actions.length === 0 && <p className="muted">{m.actionPlan.noActionsForProduct}</p>}
       {apiSteps.map((step, index) => {
         const action = byID[step.action];
         const fields = action?.fields ?? [];
@@ -919,8 +942,9 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onRunPipeline, onKill, onRefreshLogs, onReadLog }: {
+function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onRunPipeline, onKill, onRefreshLogs, onReadLog }: {
   config: V10Config;
+  product: V10Product;
   busy: boolean;
   runState: RunState;
   execution: ExecutionResponse | null;
@@ -941,8 +965,8 @@ function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, 
   return (
     <div className="v10-execution">
       <section className="v10-execution-section">
-        <h4>{m.execution.debugTitle}</h4>
-        <DebugTargetsEditor config={config} onChange={onConfigChange} />
+        <h4>{m.execution.debugTitle.replace('connecteurs', product.unitPluralLabel)}</h4>
+        <DebugTargetsEditor config={config} product={product} onChange={onConfigChange} />
       </section>
       <section className="v10-execution-section">
         <h4>{m.execution.actionsTitle}</h4>
@@ -985,13 +1009,13 @@ function ExecutionPanel({ config, busy, runState, execution, logs, selectedLog, 
   );
 }
 
-function defaultConfig(product = DEFAULT_V10_PRODUCT_ID): V10Config {
+function defaultConfig(product = DEFAULT_V10_PRODUCT_ID, productDefinition?: V10Product): V10Config {
   return normalizeConfig({
     name: '',
     product,
     release: { zipPath: '', workDir: '', overwrite: false },
-    maquette: { targetPath: '', envName: 'demo', appName: 'prod' },
-    gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {} },
+    maquette: { targetPath: '', envName: 'demo', appName: productDefinition?.defaultAppName ?? 'prod' },
+    gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {}, agents: {} },
     runtime: { debugTargets: [], openConsole: true },
     pipeline: [],
   } as V10Config);
@@ -1023,6 +1047,8 @@ function normalizeConfig(config: V10Config): V10Config {
       port: gedixConfig.port ?? 80,
       services: gedixConfig.services ?? {},
       connectors: gedixConfig.connectors ?? {},
+      agents: gedixConfig.agents ?? {},
+      units: gedixConfig.units ?? {},
     }),
     runtime: {
       ...runtime,
@@ -1056,7 +1082,7 @@ function validateConfig(config: V10Config): string {
   if (config.pipeline.some((step) => !step.action.trim())) {
     return m.errors.pipelineActionRequired;
   }
-  if (hasDuplicateConnector(Object.keys(config.gedixConfig.connectors ?? {}).map((name) => ({ id: name, name, rawConfig: '' })))) {
+  if (hasDuplicateConnector(Object.keys(unitsForConfig(config, productFor(config.product, []))).map((name) => ({ id: name, name, rawConfig: '' })))) {
     return m.duplicateConnector;
   }
   return '';
@@ -1087,12 +1113,48 @@ function makeID() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function connectorRowsFromConfig(config: V10Config): ConnectorFormRow[] {
-  return Object.entries(config.gedixConfig.connectors ?? {}).map(([name, connector]) => ({
+function unitRowsFromConfig(config: V10Config, product: V10Product): ConnectorFormRow[] {
+  return Object.entries(unitsForConfig(config, product)).map(([name, connector]) => ({
     id: makeID(),
     name,
     rawConfig: connector.rawConfig,
   }));
+}
+
+function unitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
+  const genericUnits = config.gedixConfig.units ?? {};
+  const typedUnits = product.unitKind === 'agent' ? (config.gedixConfig.agents ?? {}) : (config.gedixConfig.connectors ?? {});
+  return { ...genericUnits, ...typedUnits };
+}
+
+function productFor(productId: string | undefined, products: V10Product[]): V10Product {
+  return products.find((product) => product.id === productId) ?? products.find((product) => product.id === DEFAULT_V10_PRODUCT_ID) ?? {
+    id: DEFAULT_V10_PRODUCT_ID,
+    name: 'Gedix Prod V10',
+    label: 'Gedix Prod V10',
+    description: '',
+    defaultAppName: 'prod',
+    services: [
+      { name: 'webserver', label: 'webserver', hasDatabase: false, supportsExtraKeys: true },
+      { name: 'auth', label: 'auth', hasDatabase: true, supportsExtraKeys: true },
+      { name: 'filestore', label: 'filestore', hasDatabase: true, supportsExtraKeys: true },
+      { name: 'entreprise', label: 'entreprise', hasDatabase: true, supportsExtraKeys: true },
+      { name: 'etl', label: 'etl', hasDatabase: true, supportsExtraKeys: true },
+      { name: 'dnc', label: 'dnc', hasDatabase: true, supportsExtraKeys: true },
+      { name: 'reactor', label: 'reactor', hasDatabase: false, supportsExtraKeys: true },
+      { name: 'config', label: 'config', hasDatabase: true, supportsExtraKeys: true },
+    ],
+    unitKind: 'connector',
+    unitSingularLabel: 'connecteur',
+    unitPluralLabel: 'connecteurs',
+    unitCfgSectionName: 'connectors',
+    unitFolderPrefix: 'connector-',
+    unitExecutableName: 'gx-connector.exe',
+  };
+}
+
+function unitHelp(product: V10Product) {
+  return `Le nom du ${product.unitSingularLabel} doit correspondre exactement à la section du gedix.cfg : [environments.<env>.applications.<app>.${product.unitCfgSectionName}.<nom${product.unitSingularLabel}>]`;
 }
 
 function hasDuplicateConnector(rows: ConnectorFormRow[]) {

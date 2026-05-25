@@ -16,17 +16,9 @@ const (
 	ModuleID   = "v10-lab"
 	ModuleName = "V10 Lab"
 
-	GedixProdV10 = "gedix-prod-v10"
-	KindSystem   = "system"
-	KindAPI      = "api"
+	KindSystem = "system"
+	KindAPI    = "api"
 )
-
-type Product struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Label       string `json:"label,omitempty"`
-}
 
 type ActionField struct {
 	Name        string `json:"name"`
@@ -85,10 +77,12 @@ type MaquetteConfig struct {
 }
 
 type GedixConfig struct {
-	FQDN       string                     `json:"fqdn"`
-	Port       int                        `json:"port"`
-	Services   map[string]ServiceDBConfig `json:"services"`
-	Connectors map[string]ConnectorConfig `json:"connectors"`
+	FQDN       string                       `json:"fqdn"`
+	Port       int                          `json:"port"`
+	Services   map[string]ServiceDBConfig   `json:"services"`
+	Connectors map[string]ProductUnitConfig `json:"connectors"`
+	Agents     map[string]ProductUnitConfig `json:"agents,omitempty"`
+	Units      map[string]ProductUnitConfig `json:"units,omitempty"`
 }
 
 type ServiceDBConfig struct {
@@ -97,9 +91,11 @@ type ServiceDBConfig struct {
 	ExtraKeys map[string]string `json:"extraKeys"`
 }
 
-type ConnectorConfig struct {
+type ProductUnitConfig struct {
 	RawConfig string `json:"rawConfig"`
 }
+
+type ConnectorConfig = ProductUnitConfig
 
 type RuntimeConfig struct {
 	DebugTargets []string `json:"debugTargets"`
@@ -182,12 +178,6 @@ func Info() modulecontract.ModuleInfo {
 	}
 }
 
-func Products() []Product {
-	return []Product{
-		{ID: GedixProdV10, Name: "Gedix V10 prod", Description: "Produit Gedix V10 prod", Label: "Gedix V10 prod"},
-	}
-}
-
 func DBTemplates() []DBTemplate {
 	return []DBTemplate{
 		{Type: "sqlite", Template: ""},
@@ -196,15 +186,6 @@ func DBTemplates() []DBTemplate {
 		{Type: "mssql", Template: "server=;instance=;database=;port=;user id=;password="},
 		{Type: "oracle", Template: "/@:/"},
 	}
-}
-
-func ProductExists(productID string) bool {
-	for _, product := range Products() {
-		if product.ID == productID {
-			return true
-		}
-	}
-	return false
 }
 
 func SaveRegisteredConfig(config Config) (RegisteredMaquette, error) {
@@ -268,15 +249,43 @@ func LoadConfig(path string) (Config, error) {
 }
 
 func ApplyDefaults(config *Config) {
+	config.Product = NormalizeProductID(config.Product)
+	product, _ := ProductDefinitionByID(config.Product)
 	if strings.TrimSpace(config.Maquette.AppName) == "" {
-		config.Maquette.AppName = "prod"
+		config.Maquette.AppName = firstNonEmpty(product.DefaultAppName, "prod")
 	}
 	if config.GedixConfig.Services == nil {
 		config.GedixConfig.Services = map[string]ServiceDBConfig{}
 	}
 	if config.GedixConfig.Connectors == nil {
-		config.GedixConfig.Connectors = map[string]ConnectorConfig{}
+		config.GedixConfig.Connectors = map[string]ProductUnitConfig{}
 	}
+	if config.GedixConfig.Agents == nil {
+		config.GedixConfig.Agents = map[string]ProductUnitConfig{}
+	}
+	if config.GedixConfig.Units == nil {
+		config.GedixConfig.Units = map[string]ProductUnitConfig{}
+	}
+}
+
+func ProductUnits(config Config) map[string]ProductUnitConfig {
+	ApplyDefaults(&config)
+	product, _ := ProductDefinitionByID(config.Product)
+	units := map[string]ProductUnitConfig{}
+	for name, unit := range config.GedixConfig.Units {
+		units[name] = unit
+	}
+	switch product.UnitKind {
+	case UnitKindAgent:
+		for name, unit := range config.GedixConfig.Agents {
+			units[name] = unit
+		}
+	default:
+		for name, unit := range config.GedixConfig.Connectors {
+			units[name] = unit
+		}
+	}
+	return units
 }
 
 func MaquettesDir() string {

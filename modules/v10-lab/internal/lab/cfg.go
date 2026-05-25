@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-var servicesWithoutDB = map[string]bool{
-	"webserver": true,
-	"reactor":   true,
-}
-
 type cfgEntry struct {
 	Key   string
 	Lines []string
@@ -21,6 +16,11 @@ type cfgEntry struct {
 }
 
 func ConfigureGedixCfg(config Config, writer io.Writer) error {
+	ApplyDefaults(&config)
+	product, err := ProductDefinitionByID(config.Product)
+	if err != nil {
+		return err
+	}
 	paths, err := DetectGedixPaths(config)
 	if err != nil {
 		return err
@@ -36,6 +36,10 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 	}
 	serviceNames := sortedServiceNames(config.GedixConfig.Services)
 	for _, serviceName := range serviceNames {
+		serviceDefinition, ok := product.Service(serviceName)
+		if !ok {
+			continue
+		}
 		service := config.GedixConfig.Services[serviceName]
 		section := fmt.Sprintf("environments.%s.applications.%s.services.%s", paths.EnvName, paths.AppName, serviceName)
 		if !sectionExists(content, section) {
@@ -43,7 +47,7 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 			return fmt.Errorf("section introuvable dans gedix.cfg: [%s]", section)
 		}
 		fmt.Fprintf(writer, "[INFO] Section trouvée : [%s]\n", section)
-		if servicesWithoutDB[serviceName] {
+		if !serviceDefinition.HasDatabase {
 			content = removeOrCommentKey(content, section, "db-type")
 			content = removeOrCommentKey(content, section, "db-dsn")
 		} else {
@@ -58,23 +62,26 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 				fmt.Fprintf(writer, "[INFO] Mise à jour clé db-dsn dans service %s\n", serviceName)
 			}
 		}
-		for _, key := range sortedMapKeys(service.ExtraKeys) {
-			content = setSectionRawBlock(content, section, cfgEntry{
-				Key:   key,
-				Lines: []string{fmt.Sprintf("%s=%s", key, service.ExtraKeys[key])},
-			})
-			fmt.Fprintf(writer, "[INFO] Mise à jour clé %s dans service %s\n", key, serviceName)
+		if serviceDefinition.SupportsExtraKeys {
+			for _, key := range sortedMapKeys(service.ExtraKeys) {
+				content = setSectionRawBlock(content, section, cfgEntry{
+					Key:   key,
+					Lines: []string{fmt.Sprintf("%s=%s", key, service.ExtraKeys[key])},
+				})
+				fmt.Fprintf(writer, "[INFO] Mise à jour clé %s dans service %s\n", key, serviceName)
+			}
 		}
 	}
-	for _, connectorName := range sortedConnectorNames(config.GedixConfig.Connectors) {
-		connector := config.GedixConfig.Connectors[connectorName]
-		section := fmt.Sprintf("environments.%s.applications.%s.connectors.%s", paths.EnvName, paths.AppName, connectorName)
+	units := ProductUnits(config)
+	for _, unitName := range sortedUnitNames(units) {
+		unit := units[unitName]
+		section := fmt.Sprintf("environments.%s.applications.%s.%s.%s", paths.EnvName, paths.AppName, product.UnitCfgSectionName, unitName)
 		if !sectionExists(content, section) {
-			fmt.Fprintf(writer, "[ERROR] Section connecteur introuvable dans gedix.cfg : [%s]\n", section)
-			return fmt.Errorf("section connecteur introuvable dans gedix.cfg: [%s]", section)
+			fmt.Fprintf(writer, "[ERROR] Section %s introuvable dans gedix.cfg : [%s]\n", product.UnitSingularLabel, section)
+			return fmt.Errorf("section %s introuvable dans gedix.cfg: [%s]", product.UnitSingularLabel, section)
 		}
-		fmt.Fprintf(writer, "[INFO] Section connecteur trouvée : [%s]\n", section)
-		content = applyConnectorRawConfig(content, section, connector.RawConfig)
+		fmt.Fprintf(writer, "[INFO] Section %s trouvée : [%s]\n", product.UnitSingularLabel, section)
+		content = applyConnectorRawConfig(content, section, unit.RawConfig)
 	}
 	if err := os.WriteFile(paths.CfgPath, []byte(content), 0644); err != nil {
 		return err
@@ -367,7 +374,7 @@ func sortedServiceNames(items map[string]ServiceDBConfig) []string {
 	return keys
 }
 
-func sortedConnectorNames(items map[string]ConnectorConfig) []string {
+func sortedUnitNames(items map[string]ProductUnitConfig) []string {
 	keys := make([]string, 0, len(items))
 	for key := range items {
 		keys = append(keys, key)

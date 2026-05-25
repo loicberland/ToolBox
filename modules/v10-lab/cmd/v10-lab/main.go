@@ -143,7 +143,7 @@ func runCommand() *cobra.Command {
 	var name string
 	command := &cobra.Command{
 		Use:   "run [action]",
-		Short: "Execute un pipeline de maquette",
+		Short: "Execute un plan d'actions de maquette",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if configPath == "" && len(args) == 1 {
 				return printValue(modulecontract.ActionResponse{

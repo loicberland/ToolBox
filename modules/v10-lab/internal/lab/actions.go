@@ -158,6 +158,7 @@ func Actions() []Action {
 }
 
 func ActionsForProduct(productID string) []Action {
+	productID = NormalizeProductID(productID)
 	items := []Action{}
 	for _, action := range Actions() {
 		if action.SupportsProduct(productID) {
@@ -177,6 +178,7 @@ func FindAction(actionID string) (Action, bool) {
 }
 
 func (a Action) SupportsProduct(productID string) bool {
+	productID = NormalizeProductID(productID)
 	if len(a.Products) == 0 {
 		return true
 	}

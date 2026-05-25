@@ -157,6 +157,27 @@ func TestSelectReleasePathNonWindowsAndScanCfg(t *testing.T) {
 	}
 }
 
+func TestScanCfgUsesProductUnitSection(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	config.Name = "watch"
+	config.Product = lab.GedixWatchV10
+	config.Maquette.AppName = "watch"
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	cfg := `[environments.demo.applications.watch.agents.agent-watch-01]
+`
+	var scan ScanCfgResponse
+	postMultipart(t, router, "/api/v10-lab/maquettes/watch/scan-cfg", "gedix.cfg", []byte(cfg), nil, &scan, http.StatusOK)
+	if scan.EnvName != "demo" || scan.UnitKind != "agent" || len(scan.Units) != 1 || scan.Units[0].Name != "agent-watch-01" {
+		t.Fatalf("unexpected scan response: %#v", scan)
+	}
+}
+
 func testConfig() lab.Config {
 	zipPath := filepath.Join(os.TempDir(), "v10-lab-test-release.zip")
 	_ = os.WriteFile(zipPath, []byte("zip"), 0644)

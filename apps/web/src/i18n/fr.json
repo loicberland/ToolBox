@@ -134,6 +134,26 @@
     "addDebugTarget": "Ajouter en debug",
     "removeDebugTarget": "Retirer",
     "noStartActionNoDebug": "La sélection debug est disponible uniquement si le plan d'actions démarre la maquette.",
+    "noServicesForProduct": "Aucun service défini pour ce produit.",
+    "productChangeWarning": "Changer le produit peut modifier les services et actions disponibles. Continuer ?",
+    "units": {
+      "connectors": "Connecteurs",
+      "connector": "Connecteur",
+      "addConnector": "Ajouter un connecteur",
+      "scanConnectors": "Scanner les connecteurs du cfg",
+      "agents": "Agents",
+      "agent": "Agent",
+      "addAgent": "Ajouter un agent",
+      "scanAgents": "Scanner les agents du cfg"
+    },
+    "products": {
+      "gedixProdV10": "Gedix Prod V10",
+      "toolStockV10": "Tool Stock V10",
+      "watchV10": "Watch V10"
+    },
+    "actionPlan": {
+      "noActionsForProduct": "Aucune action disponible pour ce produit."
+    },
     "execution": {
       "actionsTitle": "Actions maquette",
       "debugTitle": "Services/connecteurs en debug",

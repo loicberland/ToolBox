@@ -263,6 +263,37 @@ go run ./modules/v10-lab/cmd/v10-lab list
 
 V10 Lab est un generateur et gestionnaire de maquettes V10.
 
+## Produits V10 Lab
+
+V10 Lab supporte plusieurs produits.
+
+Produits actuels :
+
+- `gedix-prod-v10` : Gedix Prod V10
+- `gedix-tool-stock-v10` : Tool Stock V10
+- `gedix-watch-v10` : Watch V10
+
+Chaque produit definit :
+
+- son `appName` par defaut
+- ses services
+- le terme utilise pour les connecteurs ou agents
+- le nom de section cfg a scanner/modifier
+- les futures actions compatibles dans le Plan d'actions
+
+Note developpeur :
+
+Pour ajouter un produit, ajouter une entree dans le registre produit avec :
+
+- `ID`
+- `Label`
+- `DefaultAppName`
+- `Services`
+- `UnitKind`
+- `UnitCfgSectionName`
+- `UnitFolderPrefix`
+- `UnitExecutableName`
+
 Phase 1 :
 
 - registre de produits
