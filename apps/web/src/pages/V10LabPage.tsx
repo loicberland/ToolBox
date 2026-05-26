@@ -1265,6 +1265,9 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   if (field.type === 'text') {
     return <label>{field.label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{field.description && <span className="muted">{field.description}</span>}</label>;
   }
+  if (field.type === 'number') {
+    return <label>{field.label}<input type="number" value={typeof value === 'number' ? value : ''} onChange={(event) => onChange(Number(event.currentTarget.value))} /></label>;
+  }
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
 }
 

@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	defaultAPIAuthHeader = "Authorization"
-	defaultAPIAuthPrefix = "Bearer"
+	defaultAPIAuthHeader  = "Authorization"
+	defaultAPIAuthPrefix  = "Bearer"
+	defaultAPIContentType = "application/json; charset=UTF-8"
 )
 
 type GedixAPIRequest struct {
@@ -41,16 +42,20 @@ func ExecuteGedixAPIRequests(requests []GedixAPIRequest) ActionExecute {
 	}
 }
 
-func ExecuteGedixAPITest() ActionExecute {
+func ExecuteCreatePlant() ActionExecute {
 	return func(ctx ActionContext, params map[string]any) error {
 		request := GedixAPIRequest{
-			Name:              "Test API Gedix",
-			Method:            stringParamDefault(params, "method", "GET"),
-			Path:              stringParamDefault(params, "path", "/api/health"),
-			BodyJSONParam:     "bodyJson",
-			PrintResponseBody: boolParamDefault(params, "printResponseBody", true),
+			Name:             "Créer une usine",
+			Method:           "POST",
+			Path:             "/entreprise/api/v1/plants",
+			Body:             createPlantPayload(params),
+			ExpectedStatuses: []int{http.StatusOK},
 		}
-		return executeGedixAPIRequests(ctx, params, []GedixAPIRequest{request})
+		if err := executeGedixAPIRequests(ctx, params, []GedixAPIRequest{request}); err != nil {
+			return err
+		}
+		fmt.Fprintf(ctx.Writer, "[API] Usine créée avec succès : %s\n", stringParam(params, "entity_name"))
+		return nil
 	}
 }
 
@@ -138,21 +143,19 @@ func executeGedixAPIRequest(client *http.Client, writer io.Writer, baseURL strin
 	}
 	name := strings.TrimSpace(apiRequest.Name)
 	if name != "" {
-		fmt.Fprintf(writer, "%s\n", name)
+		fmt.Fprintf(writer, "[API] %s\n", name)
 	}
-	fmt.Fprintf(writer, "HTTP %s %s\n", method, redactToken(targetURL, token))
+	fmt.Fprintf(writer, "[API] %s %s\n", method, apiRequest.LogPath())
 	request, err := http.NewRequest(method, targetURL, body)
 	if err != nil {
 		return err
 	}
 	request.Header.Set(defaultAPIAuthHeader, strings.TrimSpace(defaultAPIAuthPrefix+" "+token))
+	request.Header.Set("Content-Type", defaultAPIContentType)
 	for key, value := range apiRequest.Headers {
 		if strings.TrimSpace(key) != "" {
 			request.Header.Set(key, value)
 		}
-	}
-	if body != nil && request.Header.Get("Content-Type") == "" {
-		request.Header.Set("Content-Type", "application/json")
 	}
 	response, err := client.Do(request)
 	if err != nil {
@@ -164,17 +167,32 @@ func executeGedixAPIRequest(client *http.Client, writer io.Writer, baseURL strin
 		return err
 	}
 	safeBody := redactToken(string(responseBody), token)
-	fmt.Fprintf(writer, "Status HTTP: %d\n", response.StatusCode)
+	fmt.Fprintf(writer, "[API] Status HTTP : %d\n", response.StatusCode)
 	if apiRequest.PrintResponseBody && strings.TrimSpace(safeBody) != "" {
-		fmt.Fprintf(writer, "Réponse:\n%s\n", safeBody)
+		fmt.Fprintf(writer, "[API] Réponse :\n%s\n", safeBody)
 	}
 	if !expectedHTTPStatus(response.StatusCode, apiRequest.ExpectedStatuses) {
+		if strings.TrimSpace(safeBody) != "" {
+			fmt.Fprintf(writer, "[API] Erreur Gedix : %s\n", safeBody)
+		}
 		if strings.TrimSpace(safeBody) == "" {
 			return fmt.Errorf("requête API Gedix échouée: status HTTP %d", response.StatusCode)
 		}
 		return fmt.Errorf("requête API Gedix échouée: status HTTP %d: %s", response.StatusCode, safeBody)
 	}
 	return nil
+}
+
+func (r GedixAPIRequest) LogPath() string {
+	value := strings.TrimSpace(r.Path)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err == nil && parsed.IsAbs() {
+		return parsed.Redacted()
+	}
+	return value
 }
 
 func gedixAPIBaseURL(config Config) (string, error) {
@@ -275,18 +293,37 @@ func redactToken(value string, token string) string {
 	return strings.ReplaceAll(value, token, "[REDACTED]")
 }
 
-func stringParamDefault(params map[string]any, key string, defaultValue string) string {
-	value := strings.TrimSpace(stringParam(params, key))
-	if value == "" {
-		return defaultValue
+func createPlantPayload(params map[string]any) map[string]any {
+	return map[string]any{
+		"entity_name":        stringParam(params, "entity_name"),
+		"description":        stringParam(params, "description"),
+		"address_name":       stringParam(params, "address_name"),
+		"address_street":     stringParam(params, "address_street"),
+		"address_postalcode": stringParam(params, "address_postalcode"),
+		"address_town":       stringParam(params, "address_town"),
+		"address_country":    stringParam(params, "address_country"),
+		"created_by":         numberParam(params, "created_by"),
 	}
-	return value
 }
 
-func boolParamDefault(params map[string]any, key string, defaultValue bool) bool {
-	value, ok := params[key].(bool)
-	if !ok {
-		return defaultValue
+func numberParam(params map[string]any, key string) any {
+	switch value := params[key].(type) {
+	case int:
+		return value
+	case int64:
+		return value
+	case float64:
+		if value == float64(int64(value)) {
+			return int64(value)
+		}
+		return value
+	case json.Number:
+		if integer, err := value.Int64(); err == nil {
+			return integer
+		}
+		if decimal, err := value.Float64(); err == nil {
+			return decimal
+		}
 	}
-	return value
+	return params[key]
 }

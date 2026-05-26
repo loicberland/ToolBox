@@ -155,7 +155,7 @@ func TestActionsByProduct(t *testing.T) {
 		}
 		byID[action.ID] = true
 	}
-	if !byID["gedix-api-test"] || byID["create-machine"] {
+	if !byID["create-plant"] || byID["create-machine"] {
 		t.Fatalf("expected only visible API actions, got %#v", actions)
 	}
 }

@@ -1,6 +1,7 @@
 package lab
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -130,6 +131,13 @@ func fieldValueMatchesType(value any, expected string) bool {
 	case "bool":
 		_, ok := value.(bool)
 		return ok
+	case "number":
+		switch value.(type) {
+		case int, int64, float64, json.Number:
+			return true
+		default:
+			return false
+		}
 	case "string[]":
 		switch items := value.(type) {
 		case []any:

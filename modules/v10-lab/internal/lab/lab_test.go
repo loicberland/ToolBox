@@ -3,6 +3,7 @@ package lab
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -85,9 +86,14 @@ func TestActionsForProductIncludesSystemAndGedixActions(t *testing.T) {
 		byID[action.ID] = true
 	}
 
-	for _, id := range []string{"create-env", "configure-gedix-cfg", "start-maquette", "stop-maquette", "kill-gx-processes", "update-env", "gedix-api-test", "create-machine-group", "create-machine", "create-cnc-folder"} {
+	for _, id := range []string{"create-env", "configure-gedix-cfg", "start-maquette", "stop-maquette", "kill-gx-processes", "update-env", "create-plant", "create-machine-group", "create-machine", "create-cnc-folder"} {
 		if !byID[id] {
 			t.Fatalf("expected action %s in product actions", id)
+		}
+	}
+	for _, action := range ActionsForProduct(GedixWatchV10) {
+		if action.ID == "create-plant" {
+			t.Fatal("create-plant must be limited to gedix-prod-v10")
 		}
 	}
 }
@@ -152,17 +158,44 @@ func TestGedixAPIBaseURLDefaults(t *testing.T) {
 	if baseURL != "http://portlb/env_live/app_prod" {
 		t.Fatalf("unexpected base URL without port %q", baseURL)
 	}
+	finalURL, err := gedixAPIRequestURL(baseURL, "/entreprise/api/v1/plants", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finalURL != "http://portlb/env_live/app_prod/entreprise/api/v1/plants" {
+		t.Fatalf("unexpected final URL %q", finalURL)
+	}
+	finalURL, err = gedixAPIRequestURL(baseURL, "https://gedix.example/api", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finalURL != "https://gedix.example/api" {
+		t.Fatalf("unexpected absolute final URL %q", finalURL)
+	}
 }
 
-func TestGedixAPITestActionUsesTokenAndRedactsLogs(t *testing.T) {
+func TestCreatePlantActionUsesTokenPayloadAndRedactsLogs(t *testing.T) {
 	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
 	const token = "secret-token"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method %s", r.Method)
+		}
 		if r.Header.Get(defaultAPIAuthHeader) != defaultAPIAuthPrefix+" "+token {
 			t.Fatalf("missing API token header: %q", r.Header.Get(defaultAPIAuthHeader))
 		}
-		if r.URL.Path != "/api/health" {
+		if r.Header.Get("Content-Type") != defaultAPIContentType {
+			t.Fatalf("unexpected content type %q", r.Header.Get("Content-Type"))
+		}
+		if r.URL.Path != "/entreprise/api/v1/plants" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["entity_name"] != "Usine1" || payload["created_by"].(float64) != 1 {
+			t.Fatalf("unexpected payload: %#v", payload)
 		}
 		_, _ = w.Write([]byte("ok " + token))
 	}))
@@ -173,11 +206,16 @@ func TestGedixAPITestActionUsesTokenAndRedactsLogs(t *testing.T) {
 		Product: GedixProdV10,
 		API:     APIConfig{BaseURL: server.URL},
 		Pipeline: []PipelineStep{{
-			Action: "gedix-api-test",
+			Action: "create-plant",
 			Params: map[string]any{
-				"method":            "GET",
-				"path":              "/api/health",
-				"printResponseBody": true,
+				"entity_name":        "Usine1",
+				"description":        "Usine de test",
+				"address_name":       "LMBA",
+				"address_street":     "20 Bd Eugène Deruelle",
+				"address_postalcode": "69006",
+				"address_town":       "Lyon",
+				"address_country":    "France",
+				"created_by":         1,
 			},
 		}},
 	}
@@ -192,8 +230,48 @@ func TestGedixAPITestActionUsesTokenAndRedactsLogs(t *testing.T) {
 	if strings.Contains(log, token) {
 		t.Fatalf("token leaked in log:\n%s", log)
 	}
-	if !strings.Contains(log, "[REDACTED]") || !strings.Contains(log, "Status HTTP: 200") {
+	if strings.Contains(log, "Authorization") || strings.Contains(log, "Bearer") {
+		t.Fatalf("auth header leaked in log:\n%s", log)
+	}
+	if !strings.Contains(log, "[API] Status HTTP : 200") || !strings.Contains(log, "Usine créée avec succès : Usine1") {
 		t.Fatalf("missing expected API log details:\n%s", log)
+	}
+}
+
+func TestCreatePlantActionReportsHTTPErrorWithoutToken(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	const token = "secret-token"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad plant "+token, http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	config := Config{
+		Name:    "ticket-T5808",
+		Product: GedixProdV10,
+		API:     APIConfig{BaseURL: server.URL},
+		Pipeline: []PipelineStep{{
+			Action: "create-plant",
+			Params: map[string]any{
+				"entity_name": "Usine1",
+				"created_by":  1,
+			},
+		}},
+	}
+	if err := SaveAPIToken(config.Name, token); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	err := RunPipeline(t.Context(), config, &output)
+	if err == nil || !strings.Contains(err.Error(), "status HTTP 400") {
+		t.Fatalf("expected HTTP status error, got %v", err)
+	}
+	log := output.String()
+	if strings.Contains(log, token) || strings.Contains(log, "Bearer") || strings.Contains(log, "Authorization") {
+		t.Fatalf("token leaked in error log:\n%s", log)
+	}
+	if !strings.Contains(log, "[API] Erreur Gedix") || !strings.Contains(log, "[REDACTED]") {
+		t.Fatalf("missing redacted Gedix error log:\n%s", log)
 	}
 }
 
