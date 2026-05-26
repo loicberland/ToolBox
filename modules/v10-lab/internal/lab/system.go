@@ -503,7 +503,7 @@ func openConsole(dir string, title string, exe string, args ...string) error {
 		fmt.Printf("[DRY-RUN non-windows] cd %s && %s\n", quoteCmdArg(dir), commandLine)
 		return nil
 	}
-	cmd := newConsoleCommand(dir, exe, args...)
+	cmd := newConsoleCommand(dir, title, exe, args...)
 	return cmd.Start()
 }
 
@@ -520,15 +520,27 @@ func openConsoleRaw(dir string, title string, exe string, rawArgs string) error 
 	return openConsole(dir, title, exe, args...)
 }
 
-func newConsoleCommand(dir string, exe string, args ...string) *exec.Cmd {
-	cmd := exec.Command("cmd.exe", "/D", "/K", consoleCommandLineForCmdCall(exe, args...))
+func newConsoleCommand(dir string, title string, exe string, args ...string) *exec.Cmd {
+	cmd := exec.Command("cmd.exe", "/D", "/C", startConsoleCommandLine(dir, title, exe, args...))
 	cmd.Dir = dir
-	configureNewConsole(cmd)
 	return cmd
 }
 
-func consoleCommandLineForCmdCall(exe string, args ...string) string {
-	parts := []string{"call", quoteBatchPath(exe)}
+func startConsoleCommandLine(dir string, title string, exe string, args ...string) string {
+	if strings.TrimSpace(title) == "" {
+		title = "V10 Lab"
+	}
+	parts := []string{
+		"start",
+		quoteBatchArg(title),
+		"/D",
+		quoteBatchPath(dir),
+		"cmd.exe",
+		"/D",
+		"/K",
+		"call",
+		quoteBatchPath(exe),
+	}
 	for _, arg := range args {
 		parts = append(parts, quoteBatchArg(arg))
 	}
