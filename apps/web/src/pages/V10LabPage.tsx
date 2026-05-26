@@ -559,7 +559,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <Button type="button" variant="secondary" size="sm" onClick={() => void reloadList()} disabled={busy}>{m.refreshLogs}</Button>
         </div>
         <div className="v10-file-row">
-          <input placeholder="Nom du groupe" value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} />
+          <input placeholder="Nom du groupe" value={newGroupName} onChange={(event) => setNewGroupName(event.currentTarget.value)} />
           <Button type="button" variant="secondary" size="sm" onClick={() => void createGroup()} disabled={busy || !newGroupName.trim()}>Créer un groupe</Button>
         </div>
         {maquettes.length === 0 && groups.length === 0 ? (
@@ -649,7 +649,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           )}
           {activeTab === m.tabs.json && (
             <div className="v10-json-panel">
-              <textarea value={jsonText} onChange={(event) => setJsonText(event.target.value)} spellCheck={false} />
+              <textarea value={jsonText} onChange={(event) => setJsonText(event.currentTarget.value)} spellCheck={false} />
               {execution?.errors?.length ? <p className="error whitespace">{execution.errors.join('\n')}</p> : null}
               {execution?.status === 'valid' && <p className="info-message">{execution.output || m.validationOk}</p>}
               <div className="button-row end">
@@ -758,15 +758,15 @@ function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onCh
   return (
     <div className="form-grid v10-form-grid">
       <label className="span-2">{m.product}
-        <select value={config.product} onChange={(event) => changeProduct(event.target.value)}>
+        <select value={config.product} onChange={(event) => changeProduct(event.currentTarget.value)}>
           {products.map((product) => <option value={product.id} key={product.id}>{product.label || product.name}</option>)}
         </select>
       </label>
       <label>{m.name}
-        <input value={config.name} onChange={(event) => onChange({ ...config, name: event.target.value })} />
+        <input value={config.name} onChange={(event) => onChange({ ...config, name: event.currentTarget.value })} />
       </label>
       <label>Groupe
-        <select value={config.groupName ?? ''} onChange={(event) => onChange({ ...config, groupName: event.target.value })}>
+        <select value={config.groupName ?? ''} onChange={(event) => onChange({ ...config, groupName: event.currentTarget.value })}>
           <option value="">Sans groupe</option>
           {groups.map((group) => <option value={group.name} key={group.name}>{group.name}</option>)}
         </select>
@@ -776,22 +776,22 @@ function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onCh
           <Button type="button" variant="secondary" size="sm" onClick={() => onSelectZip(config, onChange)}>
             {m.selectZip}
           </Button>
-          <input placeholder={m.manualZip} value={config.release.zipPath} onChange={(event) => onChange({ ...config, release: { ...config.release, zipPath: event.target.value } })} />
+          <input placeholder={m.manualZip} value={config.release.zipPath} onChange={(event) => onChange({ ...config, release: { ...config.release, zipPath: event.currentTarget.value } })} />
         </div>
       </label>
       <label>{m.targetPath}
-        <input placeholder={m.targetPlaceholder.replace('{{path}}', defaultTargetPath)} value={config.maquette.targetPath} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, targetPath: event.target.value } })} />
+        <input placeholder={m.targetPlaceholder.replace('{{path}}', defaultTargetPath)} value={config.maquette.targetPath} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, targetPath: event.currentTarget.value } })} />
       </label>
       <label>{m.appName}
-        <input value={config.maquette.appName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, appName: event.target.value } })} />
+        <input value={config.maquette.appName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, appName: event.currentTarget.value } })} />
       </label>
       <label>{m.envName}
-        <input value={config.maquette.envName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, envName: event.target.value } })} />
+        <input value={config.maquette.envName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, envName: event.currentTarget.value } })} />
       </label>
       {!creating && (
         <>
           <label className="checkbox-row span-2">
-            <input type="checkbox" checked={config.release.overwrite} onChange={(event) => onChange({ ...config, release: { ...config.release, overwrite: event.target.checked } })} />
+            <input type="checkbox" checked={config.release.overwrite} onChange={(event) => onChange({ ...config, release: { ...config.release, overwrite: event.currentTarget.checked } })} />
             {m.overwriteLabel}
           </label>
           <p className="muted v10-help-text span-2">{m.overwriteHelp}</p>
@@ -812,7 +812,7 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
     .filter((item) => !config.runtime.debugTargets.includes(item));
   const allTargets = [...product.services.map((service) => service.name), ...Object.keys(unitsForConfig(config, product))]
     .filter((item, index, items) => items.indexOf(item) === index);
-  const debugTargetFlags = config.runtime.debugTargetFlags ?? {};
+  const debugTargetFlags: Record<string, string[]> = config.runtime.debugTargetFlags ?? {};
   const addCustomFlag = () => {
     const target = customTarget.trim();
     const flag = normalizeDebugFlag(customFlag);
@@ -844,7 +844,7 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
   return (
     <div className="v10-debug-targets">
       <div className="v10-file-row">
-        <select value={selected} onChange={(event) => setSelected(event.target.value)}>
+        <select value={selected} onChange={(event) => setSelected(event.currentTarget.value)}>
           <option value="">{m.chooseDebugTarget}</option>
           {options.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
@@ -869,11 +869,11 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
         ))}
       </div>
       <div className="v10-file-row">
-        <select value={customTarget} onChange={(event) => setCustomTarget(event.target.value)}>
+        <select value={customTarget} onChange={(event) => setCustomTarget(event.currentTarget.value)}>
           <option value="">Cible debug sur mesure</option>
           {allTargets.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
-        <input value={customFlag} placeholder="clef ou --clef" onChange={(event) => setCustomFlag(event.target.value)} />
+        <input value={customFlag} placeholder="clef ou --clef" onChange={(event) => setCustomFlag(event.currentTarget.value)} />
         <Button type="button" variant="secondary" size="sm" disabled={!customTarget || !customFlag.trim()} onClick={addCustomFlag}>Ajouter</Button>
       </div>
       <p className="muted">Ces clés lancent la cible séparément. Le mode debug --debug -v2 est ajouté uniquement si la cible est aussi sélectionnée en debug.</p>
@@ -893,10 +893,10 @@ function GedixForm({ config, onChange, compact = false }: { config: V10Config; o
   const content = (
     <>
       <label>FQDN
-        <input value={config.gedixConfig.fqdn} onChange={(event) => onChange({ ...config, gedixConfig: { ...config.gedixConfig, fqdn: event.target.value } })} />
+        <input value={config.gedixConfig.fqdn} onChange={(event) => onChange({ ...config, gedixConfig: { ...config.gedixConfig, fqdn: event.currentTarget.value } })} />
       </label>
       <label>Port
-        <input type="number" min={0} max={65535} value={config.gedixConfig.port} onChange={(event) => onChange({ ...config, gedixConfig: { ...config.gedixConfig, port: Number(event.target.value) } })} />
+        <input type="number" min={0} max={65535} value={config.gedixConfig.port} onChange={(event) => onChange({ ...config, gedixConfig: { ...config.gedixConfig, port: Number(event.currentTarget.value) } })} />
       </label>
     </>
   );
@@ -935,22 +935,22 @@ function ServicesForm({ config, product, templates, onChange }: { config: V10Con
                   <input
                     type="checkbox"
                     checked={enabled}
-                    onChange={(event) => updateService(name, event.target.checked ? { dbType: 'sqlite', dbDsn: '', extraKeys: {} } : null)}
+                    onChange={(event) => updateService(name, event.currentTarget.checked ? { dbType: 'sqlite', dbDsn: '', extraKeys: {} } : null)}
                   />
                   {m.configureDb}
                 </label>
                 {enabled && (
                   <div className="v10-service-config">
                     <label>{m.dbType}
-                      <select value={service?.dbType ?? ''} onChange={(event) => updateService(name, { ...service!, dbType: event.target.value, dbDsn: event.target.value === 'sqlite' ? '' : service?.dbDsn ?? '' })}>
+                      <select value={service?.dbType ?? ''} onChange={(event) => updateService(name, { ...service!, dbType: event.currentTarget.value, dbDsn: event.currentTarget.value === 'sqlite' ? '' : service?.dbDsn ?? '' })}>
                         {['sqlite', 'mysql', 'postgres', 'mssql', 'oracle'].map((type) => <option key={type} value={type}>{type}</option>)}
                       </select>
                     </label>
                     <label>{service?.dbType === 'sqlite' ? m.sqliteDsn : m.dbDsn}
-                      <input placeholder={service?.dbType === 'sqlite' ? m.sqliteDsnPlaceholder : ''} value={service?.dbDsn ?? ''} onChange={(event) => updateService(name, { ...service!, dbDsn: event.target.value })} />
+                      <input placeholder={service?.dbType === 'sqlite' ? m.sqliteDsnPlaceholder : ''} value={service?.dbDsn ?? ''} onChange={(event) => updateService(name, { ...service!, dbDsn: event.currentTarget.value })} />
                     </label>
                     <label>{m.dsnTemplate}
-                      <select value="" onChange={(event) => updateService(name, { ...service!, dbDsn: event.target.value })}>
+                      <select value="" onChange={(event) => updateService(name, { ...service!, dbDsn: event.currentTarget.value })}>
                         <option value="">{m.insertTemplate}</option>
                         {templates.filter((template) => template.template).map((template) => <option key={template.type} value={template.template}>{template.type}</option>)}
                       </select>
@@ -994,8 +994,8 @@ function ExtraKeysEditor({ serviceKey, service, onChange }: { serviceKey: string
       </div>
       {rows.map((row) => (
         <div className="v10-key-row" key={row.id}>
-          <input value={row.key} placeholder={m.extraKeyName} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, key: event.target.value } : item))} />
-          <input value={row.value} placeholder={m.extraKeyValue} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} />
+          <input value={row.key} placeholder={m.extraKeyName} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, key: event.currentTarget.value } : item))} />
+          <input value={row.value} placeholder={m.extraKeyValue} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, value: event.currentTarget.value } : item))} />
           <Button type="button" size="sm" variant="danger" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
       ))}
@@ -1047,7 +1047,7 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
             type="file"
             accept=".cfg"
             onChange={(event) => {
-              const file = event.target.files?.[0];
+              const file = event.currentTarget.files?.[0];
               if (file) {
                 onScanCfg(file);
               }
@@ -1061,14 +1061,14 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
         <div className="v10-connector-row" key={row.id}>
           <div>
             <label>{product.unitKind === 'agent' ? m.units.agentName : m.units.connectorName}
-              <input value={row.name} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} />
+              <input value={row.name} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, name: event.currentTarget.value } : item))} />
             </label>
             <label>{m.units.module}
-              <input value={row.module} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, module: event.target.value } : item))} />
+              <input value={row.module} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, module: event.currentTarget.value } : item))} />
             </label>
           </div>
           <label>{m.units.rawConfig}
-            <textarea value={row.rawConfig} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, rawConfig: event.target.value } : item))} />
+            <textarea value={row.rawConfig} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, rawConfig: event.currentTarget.value } : item))} />
           </label>
           <Button type="button" variant="danger" size="sm" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
@@ -1114,15 +1114,15 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
               <div className="form-grid v10-form-grid">
                 <label>{m.action}
                   <select value={step.action} onChange={(event) => {
-                    const selected = byID[event.target.value];
-                    updateStep(index, { action: event.target.value, label: selected?.label ?? '', params: {} });
+                    const selected = byID[event.currentTarget.value];
+                    updateStep(index, { action: event.currentTarget.value, label: selected?.label ?? '', params: {} });
                   }}>
                     <option value="">{m.chooseAction}</option>
                     {actions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                   </select>
                 </label>
                 <label>{m.label}
-                  <input value={step.label} onChange={(event) => updateStep(index, { ...step, label: event.target.value })} />
+                  <input value={step.label} onChange={(event) => updateStep(index, { ...step, label: event.currentTarget.value })} />
                 </label>
               </div>
               {step.action === 'create-env' && <p className="readonly-notice">{m.actionUsesGeneralSettings}</p>}
@@ -1156,12 +1156,12 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
 
 function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields'][number]; value: unknown; onChange: (value: unknown) => void }) {
   if (field.type === 'bool') {
-    return <label className="checkbox-row"><input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} />{field.label}</label>;
+    return <label className="checkbox-row"><input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.currentTarget.checked)} />{field.label}</label>;
   }
   if (field.type === 'string[]') {
-    return <label>{field.label}<input value={Array.isArray(value) ? value.join(',') : ''} onChange={(event) => onChange(event.target.value.split(',').map((item) => item.trim()).filter(Boolean))} /></label>;
+    return <label>{field.label}<input value={Array.isArray(value) ? value.join(',') : ''} onChange={(event) => onChange(event.currentTarget.value.split(',').map((item) => item.trim()).filter(Boolean))} /></label>;
   }
-  return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} /></label>;
+  return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
 }
 
 function ModuleCommandPanel({ config, product, disabled, onRun }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void }) {
@@ -1186,12 +1186,12 @@ function ModuleCommandPanel({ config, product, disabled, onRun }: { config: V10C
       ) : (
         <div className="form-grid v10-form-grid">
           <label>{isAgent ? m.moduleCommand.agent : m.moduleCommand.connector}
-            <select value={unitName} onChange={(event) => setUnitName(event.target.value)}>
+            <select value={unitName} onChange={(event) => setUnitName(event.currentTarget.value)}>
               {unitNames.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
           </label>
           <label>{m.moduleCommand.command}
-            <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.target.value)} />
+            <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.currentTarget.value)} />
           </label>
         </div>
       )}

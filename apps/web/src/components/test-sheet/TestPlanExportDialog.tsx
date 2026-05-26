@@ -55,27 +55,27 @@ export function TestPlanExportDialog({ planId, planName, onClose, onError }: Pro
             <span className="export-option-label">Plan</span>
           </label>
           <label className="export-option">
-            <input className="export-option-checkbox" type="checkbox" checked={options.includeGroups} onChange={(event) => setOption('includeGroups', event.target.checked)} />
+            <input className="export-option-checkbox" type="checkbox" checked={options.includeGroups} onChange={(event) => setOption('includeGroups', event.currentTarget.checked)} />
             <span className="export-option-label">Sous-plans / groupes</span>
           </label>
           <label className="export-option">
-            <input className="export-option-checkbox" type="checkbox" checked={options.includeSheets} onChange={(event) => setOption('includeSheets', event.target.checked)} />
+            <input className="export-option-checkbox" type="checkbox" checked={options.includeSheets} onChange={(event) => setOption('includeSheets', event.currentTarget.checked)} />
             <span className="export-option-label">Fiches</span>
           </label>
           <label className="export-option">
-            <input className="export-option-checkbox" type="checkbox" checked={options.includeSteps} onChange={(event) => setOption('includeSteps', event.target.checked)} />
+            <input className="export-option-checkbox" type="checkbox" checked={options.includeSteps} onChange={(event) => setOption('includeSteps', event.currentTarget.checked)} />
             <span className="export-option-label">Actions</span>
           </label>
           <label className="export-option">
-            <input className="export-option-checkbox" type="checkbox" checked={options.includeDocuments} onChange={(event) => setOption('includeDocuments', event.target.checked)} />
+            <input className="export-option-checkbox" type="checkbox" checked={options.includeDocuments} onChange={(event) => setOption('includeDocuments', event.currentTarget.checked)} />
             <span className="export-option-label">Documents</span>
           </label>
           <label className="export-option">
-            <input className="export-option-checkbox" type="checkbox" checked={options.includeHistory} onChange={(event) => setOption('includeHistory', event.target.checked)} />
+            <input className="export-option-checkbox" type="checkbox" checked={options.includeHistory} onChange={(event) => setOption('includeHistory', event.currentTarget.checked)} />
             <span className="export-option-label">Historique d'exécution</span>
           </label>
           <label className="export-option">
-            <input className="export-option-checkbox" type="checkbox" checked={options.includeEvidences} onChange={(event) => setOption('includeEvidences', event.target.checked)} />
+            <input className="export-option-checkbox" type="checkbox" checked={options.includeEvidences} onChange={(event) => setOption('includeEvidences', event.currentTarget.checked)} />
             <span className="export-option-label">Preuves / evidences</span>
           </label>
         </div>
