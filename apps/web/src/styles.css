@@ -1630,6 +1630,33 @@ textarea {
   gap: 12px;
 }
 
+.v10-api-token {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  align-items: end;
+}
+
+.v10-api-token label {
+  display: grid;
+  gap: 7px;
+  color: #334e68;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.v10-api-token .muted,
+.v10-api-token .error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.v10-api-token .masked-token {
+  background: #f1f5f9;
+  color: transparent;
+  text-shadow: 0 0 8px rgba(51, 78, 104, 0.65);
+}
+
 .v10-service-row,
 .v10-connector-row,
 .v10-pipeline-step {
@@ -1922,6 +1949,7 @@ textarea {
   .v10-key-row,
   .v10-connector-row,
   .v10-pipeline-step,
+  .v10-api-token,
   .v10-log-layout,
   .v10-file-row,
   .plan-toolbar,

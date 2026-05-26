@@ -3,11 +3,15 @@ package lab
 import (
 	"archive/zip"
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"toolBox/pkg/toolboxruntime"
 )
 
 func TestValidateConfigAcceptsSystemShape(t *testing.T) {
@@ -81,10 +85,115 @@ func TestActionsForProductIncludesSystemAndGedixActions(t *testing.T) {
 		byID[action.ID] = true
 	}
 
-	for _, id := range []string{"create-env", "configure-gedix-cfg", "start-maquette", "stop-maquette", "kill-gx-processes", "update-env", "create-machine-group", "create-machine", "create-cnc-folder"} {
+	for _, id := range []string{"create-env", "configure-gedix-cfg", "start-maquette", "stop-maquette", "kill-gx-processes", "update-env", "gedix-api-test", "create-machine-group", "create-machine", "create-cnc-folder"} {
 		if !byID[id] {
 			t.Fatalf("expected action %s in product actions", id)
 		}
+	}
+}
+
+func TestAPITokenStorage(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+
+	hasToken, err := HasAPIToken("ticket-T5808")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasToken {
+		t.Fatal("expected no token initially")
+	}
+	if err := SaveAPIToken("ticket-T5808", "secret-token"); err != nil {
+		t.Fatal(err)
+	}
+	hasToken, err = HasAPIToken("ticket-T5808")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasToken {
+		t.Fatal("expected token after save")
+	}
+	token, err := LoadAPIToken("ticket-T5808")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "secret-token" {
+		t.Fatalf("unexpected token %q", token)
+	}
+	if err := DeleteAPIToken("ticket-T5808"); err != nil {
+		t.Fatal(err)
+	}
+	hasToken, err = HasAPIToken("ticket-T5808")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasToken {
+		t.Fatal("expected no token after delete")
+	}
+}
+
+func TestGedixAPIBaseURLDefaults(t *testing.T) {
+	config := Config{
+		GedixConfig: GedixConfig{FQDN: "localhost", Port: 80},
+		Maquette:    MaquetteConfig{EnvName: "live", AppName: "prod"},
+	}
+	baseURL, err := gedixAPIBaseURL(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseURL != "http://localhost:80/env_live/app_prod" {
+		t.Fatalf("unexpected base URL %q", baseURL)
+	}
+	config.GedixConfig.Port = 0
+	config.GedixConfig.FQDN = "portlb"
+	baseURL, err = gedixAPIBaseURL(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseURL != "http://portlb/env_live/app_prod" {
+		t.Fatalf("unexpected base URL without port %q", baseURL)
+	}
+}
+
+func TestGedixAPITestActionUsesTokenAndRedactsLogs(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	const token = "secret-token"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(defaultAPIAuthHeader) != defaultAPIAuthPrefix+" "+token {
+			t.Fatalf("missing API token header: %q", r.Header.Get(defaultAPIAuthHeader))
+		}
+		if r.URL.Path != "/api/health" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte("ok " + token))
+	}))
+	defer server.Close()
+
+	config := Config{
+		Name:    "ticket-T5808",
+		Product: GedixProdV10,
+		API:     APIConfig{BaseURL: server.URL},
+		Pipeline: []PipelineStep{{
+			Action: "gedix-api-test",
+			Params: map[string]any{
+				"method":            "GET",
+				"path":              "/api/health",
+				"printResponseBody": true,
+			},
+		}},
+	}
+	if err := SaveAPIToken(config.Name, token); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := RunPipeline(t.Context(), config, &output); err != nil {
+		t.Fatal(err)
+	}
+	log := output.String()
+	if strings.Contains(log, token) {
+		t.Fatalf("token leaked in log:\n%s", log)
+	}
+	if !strings.Contains(log, "[REDACTED]") || !strings.Contains(log, "Status HTTP: 200") {
+		t.Fatalf("missing expected API log details:\n%s", log)
 	}
 }
 

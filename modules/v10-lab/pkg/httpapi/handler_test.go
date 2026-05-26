@@ -53,6 +53,20 @@ func TestMaquetteCRUDAndValidate(t *testing.T) {
 		t.Fatalf("unexpected validation response: %#v", validation)
 	}
 
+	var tokenStatus APITokenStatus
+	getJSON(t, router, "/api/v10-lab/maquettes/ticket-T5808/api-token", &tokenStatus, http.StatusOK)
+	if tokenStatus.HasToken {
+		t.Fatal("expected no API token initially")
+	}
+	postJSONInto(t, router, "/api/v10-lab/maquettes/ticket-T5808/api-token", APITokenRequest{Token: "secret-token"}, &tokenStatus, http.StatusOK, http.MethodPut)
+	if !tokenStatus.HasToken {
+		t.Fatal("expected API token after save")
+	}
+	getJSON(t, router, "/api/v10-lab/maquettes/ticket-T5808", &loaded, http.StatusOK)
+	if payload, err := json.Marshal(loaded); err != nil || strings.Contains(string(payload), "secret-token") {
+		t.Fatalf("token leaked through maquette GET: %s err=%v", payload, err)
+	}
+
 	request := httptest.NewRequest(http.MethodDelete, "/api/v10-lab/maquettes/ticket-T5808", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -61,6 +75,9 @@ func TestMaquetteCRUDAndValidate(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "modules", "v10-lab", "data", "maquettes", "ticket-T5808", "maquette.json")); !os.IsNotExist(err) {
 		t.Fatalf("expected registration json to be removed, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "modules", "v10-lab", "data", "maquettes", "ticket-T5808", "data", "secrets.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected API token secret to be removed, err=%v", err)
 	}
 }
 
@@ -128,10 +145,18 @@ func TestActionsByProduct(t *testing.T) {
 	if len(actions) == 0 {
 		t.Fatal("expected actions")
 	}
+	byID := map[string]bool{}
 	for _, action := range actions {
 		if action.Kind != lab.KindAPI {
 			t.Fatalf("expected only API actions in pipeline builder, got %#v", action)
 		}
+		if action.Hidden {
+			t.Fatalf("hidden action should not be returned to pipeline builder: %#v", action)
+		}
+		byID[action.ID] = true
+	}
+	if !byID["gedix-api-test"] || byID["create-machine"] {
+		t.Fatalf("expected only visible API actions, got %#v", actions)
 	}
 }
 

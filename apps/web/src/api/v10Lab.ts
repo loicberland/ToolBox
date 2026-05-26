@@ -130,6 +130,10 @@ export type LogSummary = {
   modifiedAt: string;
 };
 
+export type ApiTokenStatus = {
+  hasToken: boolean;
+};
+
 export type SelectReleasePathResponse = {
   path?: string;
   cancelled: boolean;
@@ -195,6 +199,9 @@ export const v10LabApi = {
   getMaquette: (name: string) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`),
   updateMaquette: (name: string, config: V10Config) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, jsonRequest('PUT', config)),
   deleteMaquette: (name: string) => request<void>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  getApiTokenStatus: (name: string) => request<ApiTokenStatus>(`/v10-lab/maquettes/${encodeURIComponent(name)}/api-token`),
+  saveApiToken: (name: string, token: string) => request<ApiTokenStatus>(`/v10-lab/maquettes/${encodeURIComponent(name)}/api-token`, jsonRequest('PUT', { token })),
+  deleteApiToken: (name: string) => request<void>(`/v10-lab/maquettes/${encodeURIComponent(name)}/api-token`, { method: 'DELETE' }),
   validateMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/validate`, { method: 'POST' }),
   runMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run`, { method: 'POST' }),
   runAction: (name: string, actionId: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/actions/${encodeURIComponent(actionId)}/run`, { method: 'POST' }),

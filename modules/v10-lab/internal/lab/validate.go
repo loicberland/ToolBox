@@ -98,6 +98,10 @@ func ValidateConfig(config Config) error {
 		}
 		for _, field := range action.Fields {
 			value, exists := params[field.Name]
+			if !exists && field.Default != nil {
+				value = field.Default
+				exists = true
+			}
 			if field.Required && !exists {
 				errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: champ requis manquant", index, field.Name))
 				continue
@@ -118,6 +122,9 @@ func fieldValueMatchesType(value any, expected string) bool {
 	case "", "any":
 		return true
 	case "string":
+		_, ok := value.(string)
+		return ok
+	case "text":
 		_, ok := value.(string)
 		return ok
 	case "bool":

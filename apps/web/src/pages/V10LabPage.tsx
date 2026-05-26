@@ -623,6 +623,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file) => void scanCfg(file)} />}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
+              <ApiTokenEditor maquetteName={config.name} disabled={busy} />
               <PipelineBuilder config={config} actions={actions} onChange={updateConfig} />
             </LocalErrorBoundary>
           )}
@@ -879,11 +880,7 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
       <p className="muted">Ces clés lancent la cible séparément. Le mode debug --debug -v2 est ajouté uniquement si la cible est aussi sélectionnée en debug.</p>
       {customError && <p className="error">{customError}</p>}
       <div className="button-row">
-        {Object.entries(debugTargetFlags).flatMap(([target, flags]) => flags.map((flag) => (
-          <Button key={`${target}:${flag}`} type="button" size="sm" variant="secondary" onClick={() => removeCustomFlag(target, flag)}>
-            {target} {flag} - {m.removeDebugTarget}
-          </Button>
-        )))}
+        {debugFlagButtons(debugTargetFlags, removeCustomFlag)}
       </div>
     </div>
   );
@@ -1115,7 +1112,7 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
                 <label>{m.action}
                   <select value={step.action} onChange={(event) => {
                     const selected = byID[event.currentTarget.value];
-                    updateStep(index, { action: event.currentTarget.value, label: selected?.label ?? '', params: {} });
+                    updateStep(index, { action: event.currentTarget.value, label: selected?.label ?? '', params: selected ? paramsFromActionDefaults(selected) : {} });
                   }}>
                     <option value="">{m.chooseAction}</option>
                     {actions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -1148,8 +1145,112 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
         );
       })}
       <div className="button-row">
-        <Button type="button" variant="secondary" onClick={() => onChange({ ...config, pipeline: [...apiSteps, { action: actions[0]?.id ?? '', label: actions[0]?.label ?? '', params: {} }] })} disabled={actions.length === 0}>{m.addAction}</Button>
+        <Button type="button" variant="secondary" onClick={() => {
+          const action = actions[0];
+          onChange({ ...config, pipeline: [...apiSteps, { action: action?.id ?? '', label: action?.label ?? '', params: action ? paramsFromActionDefaults(action) : {} }] });
+        }} disabled={actions.length === 0}>{m.addAction}</Button>
       </div>
+    </div>
+  );
+}
+
+function ApiTokenEditor({ maquetteName, disabled }: { maquetteName: string; disabled: boolean }) {
+  const [hasToken, setHasToken] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftToken, setDraftToken] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setDraftToken('');
+    setEditing(false);
+    v10LabApi.getApiTokenStatus(maquetteName)
+      .then((status) => {
+        if (!cancelled) {
+          setHasToken(status.hasToken);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Erreur inconnue');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [maquetteName]);
+
+  const save = async () => {
+    const token = draftToken.trim();
+    if (!token) {
+      setError(m.apiToken.required);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const status = await v10LabApi.saveApiToken(maquetteName, token);
+      setHasToken(status.hasToken);
+      setEditing(false);
+      setDraftToken('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const remove = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await v10LabApi.deleteApiToken(maquetteName);
+      setHasToken(false);
+      setEditing(false);
+      setDraftToken('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const editingToken = editing || !hasToken;
+  return (
+    <div className="v10-api-token">
+      <label>{m.apiToken.label}
+        <input
+          type="password"
+          value={editingToken ? draftToken : '************'}
+          placeholder={m.apiToken.placeholder}
+          disabled={disabled || loading || !editingToken}
+          className={!editingToken ? 'masked-token' : undefined}
+          onChange={(event) => setDraftToken(event.currentTarget.value)}
+        />
+      </label>
+      <div className="button-row">
+        {editingToken ? (
+          <>
+            <Button type="button" size="sm" onClick={() => void save()} disabled={disabled || loading || !draftToken.trim()}>{m.apiToken.save}</Button>
+            {hasToken && <Button type="button" size="sm" variant="secondary" onClick={() => { setEditing(false); setDraftToken(''); setError(''); }} disabled={disabled || loading}>{m.apiToken.cancel}</Button>}
+          </>
+        ) : (
+          <>
+            <Button type="button" size="sm" variant="secondary" onClick={() => { setEditing(true); setDraftToken(''); setError(''); }} disabled={disabled || loading}>{m.apiToken.edit}</Button>
+            <Button type="button" size="sm" variant="danger" onClick={() => void remove()} disabled={disabled || loading}>{m.apiToken.delete}</Button>
+          </>
+        )}
+      </div>
+      {hasToken && !editingToken && <p className="muted">{m.apiToken.saved}</p>}
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }
@@ -1160,6 +1261,9 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   }
   if (field.type === 'string[]') {
     return <label>{field.label}<input value={Array.isArray(value) ? value.join(',') : ''} onChange={(event) => onChange(event.currentTarget.value.split(',').map((item) => item.trim()).filter(Boolean))} /></label>;
+  }
+  if (field.type === 'text') {
+    return <label>{field.label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{field.description && <span className="muted">{field.description}</span>}</label>;
   }
   return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
 }
@@ -1462,6 +1566,30 @@ function hasDuplicateConnector(rows: ConnectorFormRow[]) {
     seen.add(name);
   }
   return false;
+}
+
+function paramsFromActionDefaults(action: V10Action): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  for (const field of action.fields) {
+    if (field.default !== undefined && field.default !== null) {
+      params[field.name] = field.default;
+    }
+  }
+  return params;
+}
+
+function debugFlagButtons(debugTargetFlags: Record<string, string[]>, removeCustomFlag: (target: string, flag: string) => void) {
+  const buttons: React.ReactNode[] = [];
+  for (const [target, flags] of Object.entries(debugTargetFlags)) {
+    for (const flag of flags) {
+      buttons.push(
+        <Button key={`${target}:${flag}`} type="button" size="sm" variant="secondary" onClick={() => removeCustomFlag(target, flag)}>
+          {target} {flag} - {m.removeDebugTarget}
+        </Button>,
+      );
+    }
+  }
+  return buttons;
 }
 
 function delay(ms: number) {

@@ -47,6 +47,9 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.updateMaquette).Methods(http.MethodPut)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}", h.deleteMaquette).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/validate", h.validateMaquette).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/api-token", h.getAPITokenStatus).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/api-token", h.saveAPIToken).Methods(http.MethodPut)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/api-token", h.deleteAPIToken).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run", h.runMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/actions/{actionId}/run", h.runMaquetteAction).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/module-command/run", h.runModuleCommand).Methods(http.MethodPost)
@@ -128,6 +131,14 @@ type ModuleCommandRunRequest struct {
 
 type MaquetteGroupRequest struct {
 	Name string `json:"name"`
+}
+
+type APITokenStatus struct {
+	HasToken bool `json:"hasToken"`
+}
+
+type APITokenRequest struct {
+	Token string `json:"token"`
 }
 
 func (h *Handler) products(w http.ResponseWriter, _ *http.Request) {
@@ -284,6 +295,35 @@ func (h *Handler) validateMaquette(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ExecutionResponse{Status: "valid", Output: "Validation OK"})
+}
+
+func (h *Handler) getAPITokenStatus(w http.ResponseWriter, r *http.Request) {
+	hasToken, err := lab.HasAPIToken(mux.Vars(r)["name"])
+	respond(w, APITokenStatus{HasToken: hasToken}, err)
+}
+
+func (h *Handler) saveAPIToken(w http.ResponseWriter, r *http.Request) {
+	var request APITokenRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	if strings.TrimSpace(request.Token) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "token API requis"})
+		return
+	}
+	if err := lab.SaveAPIToken(mux.Vars(r)["name"], request.Token); err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, APITokenStatus{HasToken: true})
+}
+
+func (h *Handler) deleteAPIToken(w http.ResponseWriter, r *http.Request) {
+	if err := lab.DeleteAPIToken(mux.Vars(r)["name"]); err != nil {
+		respondError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) runMaquette(w http.ResponseWriter, r *http.Request) {
@@ -765,7 +805,7 @@ func firstNonEmpty(values ...string) string {
 func pipelineActions(actions []lab.Action) []lab.Action {
 	items := []lab.Action{}
 	for _, action := range actions {
-		if action.Kind != lab.KindAPI {
+		if action.Kind != lab.KindAPI || action.Hidden {
 			continue
 		}
 		items = append(items, action)
@@ -787,7 +827,7 @@ func apiPipelineSteps(steps []lab.PipelineStep, product string) []lab.PipelineSt
 
 func isRunnableSystemAction(actionID string) bool {
 	switch actionID {
-	case "create-env", "configure-gedix-cfg", "start-maquette", "update-env":
+	case "create-env", "configure-gedix-cfg", "start-maquette", "stop-maquette", "kill-gx-processes", "update-env", "start-services", "stop-services":
 		return true
 	default:
 		return false

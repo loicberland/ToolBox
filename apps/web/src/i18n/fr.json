@@ -159,6 +159,16 @@
     "actionPlan": {
       "noActionsForProduct": "Aucune action disponible pour ce produit."
     },
+    "apiToken": {
+      "label": "Token API",
+      "placeholder": "Saisir le token API",
+      "save": "Enregistrer",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "cancel": "Annuler",
+      "saved": "Token API enregistré.",
+      "required": "Token API obligatoire."
+    },
     "moduleCommand": {
       "titleConnector": "Commande module connecteur",
       "titleAgent": "Commande module agent",
@@ -187,7 +197,7 @@
       "updateMaquette": "Mettre à jour maquette",
       "configureCfg": "Modifier gedix.cfg",
       "startMaquette": "Démarrer maquette",
-      "runApiPipeline": "Lancer le plan d'action",
+      "runApiPipeline": "Lancer le plan d'actions",
       "refreshLogs": "Rafraîchir les logs",
       "updateMaquetteConfirm": "La maquette existante va être mise à jour avec la release sélectionnée. Le fichier gedix.cfg et les logs seront conservés. Continuer ?",
       "updateRunning": "Mise à jour en cours...",

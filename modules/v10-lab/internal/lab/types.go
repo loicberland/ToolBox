@@ -295,6 +295,9 @@ func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaq
 }
 
 func DeleteRegisteredConfig(name string) error {
+	if err := DeleteAPIToken(name); err != nil {
+		return err
+	}
 	path := filepath.Join(MaquettesDir(), safeDirName(name), "maquette.json")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
