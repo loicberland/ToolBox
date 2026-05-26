@@ -16,7 +16,7 @@ export const useApiFetch = <T, B = unknown>(endpoint: string, shouldFetchOnInit:
             const responseData = await apiFetch<T, B>(url, method, body);
             setData(responseData);
         } catch (err) {
-            setError('Erreur lors de la requête');
+            setError(`Erreur lors de la requête : ${(err as Error).message}`);
         } finally {
             setLoading(false);
         }

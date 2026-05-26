@@ -371,8 +371,8 @@ function ImportPlanDialog({
   return (
     <div className="dialog-backdrop" role="presentation">
       <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="import-plan-title">
-        <h3 id="import-plan-title">Importer un plan</h3>
-        <p className="dialog-help">Sélectionnez le fichier ZIP généré par l'export d'un plan de test.</p>
+        <h3 id="import-plan-title">{messages.testSheet.plans.import}</h3>
+        <p className="dialog-help">{messages.testSheet.plans.importDialog}</p>
         <DocumentFilePicker
           id={fileInputId}
           file={file}

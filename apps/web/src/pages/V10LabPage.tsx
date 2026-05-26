@@ -757,6 +757,11 @@ function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onCh
   };
   return (
     <div className="form-grid v10-form-grid">
+      <label className="span-2">{m.product}
+        <select value={config.product} onChange={(event) => changeProduct(event.target.value)}>
+          {products.map((product) => <option value={product.id} key={product.id}>{product.label || product.name}</option>)}
+        </select>
+      </label>
       <label>{m.name}
         <input value={config.name} onChange={(event) => onChange({ ...config, name: event.target.value })} />
       </label>
@@ -764,11 +769,6 @@ function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onCh
         <select value={config.groupName ?? ''} onChange={(event) => onChange({ ...config, groupName: event.target.value })}>
           <option value="">Sans groupe</option>
           {groups.map((group) => <option value={group.name} key={group.name}>{group.name}</option>)}
-        </select>
-      </label>
-      <label>{m.product}
-        <select value={config.product} onChange={(event) => changeProduct(event.target.value)}>
-          {products.map((product) => <option value={product.id} key={product.id}>{product.label || product.name}</option>)}
         </select>
       </label>
       <label>{m.releaseZip}
@@ -782,17 +782,21 @@ function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onCh
       <label>{m.targetPath}
         <input placeholder={m.targetPlaceholder.replace('{{path}}', defaultTargetPath)} value={config.maquette.targetPath} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, targetPath: event.target.value } })} />
       </label>
-      <label>{m.envName}
-        <input value={config.maquette.envName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, envName: event.target.value } })} />
-      </label>
       <label>{m.appName}
         <input value={config.maquette.appName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, appName: event.target.value } })} />
       </label>
-      <label className="checkbox-row">
-        <input type="checkbox" checked={config.release.overwrite} onChange={(event) => onChange({ ...config, release: { ...config.release, overwrite: event.target.checked } })} />
-        {m.overwriteLabel}
+      <label>{m.envName}
+        <input value={config.maquette.envName} onChange={(event) => onChange({ ...config, maquette: { ...config.maquette, envName: event.target.value } })} />
       </label>
-      <p className="muted v10-help-text">{m.overwriteHelp}</p>
+      {!creating && (
+        <>
+          <label className="checkbox-row span-2">
+            <input type="checkbox" checked={config.release.overwrite} onChange={(event) => onChange({ ...config, release: { ...config.release, overwrite: event.target.checked } })} />
+            {m.overwriteLabel}
+          </label>
+          <p className="muted v10-help-text span-2">{m.overwriteHelp}</p>
+        </>
+      )}
       {creating && <GedixForm config={config} onChange={onChange} compact />}
     </div>
   );
@@ -1277,7 +1281,7 @@ function defaultConfig(product = DEFAULT_V10_PRODUCT_ID, productDefinition?: V10
     name: '',
     product,
     release: { zipPath: '', workDir: '', overwrite: false },
-    maquette: { targetPath: '', envName: 'demo', appName: productDefinition?.defaultAppName ?? 'prod' },
+    maquette: { targetPath: '', envName: 'live', appName: productDefinition?.defaultAppName ?? 'prod' },
     gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {}, agents: {} },
     runtime: { debugTargets: [], openConsole: true },
     groupName: '',

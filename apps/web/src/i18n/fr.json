@@ -264,7 +264,9 @@
       "withoutDescription": "Sans description",
       "executionNumber": "Exécution n°",
       "begin": "Début",
-      "end": "Fin"
+      "end": "Fin",
+      "import": "Importer un plan",
+      "importDialog": "Sélectionnez le fichier ZIP généré par l'export d'un plan de test."
     },
     "dialogs": {
       "modelChangedRunCanceled": "Le plan a été modifié. L’exécution en cours a été annulée car elle ne correspondait plus à la nouvelle version du plan.",
