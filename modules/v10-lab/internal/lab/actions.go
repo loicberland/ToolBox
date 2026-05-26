@@ -40,6 +40,18 @@ func Actions() []Action {
 			},
 		},
 		{
+			ID:          "stop-maquette",
+			Label:       "Arrêter maquette",
+			Description: "Indique comment arrêter manuellement la maquette.",
+			Kind:        KindSystem,
+			Products:    []string{},
+			Execute: func(ctx ActionContext, params map[string]any) error {
+				fmt.Fprintln(ctx.Writer, "Fermez les fenêtres gx-front/gx-app ouvertes pour arrêter la maquette.")
+				fmt.Fprintln(ctx.Writer, "Pour tuer radicalement les processus, utilisez v10-lab kill-gx-processes --force.")
+				return nil
+			},
+		},
+		{
 			ID:          "kill-gx-processes",
 			Label:       "Couper les services GX",
 			Description: "Coupe manuellement tous les processus GX en cours sur cette machine.",
@@ -81,6 +93,21 @@ func Actions() []Action {
 			},
 		},
 		{
+			ID:          "stop-services",
+			Label:       "Arrêter services",
+			Description: "Alias compatibilité: utilisez stop-maquette.",
+			Kind:        KindSystem,
+			Products:    []string{},
+			Fields: []ActionField{
+				{Name: "taskkill", Label: "Forcer la coupure GX", Type: "bool", Default: false},
+			},
+			Execute: func(ctx ActionContext, params map[string]any) error {
+				fmt.Fprintln(ctx.Writer, "[ALIAS] stop-services redirige vers stop-maquette.")
+				fmt.Fprintln(ctx.Writer, "Fermez les fenêtres gx-front/gx-app ouvertes pour arrêter la maquette.")
+				return nil
+			},
+		},
+		{
 			ID:          "create-plant",
 			Label:       "Créer une usine",
 			Description: "Crée une usine Gedix via l'API entreprise.",
@@ -97,6 +124,56 @@ func Actions() []Action {
 				{Name: "created_by", Label: "Créé par", Type: "number", Required: true, Default: 1},
 			},
 			Execute: ExecuteCreatePlant(),
+		},
+		{
+			ID:          "create-machine-group",
+			Label:       "Créer groupe machine",
+			Description: "Crée fictivement un groupe machine Gedix V10.",
+			Kind:        KindAPI,
+			Products:    []string{GedixProdV10},
+			Hidden:      true,
+			Fields: []ActionField{
+				{Name: "code", Label: "Code", Type: "string", Required: true},
+				{Name: "name", Label: "Nom", Type: "string", Required: true},
+			},
+			Execute: func(ctx ActionContext, params map[string]any) error {
+				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Créer groupe machine %s / %s\n", stringParam(params, "code"), stringParam(params, "name"))
+				return nil
+			},
+		},
+		{
+			ID:          "create-machine",
+			Label:       "Créer machine",
+			Description: "Crée fictivement une machine Gedix V10.",
+			Kind:        KindAPI,
+			Products:    []string{GedixProdV10},
+			Hidden:      true,
+			Fields: []ActionField{
+				{Name: "code", Label: "Code", Type: "string", Required: true},
+				{Name: "name", Label: "Nom", Type: "string", Required: true},
+				{Name: "groupCode", Label: "Groupe", Type: "string"},
+			},
+			Execute: func(ctx ActionContext, params map[string]any) error {
+				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Créer machine %s / %s\n", stringParam(params, "code"), stringParam(params, "name"))
+				return nil
+			},
+		},
+		{
+			ID:          "create-cnc-folder",
+			Label:       "Créer dossier CN",
+			Description: "Crée fictivement un dossier CN Gedix V10.",
+			Kind:        KindAPI,
+			Products:    []string{GedixProdV10},
+			Hidden:      true,
+			Fields: []ActionField{
+				{Name: "machineGroupCode", Label: "Groupe machine", Type: "string", Required: true},
+				{Name: "programCode", Label: "Programme", Type: "string", Required: true},
+				{Name: "programIndex", Label: "Indice", Type: "string", Default: "A"},
+			},
+			Execute: func(ctx ActionContext, params map[string]any) error {
+				fmt.Fprintf(ctx.Writer, "[DRY-RUN] Créer dossier CN %s indice %s pour groupe %s\n", stringParam(params, "programCode"), stringParam(params, "programIndex"), stringParam(params, "machineGroupCode"))
+				return nil
+			},
 		},
 	}
 }
