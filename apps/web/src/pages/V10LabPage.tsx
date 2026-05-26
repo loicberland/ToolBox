@@ -826,6 +826,7 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
         <input value={customFlag} placeholder="clef ou --clef" onChange={(event) => setCustomFlag(event.target.value)} />
         <Button type="button" variant="secondary" size="sm" disabled={!customTarget || !customFlag.trim()} onClick={addCustomFlag}>Ajouter</Button>
       </div>
+      <p className="muted">Ces clés lancent la cible séparément. Le mode debug --debug -v2 est ajouté uniquement si la cible est aussi sélectionnée en debug.</p>
       {customError && <p className="error">{customError}</p>}
       <div className="button-row">
         {Object.entries(debugTargetFlags).flatMap(([target, flags]) => flags.map((flag) => (
@@ -1391,7 +1392,7 @@ function normalizeDebugFlag(value: string) {
 
 function debugFlagHasUnsafeCharacters(value: string) {
   const normalized = normalizeDebugFlag(value);
-  return !normalized || /[\s"'&|;<>]/.test(normalized) || !/^--[A-Za-z0-9._=-]+$/.test(normalized);
+  return !normalized || normalized === '--' || normalized === '---' || /[\s"'&|;<>]/.test(normalized) || !/^--[A-Za-z0-9._=-]+$/.test(normalized);
 }
 
 function normalizeModuleType(value: string) {

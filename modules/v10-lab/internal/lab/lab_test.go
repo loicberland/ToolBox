@@ -260,15 +260,13 @@ func TestGXFrontDetectionPowerShellTargetsExactExecutable(t *testing.T) {
 	}
 }
 
-func TestConsoleLauncherScriptRawKeepsUserCommand(t *testing.T) {
-	content := consoleLauncherScriptContentRaw(
-		`D:\Data\Gedix\env_demo\app_prod\connector-filesystem01`,
-		`D:\Data\Gedix\env_demo\app_prod\connector-filesystem01\gx-module-filesystem.exe`,
-		`import --file "test file.json"`,
-	)
-	expected := `"D:\Data\Gedix\env_demo\app_prod\connector-filesystem01\gx-module-filesystem.exe" import --file "test file.json"`
-	if !strings.Contains(content, expected) {
-		t.Fatalf("expected raw module command in script, got:\n%s", content)
+func TestSplitCommandLineKeepsQuotedUserCommandArgument(t *testing.T) {
+	args, err := splitCommandLine(`import --file "test file.json"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(args, "|") != "import|--file|test file.json" {
+		t.Fatalf("unexpected split args: %#v", args)
 	}
 }
 
@@ -292,31 +290,39 @@ func TestConsoleCommandLineQuotesExecutablePathWithSpaces(t *testing.T) {
 		t.Fatalf("unexpected console command:\ngot:  %s\nwant: %s", got, want)
 	}
 
-	cmdArgs := openConsoleArgs("V10 Lab gx-front", `C:\Temp\v10-lab-run-1.cmd`)
-	if len(cmdArgs) != 7 || cmdArgs[5] != "call" || cmdArgs[6] != `C:\Temp\v10-lab-run-1.cmd` {
-		t.Fatalf("console should launch the generated script via call, got %#v", cmdArgs)
+}
+
+func TestConsoleCommandLineKeepsUnicodePath(t *testing.T) {
+	got := consoleCommandLine(
+		`D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe`,
+		"listen",
+	)
+	want := `"D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe" listen`
+	if got != want {
+		t.Fatalf("unexpected unicode console command:\ngot:  %s\nwant: %s", got, want)
 	}
 }
 
-func TestConsoleLauncherScriptQuotesPathsWithoutBackslashEscapedQuotes(t *testing.T) {
-	content := consoleLauncherScriptContent(
-		`D:\Data\Gedix10\01_Clients\GMP Industrie`,
-		`D:\Data\Gedix10\01_Clients\GMP Industrie\gx-front.exe`,
+func TestConsoleLauncherPowerShellScriptUsesLiteralPathsAndSeparateArgs(t *testing.T) {
+	content := consoleLauncherPowerShellScript(
+		`D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo`,
+		"V10 Lab gx-front",
+		`D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe`,
 		"listen",
+		"--trace",
 	)
 	for _, expected := range []string{
-		`cd /d "D:\Data\Gedix10\01_Clients\GMP Industrie"`,
-		`"D:\Data\Gedix10\01_Clients\GMP Industrie\gx-front.exe" listen`,
+		`Set-Location -LiteralPath 'D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo'`,
+		`& 'D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe' @arguments`,
+		`'listen',`,
+		`'--trace',`,
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("expected script to contain %q, got:\n%s", expected, content)
 		}
 	}
-	if strings.Contains(content, `\"`) {
-		t.Fatalf("batch script must not contain backslash-escaped quotes:\n%s", content)
-	}
-	if !strings.Contains(content, "\r\n") {
-		t.Fatalf("batch script should use CRLF line endings, got %q", content)
+	if strings.Contains(content, ".cmd") || strings.Contains(content, "cmd /") {
+		t.Fatalf("PowerShell launcher must not depend on cmd scripts:\n%s", content)
 	}
 }
 
@@ -333,9 +339,10 @@ func TestConsoleCommandLineKeepsDebugTargetsAsSingleArgument(t *testing.T) {
 	}
 }
 
-func TestConsoleLauncherScriptQuotesArgumentsWithSpaces(t *testing.T) {
-	content := consoleLauncherScriptContent(
+func TestConsoleLauncherPowerShellScriptKeepsArgumentsSeparated(t *testing.T) {
+	content := consoleLauncherPowerShellScript(
 		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod`,
+		"V10 Lab gx-app",
 		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`,
 		"run",
 		"-e",
@@ -344,15 +351,15 @@ func TestConsoleLauncherScriptQuotesArgumentsWithSpaces(t *testing.T) {
 		`D:\A B\file.txt`,
 	)
 	for _, expected := range []string{
-		`"D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01 --some-path "D:\A B\file.txt"`,
-		`-e auth,connector-focas-01`,
+		`'run',`,
+		`'-e',`,
+		`'auth,connector-focas-01',`,
+		`'--some-path',`,
+		`'D:\A B\file.txt',`,
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("expected script to contain %q, got:\n%s", expected, content)
 		}
-	}
-	if strings.Contains(content, `-e auth connector-focas-01`) {
-		t.Fatalf("debug target list should stay a single argument:\n%s", content)
 	}
 }
 
@@ -371,27 +378,71 @@ func TestSafeDirNameKeepsUnicodeAndRemovesWindowsForbiddenCharacters(t *testing.
 }
 
 func TestNormalizeDebugFlagAndLaunchTargets(t *testing.T) {
-	flag, err := NormalizeDebugFlag("v2")
-	if err != nil || flag != "--v2" {
-		t.Fatalf("unexpected normalized flag %q err=%v", flag, err)
+	cases := map[string]string{
+		"trace":        "--trace",
+		"--trace":      "--trace",
+		"clef-test":    "--clef-test",
+		"clef_test":    "--clef_test",
+		"clef.test":    "--clef.test",
+		"--clef=value": "--clef=value",
 	}
-	if _, err := NormalizeDebugFlag("bad flag"); err == nil {
-		t.Fatal("expected flag with space to be rejected")
+	for input, expected := range cases {
+		flag, err := NormalizeDebugFlag(input)
+		if err != nil || flag != expected {
+			t.Fatalf("NormalizeDebugFlag(%q)=%q err=%v, want %q", input, flag, err, expected)
+		}
+	}
+	for _, input := range []string{"bad flag", `"quoted"`, "&", "|", ";", "<", ">", "--", "-", ""} {
+		if _, err := NormalizeDebugFlag(input); err == nil {
+			t.Fatalf("expected %q to be rejected", input)
+		}
 	}
 	runtimeConfig := RuntimeConfig{
 		DebugTargets: []string{"auth"},
 		DebugTargetFlags: map[string][]string{
-			"auth":                 {"--trace"},
-			"connector-filesystem": {"v2"},
+			"auth":                   {"--trace"},
+			"connector-filesystem01": {"v2"},
 		},
 	}
 	targets := RuntimeDebugLaunchTargets(runtimeConfig)
-	if strings.Join(targets, ",") != "auth,connector-filesystem" {
+	if strings.Join(targets, ",") != "auth,connector-filesystem01" {
 		t.Fatalf("unexpected debug launch targets: %#v", targets)
 	}
 	args := debugArgsForTarget(runtimeConfig, "auth")
 	if strings.Join(args, " ") != "listen --debug -v2 --trace" {
 		t.Fatalf("unexpected debug args: %#v", args)
+	}
+}
+
+func TestRuntimeDebugLaunchTargetsIncludesCustomOnlyTargets(t *testing.T) {
+	runtimeConfig := RuntimeConfig{
+		DebugTargets:     []string{},
+		DebugTargetFlags: map[string][]string{"auth": {"--trace"}},
+	}
+	targets := RuntimeDebugLaunchTargets(runtimeConfig)
+	if strings.Join(targets, ",") != "auth" {
+		t.Fatalf("unexpected debug launch targets: %#v", targets)
+	}
+	if got := debugExclusionArg(targets); got != "auth" {
+		t.Fatalf("gx-app exclusion should include custom-only target, got %q", got)
+	}
+}
+
+func TestDebugArgsForTargetSeparatesStandardDebugFromCustomOnly(t *testing.T) {
+	standard := RuntimeConfig{
+		DebugTargets:     []string{"auth"},
+		DebugTargetFlags: map[string][]string{"auth": {"trace", "--verbose"}},
+	}
+	if got := strings.Join(debugArgsForTarget(standard, "auth"), " "); got != "listen --debug -v2 --trace --verbose" {
+		t.Fatalf("unexpected standard debug args: %s", got)
+	}
+
+	customOnly := RuntimeConfig{
+		DebugTargets:     []string{},
+		DebugTargetFlags: map[string][]string{"auth": {"trace", "--verbose"}},
+	}
+	if got := strings.Join(debugArgsForTarget(customOnly, "auth"), " "); got != "listen --trace --verbose" {
+		t.Fatalf("unexpected custom-only debug args: %s", got)
 	}
 }
 

@@ -2,6 +2,7 @@ package lab
 
 import (
 	"archive/zip"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
@@ -194,7 +196,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 		} else {
 			fmt.Fprintf(writer, "[INFO] Lancement service debug %s : %s %s\n", debugTarget.Name, filepath.Base(debugTarget.ExePath), strings.Join(debugArgs, " "))
 		}
-		fmt.Fprintf(writer, "Démarrage debug %s (%s) : %s\n", debugTarget.Name, debugTarget.Kind, consoleCommandLine(debugTarget.ExePath, "listen", "--debug", "-v2"))
+		fmt.Fprintf(writer, "Démarrage debug %s (%s) : %s\n", debugTarget.Name, debugTarget.Kind, consoleCommandLine(debugTarget.ExePath, debugArgs...))
 		if err := openConsole(debugTarget.WorkDir, "V10 Lab debug "+debugTarget.Name, debugTarget.ExePath, debugArgs...); err != nil {
 			return err
 		}
@@ -290,14 +292,35 @@ func RuntimeDebugLaunchTargets(runtime RuntimeConfig) []string {
 }
 
 func debugArgsForTarget(runtime RuntimeConfig, target string) []string {
-	args := []string{"listen", "--debug", "-v2"}
-	for _, flag := range runtime.DebugTargetFlags[target] {
+	args := []string{"listen"}
+	if runtimeHasDebugTarget(runtime, target) {
+		args = append(args, "--debug", "-v2")
+	}
+	for _, flag := range debugTargetFlagsForTarget(runtime, target) {
 		normalized, err := NormalizeDebugFlag(flag)
 		if err == nil {
 			args = append(args, normalized)
 		}
 	}
 	return args
+}
+
+func runtimeHasDebugTarget(runtime RuntimeConfig, target string) bool {
+	for _, item := range runtime.DebugTargets {
+		if strings.EqualFold(strings.TrimSpace(item), strings.TrimSpace(target)) {
+			return true
+		}
+	}
+	return false
+}
+
+func debugTargetFlagsForTarget(runtime RuntimeConfig, target string) []string {
+	for key, flags := range runtime.DebugTargetFlags {
+		if strings.EqualFold(strings.TrimSpace(key), strings.TrimSpace(target)) {
+			return flags
+		}
+	}
+	return nil
 }
 
 func NormalizeDebugFlag(value string) (string, error) {
@@ -312,6 +335,9 @@ func NormalizeDebugFlag(value string) (string, error) {
 		flag = "--" + flag
 	}
 	if flag == "--" {
+		return "", fmt.Errorf("flag debug invalide %q", value)
+	}
+	if strings.TrimPrefix(flag, "--") == "-" {
 		return "", fmt.Errorf("flag debug invalide %q", value)
 	}
 	for _, char := range strings.TrimPrefix(flag, "--") {
@@ -368,7 +394,7 @@ func isGXFrontRunning(frontExePath string) (bool, error) {
 		return false, nil
 	}
 	script := gxFrontDetectionPowerShell(frontExePath)
-	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodedPowerShellCommand(script))
 	output, err := cmd.Output()
 	if err != nil {
 		return false, err
@@ -479,12 +505,7 @@ func openConsole(dir string, title string, exe string, args ...string) error {
 		fmt.Printf("[DRY-RUN non-windows] cd %s && %s\n", quoteCmdArg(dir), commandLine)
 		return nil
 	}
-	scriptPath, err := createConsoleLauncherScript(dir, exe, args...)
-	if err != nil {
-		return err
-	}
-	cmd := exec.Command("cmd", openConsoleArgs(title, scriptPath)...)
-	return cmd.Start()
+	return startPowerShellConsole(title, consoleLauncherPowerShellScript(dir, title, exe, args...))
 }
 
 func openConsoleRaw(dir string, title string, exe string, rawArgs string) error {
@@ -493,68 +514,93 @@ func openConsoleRaw(dir string, title string, exe string, rawArgs string) error 
 		fmt.Printf("[DRY-RUN non-windows] cd %s && %s\n", quoteCmdArg(dir), commandLine)
 		return nil
 	}
-	scriptPath, err := createConsoleLauncherScriptRaw(dir, exe, rawArgs)
+	args, err := splitCommandLine(rawArgs)
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("cmd", openConsoleArgs(title, scriptPath)...)
-	return cmd.Start()
+	return startPowerShellConsole(title, consoleLauncherPowerShellScript(dir, title, exe, args...))
 }
 
-func openConsoleArgs(title string, scriptPath string) []string {
-	return []string{"/C", "start", title, "cmd", "/K", "call", scriptPath}
+func startPowerShellConsole(title string, script string) error {
+	encoded := encodedPowerShellCommand(script)
+	outerScript := strings.Join([]string{
+		"$arguments = @(",
+		"  '-NoExit',",
+		"  '-NoProfile',",
+		"  '-ExecutionPolicy',",
+		"  'Bypass',",
+		"  '-EncodedCommand',",
+		"  " + powerShellSingleQuoted(encoded),
+		")",
+		"Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Normal",
+	}, "\n")
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodedPowerShellCommand(outerScript))
+	return cmd.Run()
 }
 
-func createConsoleLauncherScript(dir string, exe string, args ...string) (string, error) {
-	file, err := os.CreateTemp("", "v10-lab-run-*.cmd")
-	if err != nil {
-		return "", err
+func consoleLauncherPowerShellScript(dir string, title string, exe string, args ...string) string {
+	lines := []string{
+		"$Host.UI.RawUI.WindowTitle = " + powerShellSingleQuoted(title),
+		"Set-Location -LiteralPath " + powerShellSingleQuoted(dir),
+		"$arguments = @(",
 	}
-	path := file.Name()
-	content := consoleLauncherScriptContent(dir, exe, args...)
-	if _, err := file.WriteString(content); err != nil {
-		_ = file.Close()
-		return "", err
+	for _, arg := range args {
+		lines = append(lines, "  "+powerShellSingleQuoted(arg)+",")
 	}
-	if err := file.Close(); err != nil {
-		return "", err
-	}
-	return path, nil
+	lines = append(lines,
+		")",
+		"& "+powerShellSingleQuoted(exe)+" @arguments",
+	)
+	return strings.Join(lines, "\n")
 }
 
-func createConsoleLauncherScriptRaw(dir string, exe string, rawArgs string) (string, error) {
-	file, err := os.CreateTemp("", "v10-lab-run-*.cmd")
-	if err != nil {
-		return "", err
+func encodedPowerShellCommand(script string) string {
+	encoded := utf16.Encode([]rune(script))
+	payload := make([]byte, len(encoded)*2)
+	for index, value := range encoded {
+		payload[index*2] = byte(value)
+		payload[index*2+1] = byte(value >> 8)
 	}
-	path := file.Name()
-	content := consoleLauncherScriptContentRaw(dir, exe, rawArgs)
-	if _, err := file.WriteString(content); err != nil {
-		_ = file.Close()
-		return "", err
-	}
-	if err := file.Close(); err != nil {
-		return "", err
-	}
-	return path, nil
+	return base64.StdEncoding.EncodeToString(payload)
 }
 
-func consoleLauncherScriptContent(dir string, exe string, args ...string) string {
-	return strings.Join([]string{
-		"@echo off",
-		"cd /d " + quoteBatchPath(dir),
-		consoleCommandLine(exe, args...),
-		"",
-	}, "\r\n")
+func powerShellSingleQuoted(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
-func consoleLauncherScriptContentRaw(dir string, exe string, rawArgs string) string {
-	return strings.Join([]string{
-		"@echo off",
-		"cd /d " + quoteBatchPath(dir),
-		consoleCommandLineRaw(exe, rawArgs),
-		"",
-	}, "\r\n")
+func splitCommandLine(value string) ([]string, error) {
+	args := []string{}
+	var builder strings.Builder
+	inQuotes := false
+	escaped := false
+	for _, char := range value {
+		switch {
+		case escaped:
+			builder.WriteRune(char)
+			escaped = false
+		case char == '\\' && inQuotes:
+			escaped = true
+		case char == '"':
+			inQuotes = !inQuotes
+		case (char == ' ' || char == '\t') && !inQuotes:
+			if builder.Len() > 0 {
+				args = append(args, builder.String())
+				builder.Reset()
+			}
+		default:
+			builder.WriteRune(char)
+		}
+	}
+	if escaped {
+		builder.WriteRune('\\')
+	}
+	if inQuotes {
+		return nil, fmt.Errorf("commande module invalide: guillemet non ferme")
+	}
+	if builder.Len() > 0 {
+		args = append(args, builder.String())
+	}
+	return args, nil
 }
 
 func consoleCommandLine(exe string, args ...string) string {
