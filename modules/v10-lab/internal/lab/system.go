@@ -521,10 +521,18 @@ func openConsoleRaw(dir string, title string, exe string, rawArgs string) error 
 }
 
 func newConsoleCommand(dir string, exe string, args ...string) *exec.Cmd {
-	cmd := exec.Command("cmd.exe", "/D", "/S", "/K", consoleCommandLine(exe, args...))
+	cmd := exec.Command("cmd.exe", "/D", "/K", consoleCommandLineForCmdCall(exe, args...))
 	cmd.Dir = dir
 	configureNewConsole(cmd)
 	return cmd
+}
+
+func consoleCommandLineForCmdCall(exe string, args ...string) string {
+	parts := []string{"call", quoteBatchPath(exe)}
+	for _, arg := range args {
+		parts = append(parts, quoteBatchArg(arg))
+	}
+	return strings.Join(parts, " ")
 }
 
 func splitCommandLine(value string) ([]string, error) {
