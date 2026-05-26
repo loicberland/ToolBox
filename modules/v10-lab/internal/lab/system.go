@@ -521,7 +521,7 @@ func openConsoleRaw(dir string, title string, exe string, rawArgs string) error 
 }
 
 func newConsoleCommand(dir string, exe string, args ...string) *exec.Cmd {
-	cmd := exec.Command(exe, args...)
+	cmd := exec.Command("cmd.exe", "/D", "/S", "/K", consoleCommandLine(exe, args...))
 	cmd.Dir = dir
 	configureNewConsole(cmd)
 	return cmd
@@ -591,7 +591,7 @@ func quoteCmdArg(value string) string {
 }
 
 func quoteBatchArg(value string) string {
-	if strings.ContainsAny(value, " \t&()[]{}^=;!'`~") {
+	if strings.ContainsAny(value, " \t&|<>()[]{}^=;!'`~") {
 		return quoteBatchPath(value)
 	}
 	return value

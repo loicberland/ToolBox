@@ -303,18 +303,19 @@ func TestConsoleCommandLineKeepsUnicodePath(t *testing.T) {
 	}
 }
 
-func TestNewConsoleCommandUsesTargetExecutableDirectly(t *testing.T) {
+func TestNewConsoleCommandUsesCmdHostWithUnicodeCommandLine(t *testing.T) {
 	dir := `D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo`
 	exe := `D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe`
 	cmd := newConsoleCommand(dir, exe, "listen", "--trace")
-	if cmd.Path != exe {
-		t.Fatalf("expected direct executable path, got %q", cmd.Path)
+	if !strings.EqualFold(filepath.Base(cmd.Path), "cmd.exe") {
+		t.Fatalf("expected cmd.exe console host, got %q", cmd.Path)
 	}
 	if cmd.Dir != dir {
 		t.Fatalf("expected unicode working dir, got %q", cmd.Dir)
 	}
-	if strings.Join(cmd.Args, "|") != exe+"|listen|--trace" {
-		t.Fatalf("expected separated direct args, got %#v", cmd.Args)
+	want := `/D|/S|/K|"D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe" listen --trace`
+	if got := strings.Join(cmd.Args[1:], "|"); got != want {
+		t.Fatalf("expected cmd /K unicode command:\ngot:  %s\nwant: %s", got, want)
 	}
 }
 func TestConsoleCommandLineKeepsDebugTargetsAsSingleArgument(t *testing.T) {
@@ -330,7 +331,7 @@ func TestConsoleCommandLineKeepsDebugTargetsAsSingleArgument(t *testing.T) {
 	}
 }
 
-func TestNewConsoleCommandKeepsArgumentsSeparated(t *testing.T) {
+func TestNewConsoleCommandKeepsCommandLineAsSingleCmdArgument(t *testing.T) {
 	cmd := newConsoleCommand(
 		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod`,
 		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`,
@@ -340,13 +341,12 @@ func TestNewConsoleCommandKeepsArgumentsSeparated(t *testing.T) {
 		"--some-path",
 		`D:\A B\file.txt`,
 	)
-	want := `D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe|run|-e|auth,connector-focas-01|--some-path|D:\A B\file.txt`
-	if got := strings.Join(cmd.Args, "|"); got != want {
-		t.Fatalf("expected separated direct args:\ngot:  %s\nwant: %s", got, want)
+	want := `/D|/S|/K|"D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01 --some-path "D:\A B\file.txt"`
+	if got := strings.Join(cmd.Args[1:], "|"); got != want {
+		t.Fatalf("expected cmd host args:\ngot:  %s\nwant: %s", got, want)
 	}
 }
-
-func TestConsoleLaunchersDoNotUseShellsOrTempBatchFiles(t *testing.T) {
+func TestConsoleLaunchersDoNotUsePowerShellOrTempBatchFiles(t *testing.T) {
 	source, err := os.ReadFile("system.go")
 	if err != nil {
 		t.Fatal(err)
@@ -358,9 +358,14 @@ func TestConsoleLaunchersDoNotUseShellsOrTempBatchFiles(t *testing.T) {
 		t.Fatalf("could not locate console launcher implementation")
 	}
 	launcher := strings.ToLower(text[start:end])
-	for _, forbidden := range []string{"powershell", "cmd /k", `".cmd"`, `".bat"`, "createtemp"} {
+	for _, forbidden := range []string{"powershell", `".cmd"`, `".bat"`, "createtemp"} {
 		if strings.Contains(launcher, forbidden) {
 			t.Fatalf("console launcher must not use %s:\n%s", forbidden, text[start:end])
+		}
+	}
+	for _, expected := range []string{`"cmd.exe"`, `"/d"`, `"/s"`, `"/k"`} {
+		if !strings.Contains(launcher, expected) {
+			t.Fatalf("console launcher should use cmd.exe /D /S /K, missing %s:\n%s", expected, text[start:end])
 		}
 	}
 }
