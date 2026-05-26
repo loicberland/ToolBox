@@ -304,68 +304,81 @@ func TestConsoleCommandLineKeepsUnicodePath(t *testing.T) {
 	}
 }
 
-func TestStartConsoleCommandLineKeepsUnicodePath(t *testing.T) {
-	got := startConsoleCommandLine(
-		`D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo`,
-		"V10 Lab gx-front",
-		`D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe`,
-		"listen",
-	)
-	want := `start "V10 Lab gx-front" /D "D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo" cmd.exe /D /K call "D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe" listen`
-	if got != want {
-		t.Fatalf("unexpected start command:\ngot:  %s\nwant: %s", got, want)
-	}
-}
-
-func TestNewConsoleCommandUsesCmdStartWithUnicodeCommandLine(t *testing.T) {
+func TestNewConsoleCommandUsesSeparatedCmdStartArgs(t *testing.T) {
 	dir := `D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo`
 	exe := `D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe`
-	cmd := newConsoleCommand(dir, "V10 Lab gx-front", exe, "listen", "--trace")
+	cmd := newConsoleCommand(dir, "V10 Lab gx-front", exe, "listen")
 	if !strings.EqualFold(filepath.Base(cmd.Path), "cmd.exe") {
 		t.Fatalf("expected cmd.exe console host, got %q", cmd.Path)
 	}
 	if cmd.Dir != dir {
 		t.Fatalf("expected unicode working dir, got %q", cmd.Dir)
 	}
-	want := `/D|/C|start "V10 Lab gx-front" /D "D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo" cmd.exe /D /K call "D:\Data\ToolBox\ToolBox\modules\v10-lab\files\maquettes\Gedix_V10_Démo\gx-front.exe" listen --trace`
-	if got := strings.Join(cmd.Args[1:], "|"); got != want {
-		t.Fatalf("expected cmd /C start unicode command:\ngot:  %s\nwant: %s", got, want)
+	want := []string{
+		"cmd.exe",
+		"/D",
+		"/C",
+		"start",
+		"V10 Lab gx-front",
+		"/D",
+		dir,
+		"cmd.exe",
+		"/D",
+		"/K",
+		"call",
+		exe,
+		"listen",
+	}
+	if !slices.Equal(cmd.Args, want) {
+		t.Fatalf("unexpected cmd args:\ngot:  %#v\nwant: %#v", cmd.Args, want)
+	}
+	for _, arg := range cmd.Args {
+		if strings.Contains(arg, `\"`) {
+			t.Fatalf("cmd arg must not contain backslash-escaped quotes: %#v", cmd.Args)
+		}
 	}
 	if slices.Contains(cmd.Args, "/S") {
 		t.Fatalf("cmd launcher must not use /S: %#v", cmd.Args)
 	}
-	if slices.Contains(cmd.Args, "/K") {
+	if slices.Contains(cmd.Args[:3], "/K") {
 		t.Fatalf("outer cmd launcher must not use /K: %#v", cmd.Args)
 	}
 }
 
-func TestConsoleCommandLineKeepsDebugTargetsAsSingleArgument(t *testing.T) {
-	got := consoleCommandLine(
-		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`,
-		"run",
-		"-e",
-		"auth,connector-focas-01",
-	)
-	want := `"D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01`
-	if got != want {
-		t.Fatalf("unexpected debug console command:\ngot:  %s\nwant: %s", got, want)
-	}
-}
-
-func TestNewConsoleCommandKeepsStartLineAsSingleCmdArgument(t *testing.T) {
+func TestNewConsoleCommandKeepsStartArgsSeparated(t *testing.T) {
+	dir := `D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod`
+	exe := `D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`
 	cmd := newConsoleCommand(
-		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod`,
+		dir,
 		"V10 Lab gx-app",
-		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`,
+		exe,
 		"run",
 		"-e",
 		"auth,connector-focas-01",
 		"--some-path",
 		`D:\A B\file.txt`,
 	)
-	want := `/D|/C|start "V10 Lab gx-app" /D "D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod" cmd.exe /D /K call "D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01 --some-path "D:\A B\file.txt"`
-	if got := strings.Join(cmd.Args[1:], "|"); got != want {
-		t.Fatalf("expected cmd host args:\ngot:  %s\nwant: %s", got, want)
+	want := []string{
+		"cmd.exe",
+		"/D",
+		"/C",
+		"start",
+		"V10 Lab gx-app",
+		"/D",
+		dir,
+		"cmd.exe",
+		"/D",
+		"/K",
+		"call",
+		exe,
+		"run",
+		"-e",
+		"auth,connector-focas-01",
+		"--some-path",
+		`D:\A B\file.txt`,
+	}
+	if !slices.Equal(cmd.Args, want) {
+		t.Fatalf("unexpected cmd args:\ngot:  %#v\nwant: %#v", cmd.Args, want)
 	}
 }
 
@@ -381,7 +394,7 @@ func TestConsoleLaunchersDoNotUsePowerShellTempBatchOrCreateNewConsole(t *testin
 		t.Fatalf("could not locate console launcher implementation")
 	}
 	launcher := strings.ToLower(text[start:end])
-	for _, forbidden := range []string{"powershell", `".cmd"`, `".bat"`, "createtemp", "configurenewconsole"} {
+	for _, forbidden := range []string{"powershell", `".cmd"`, `".bat"`, "createtemp", "configurenewconsole", "startconsolecommandline"} {
 		if strings.Contains(launcher, forbidden) {
 			t.Fatalf("console launcher must not use %s:\n%s", forbidden, text[start:end])
 		}
@@ -391,10 +404,23 @@ func TestConsoleLaunchersDoNotUsePowerShellTempBatchOrCreateNewConsole(t *testin
 	}
 	for _, expected := range []string{`"cmd.exe"`, `"/d"`, `"/c"`, `"start"`, `"/k"`, `"call"`} {
 		if !strings.Contains(launcher, expected) {
-			t.Fatalf("console launcher should use cmd.exe /D /C start ... cmd.exe /D /K call, missing %s:\n%s", expected, text[start:end])
+			t.Fatalf("console launcher should use separated cmd.exe /D /C start ... cmd.exe /D /K call args, missing %s:\n%s", expected, text[start:end])
 		}
 	}
 }
+func TestConsoleCommandLineKeepsDebugTargetsAsSingleArgument(t *testing.T) {
+	got := consoleCommandLine(
+		`D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe`,
+		"run",
+		"-e",
+		"auth,connector-focas-01",
+	)
+	want := `"D:\Data\Gedix10\01_Clients\GMP Industrie\env_live\app_prod\gx-app.exe" run -e auth,connector-focas-01`
+	if got != want {
+		t.Fatalf("unexpected debug console command:\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
 func TestDebugTargetsUseCommaSeparatedExclusionArg(t *testing.T) {
 	got := debugExclusionArg([]string{"auth", "connector-focas-01"})
 	if got != "auth,connector-focas-01" {
