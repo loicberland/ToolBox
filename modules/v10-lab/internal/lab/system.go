@@ -2,7 +2,6 @@ package lab
 
 import (
 	"archive/zip"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf16"
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
@@ -394,7 +392,7 @@ func isGXFrontRunning(frontExePath string) (bool, error) {
 		return false, nil
 	}
 	script := gxFrontDetectionPowerShell(frontExePath)
-	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodedPowerShellCommand(script))
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
 	output, err := cmd.Output()
 	if err != nil {
 		return false, err
@@ -505,7 +503,8 @@ func openConsole(dir string, title string, exe string, args ...string) error {
 		fmt.Printf("[DRY-RUN non-windows] cd %s && %s\n", quoteCmdArg(dir), commandLine)
 		return nil
 	}
-	return startPowerShellConsole(title, consoleLauncherPowerShellScript(dir, title, exe, args...))
+	cmd := newConsoleCommand(dir, exe, args...)
+	return cmd.Start()
 }
 
 func openConsoleRaw(dir string, title string, exe string, rawArgs string) error {
@@ -518,54 +517,14 @@ func openConsoleRaw(dir string, title string, exe string, rawArgs string) error 
 	if err != nil {
 		return err
 	}
-	return startPowerShellConsole(title, consoleLauncherPowerShellScript(dir, title, exe, args...))
+	return openConsole(dir, title, exe, args...)
 }
 
-func startPowerShellConsole(title string, script string) error {
-	encoded := encodedPowerShellCommand(script)
-	outerScript := strings.Join([]string{
-		"$arguments = @(",
-		"  '-NoExit',",
-		"  '-NoProfile',",
-		"  '-ExecutionPolicy',",
-		"  'Bypass',",
-		"  '-EncodedCommand',",
-		"  " + powerShellSingleQuoted(encoded),
-		")",
-		"Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Normal",
-	}, "\n")
-	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodedPowerShellCommand(outerScript))
-	return cmd.Run()
-}
-
-func consoleLauncherPowerShellScript(dir string, title string, exe string, args ...string) string {
-	lines := []string{
-		"$Host.UI.RawUI.WindowTitle = " + powerShellSingleQuoted(title),
-		"Set-Location -LiteralPath " + powerShellSingleQuoted(dir),
-		"$arguments = @(",
-	}
-	for _, arg := range args {
-		lines = append(lines, "  "+powerShellSingleQuoted(arg)+",")
-	}
-	lines = append(lines,
-		")",
-		"& "+powerShellSingleQuoted(exe)+" @arguments",
-	)
-	return strings.Join(lines, "\n")
-}
-
-func encodedPowerShellCommand(script string) string {
-	encoded := utf16.Encode([]rune(script))
-	payload := make([]byte, len(encoded)*2)
-	for index, value := range encoded {
-		payload[index*2] = byte(value)
-		payload[index*2+1] = byte(value >> 8)
-	}
-	return base64.StdEncoding.EncodeToString(payload)
-}
-
-func powerShellSingleQuoted(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+func newConsoleCommand(dir string, exe string, args ...string) *exec.Cmd {
+	cmd := exec.Command(exe, args...)
+	cmd.Dir = dir
+	configureNewConsole(cmd)
+	return cmd
 }
 
 func splitCommandLine(value string) ([]string, error) {
