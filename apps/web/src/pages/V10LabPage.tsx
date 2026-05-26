@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DBTemplate,
   ExecutionResponse,
@@ -62,6 +62,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [confirmKill, setConfirmKill] = useState(false);
   const [confirmUpdate, setConfirmUpdate] = useState(false);
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
+  const currentMaquetteRef = useRef<HTMLElement | null>(null);
+  const scrollToCurrentMaquetteAfterTabChange = useRef(false);
 
   useEffect(() => {
     void loadInitial();
@@ -82,6 +84,16 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   useEffect(() => {
     void loadDefaultTarget(showCreate ? draft.name : config?.name ?? '');
   }, [showCreate, draft.name, config?.name]);
+
+  useEffect(() => {
+    if (!scrollToCurrentMaquetteAfterTabChange.current) {
+      return;
+    }
+    scrollToCurrentMaquetteAfterTabChange.current = false;
+    window.requestAnimationFrame(() => {
+      currentMaquetteRef.current?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    });
+  }, [activeTab]);
 
   useEffect(() => {
     if (!onBeforeLeaveChange) {
@@ -211,6 +223,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         return;
       }
     }
+    scrollToCurrentMaquetteAfterTabChange.current = true;
     setActiveTab(nextTab);
   }
 
@@ -493,6 +506,18 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     setIsDirty(true);
   }
 
+  function toggleGroup(name: string) {
+    setOpenGroups((current) => ({ ...current, [name]: !current[name] }));
+  }
+
+  function handleToggleKey(event: React.KeyboardEvent, action: () => void) {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    action();
+  }
+
   const groupedMaquettes = groups.map((group) => ({
     ...group,
     items: maquettes.filter((item) => item.groupName === group.name),
@@ -546,12 +571,18 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
             <div className="v10-group-list">
               {groupedMaquettes.map((group) => (
                 <div className="v10-group" key={group.name}>
-                  <div className="v10-group-header">
-                    <button type="button" onClick={() => setOpenGroups((current) => ({ ...current, [group.name]: !current[group.name] }))}>{openGroups[group.name] ? '▾' : '▸'}</button>
+                  <div
+                    className="v10-group-header clickable"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleGroup(group.name)}
+                    onKeyDown={(event) => handleToggleKey(event, () => toggleGroup(group.name))}
+                  >
+                    <span className="v10-chevron" aria-hidden="true">{openGroups[group.name] ? '▾' : '▸'}</span>
                     <strong>{group.name}</strong>
                     <span className="muted">{group.items.length}</span>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => { setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: group.name }); setShowCreate(true); setOpenGroups((current) => ({ ...current, [group.name]: true })); }}>Ajouter une maquette</Button>
-                    <Button type="button" size="sm" variant="danger" onClick={() => void deleteGroup(group.name)} disabled={group.items.length > 0}>Supprimer</Button>
+                    <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: group.name }); setShowCreate(true); setOpenGroups((current) => ({ ...current, [group.name]: true })); }}>Ajouter une maquette</Button>
+                    <Button type="button" size="sm" variant="danger" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void deleteGroup(group.name); }} disabled={group.items.length > 0}>Supprimer</Button>
                   </div>
                   {openGroups[group.name] && <MaquetteList items={group.items} selectedName={selectedName} onToggle={toggleMaquette} />}
                 </div>
@@ -564,7 +595,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       </section>
 
       {config && (
-        <section className="ui-card v10-section">
+        <section ref={currentMaquetteRef} className="ui-card v10-section">
           <div className="ui-card-header">
             <div>
               <h3>{config.name}</h3>
@@ -660,6 +691,14 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 }
 
 function MaquetteList({ items, selectedName, onToggle }: { items: MaquetteSummary[]; selectedName: string; onToggle: (name: string) => Promise<void> }) {
+  const handleKeyDown = (event: React.KeyboardEvent, name: string) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    void onToggle(name);
+  };
+
   if (items.length === 0) {
     return <p className="muted">Aucune maquette.</p>;
   }
@@ -672,12 +711,19 @@ function MaquetteList({ items, selectedName, onToggle }: { items: MaquetteSummar
         <span>{m.actions}</span>
       </div>
       {items.map((item) => (
-        <div className={`v10-table-row ${item.name === selectedName ? 'active' : ''}`} key={item.name}>
+        <div
+          className={`v10-table-row clickable ${item.name === selectedName ? 'active' : ''}`}
+          key={item.name}
+          role="button"
+          tabIndex={0}
+          onClick={() => void onToggle(item.name)}
+          onKeyDown={(event) => handleKeyDown(event, item.name)}
+        >
           <strong>{item.name}</strong>
           <span>{item.product}</span>
           <span>{item.existsOnDisk ? m.yes : m.no}</span>
           <div className="button-row">
-            <Button type="button" size="sm" variant="secondary" onClick={() => void onToggle(item.name)}>{item.name === selectedName ? m.close : m.open}</Button>
+            <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void onToggle(item.name); }}>{item.name === selectedName ? m.close : m.open}</Button>
           </div>
         </div>
       ))}
@@ -1434,3 +1480,4 @@ class LocalErrorBoundary extends React.Component<{ children: React.ReactNode }, 
     return this.props.children;
   }
 }
+

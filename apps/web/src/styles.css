@@ -1545,6 +1545,15 @@ textarea {
   background: var(--surface-soft);
 }
 
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.55);
+  outline-offset: 2px;
+}
+
 .v10-table-row.active {
   border-color: rgba(37, 99, 235, 0.55);
   background: #eff6ff;
@@ -1568,13 +1577,16 @@ textarea {
   flex-wrap: wrap;
 }
 
-.v10-group-header > button:first-child {
+.v10-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   height: 32px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
-  cursor: pointer;
+  font-weight: 900;
 }
 
 .truncate {
