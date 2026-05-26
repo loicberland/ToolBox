@@ -1,9 +1,22 @@
 package lab
 
 import (
-	"encoding/json"
 	"fmt"
+	"net/http"
 )
+
+const createPlantPath = "/entreprise/api/v1/plants"
+
+type CreatePlantPayload struct {
+	EntityName        string `json:"entity_name"`
+	Description       string `json:"description"`
+	AddressName       string `json:"address_name"`
+	AddressStreet     string `json:"address_street"`
+	AddressPostalCode string `json:"address_postalcode"`
+	AddressTown       string `json:"address_town"`
+	AddressCountry    string `json:"address_country"`
+	CreatedBy         any    `json:"created_by"`
+}
 
 func ExecuteCreatePlant() ActionExecute {
 	return func(ctx ActionContext, params map[string]any) error {
@@ -11,7 +24,7 @@ func ExecuteCreatePlant() ActionExecute {
 		if err != nil {
 			return err
 		}
-		payload := createPlantPayloadFromParams(params)
+		payload := createPlantPayload(params)
 		if err := client.CreatePlant(payload); err != nil {
 			return err
 		}
@@ -20,7 +33,17 @@ func ExecuteCreatePlant() ActionExecute {
 	}
 }
 
-func createPlantPayloadFromParams(params map[string]any) CreatePlantPayload {
+func (c *GedixAPIClient) CreatePlant(payload CreatePlantPayload) error {
+	return c.DoJSON(GedixAPIRequest{
+		Name:             "Créer une usine",
+		Method:           http.MethodPost,
+		Path:             createPlantPath,
+		Body:             payload,
+		ExpectedStatuses: []int{http.StatusOK},
+	})
+}
+
+func createPlantPayload(params map[string]any) CreatePlantPayload {
 	return CreatePlantPayload{
 		EntityName:        stringParam(params, "entity_name"),
 		Description:       stringParam(params, "description"),
@@ -31,26 +54,4 @@ func createPlantPayloadFromParams(params map[string]any) CreatePlantPayload {
 		AddressCountry:    stringParam(params, "address_country"),
 		CreatedBy:         numberParam(params, "created_by"),
 	}
-}
-
-func numberParam(params map[string]any, key string) any {
-	switch value := params[key].(type) {
-	case int:
-		return value
-	case int64:
-		return value
-	case float64:
-		if value == float64(int64(value)) {
-			return int64(value)
-		}
-		return value
-	case json.Number:
-		if integer, err := value.Int64(); err == nil {
-			return integer
-		}
-		if decimal, err := value.Float64(); err == nil {
-			return decimal
-		}
-	}
-	return params[key]
 }

@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+// Convention V10 Lab API Gedix:
+// - api_client.go contains only the generic HTTP client plumbing.
+// - api_token.go contains only API token management.
+// - api_actions_<domain>.go contains Gedix business actions by domain.
+// - actions.go remains the action catalog exposed to the Plan d'actions.
+// To add an API action: create/complete api_actions_<domain>.go, add Execute..., then reference it in actions.go.
 const (
 	defaultAPIAuthHeader  = "Authorization"
 	defaultAPIAuthPrefix  = "Bearer"
@@ -62,22 +68,26 @@ func NewGedixAPIClient(config Config, writer io.Writer) (*GedixAPIClient, error)
 
 func ExecuteGedixAPIRequests(requests []GedixAPIRequest) ActionExecute {
 	return func(ctx ActionContext, params map[string]any) error {
-		client, err := NewGedixAPIClient(ctx.Config, ctx.Writer)
+		return executeGedixAPIRequests(ctx, params, requests)
+	}
+}
+
+func executeGedixAPIRequests(ctx ActionContext, params map[string]any, requests []GedixAPIRequest) error {
+	client, err := NewGedixAPIClient(ctx.Config, ctx.Writer)
+	if err != nil {
+		return err
+	}
+	for _, request := range requests {
+		body, err := gedixAPIRequestBodyValue(request, params)
 		if err != nil {
 			return err
 		}
-		for _, request := range requests {
-			body, err := gedixAPIRequestBodyValue(request, params)
-			if err != nil {
-				return err
-			}
-			request.Body = body
-			if err := client.DoJSON(request); err != nil {
-				return err
-			}
+		request.Body = body
+		if err := client.DoJSON(request); err != nil {
+			return err
 		}
-		return nil
 	}
+	return nil
 }
 
 func (c *GedixAPIClient) PostJSON(apiPath string, body any, expectedStatuses ...int) error {
@@ -90,11 +100,15 @@ func (c *GedixAPIClient) PostJSON(apiPath string, body any, expectedStatuses ...
 }
 
 func (c *GedixAPIClient) DoJSON(apiRequest GedixAPIRequest) error {
+	return executeGedixAPIRequest(c.httpClient, c.writer, c.baseURL, c.token, apiRequest)
+}
+
+func executeGedixAPIRequest(client *http.Client, writer io.Writer, baseURL string, token string, apiRequest GedixAPIRequest) error {
 	method := strings.ToUpper(strings.TrimSpace(apiRequest.Method))
 	if method == "" {
 		method = http.MethodGet
 	}
-	targetURL, err := gedixAPIRequestURL(c.baseURL, apiRequest.Path, apiRequest.Query)
+	targetURL, err := gedixAPIRequestURL(baseURL, apiRequest.Path, apiRequest.Query)
 	if err != nil {
 		return err
 	}
@@ -104,21 +118,21 @@ func (c *GedixAPIClient) DoJSON(apiRequest GedixAPIRequest) error {
 	}
 	name := strings.TrimSpace(apiRequest.Name)
 	if name != "" {
-		fmt.Fprintf(c.writer, "[API] %s\n", name)
+		fmt.Fprintf(writer, "[API] %s\n", name)
 	}
-	fmt.Fprintf(c.writer, "[API] %s %s\n", method, apiRequest.LogPath())
+	fmt.Fprintf(writer, "[API] %s %s\n", method, apiRequest.LogPath())
 	request, err := http.NewRequest(method, targetURL, body)
 	if err != nil {
 		return err
 	}
-	request.Header.Set(defaultAPIAuthHeader, strings.TrimSpace(defaultAPIAuthPrefix+" "+c.token))
+	request.Header.Set(defaultAPIAuthHeader, strings.TrimSpace(defaultAPIAuthPrefix+" "+token))
 	request.Header.Set("Content-Type", defaultAPIContentType)
 	for key, value := range apiRequest.Headers {
 		if strings.TrimSpace(key) != "" {
 			request.Header.Set(key, value)
 		}
 	}
-	response, err := c.httpClient.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
@@ -127,14 +141,14 @@ func (c *GedixAPIClient) DoJSON(apiRequest GedixAPIRequest) error {
 	if err != nil {
 		return err
 	}
-	safeBody := redactToken(string(responseBody), c.token)
-	fmt.Fprintf(c.writer, "[API] Status HTTP : %d\n", response.StatusCode)
+	safeBody := redactToken(string(responseBody), token)
+	fmt.Fprintf(writer, "[API] Status HTTP : %d\n", response.StatusCode)
 	if apiRequest.PrintResponseBody && strings.TrimSpace(safeBody) != "" {
-		fmt.Fprintf(c.writer, "[API] Réponse :\n%s\n", safeBody)
+		fmt.Fprintf(writer, "[API] Réponse :\n%s\n", safeBody)
 	}
 	if !expectedHTTPStatus(response.StatusCode, apiRequest.ExpectedStatuses) {
 		if strings.TrimSpace(safeBody) != "" {
-			fmt.Fprintf(c.writer, "[API] Erreur Gedix : %s\n", safeBody)
+			fmt.Fprintf(writer, "[API] Erreur Gedix : %s\n", safeBody)
 		}
 		if strings.TrimSpace(safeBody) == "" {
 			return fmt.Errorf("requête API Gedix échouée: status HTTP %d", response.StatusCode)

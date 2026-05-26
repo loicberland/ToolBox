@@ -537,8 +537,6 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         </div>
       </header>
 
-      {error && <p className="error whitespace">{error}</p>}
-      {message && <p className="info-message">{message}</p>}
 
       {showCreate && (
         <section className="ui-card v10-section">
@@ -552,6 +550,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           </div>
         </section>
       )}
+      
 
       <section className="ui-card v10-section">
         <div className="ui-card-header">
@@ -594,6 +593,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         )}
       </section>
 
+      {error && <p className="error whitespace">{error}</p>}
+      {message && <p className="info-message">{message}</p>}
+      
       {config && (
         <section ref={currentMaquetteRef} className="ui-card v10-section">
           <div className="ui-card-header">

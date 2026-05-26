@@ -660,3 +660,25 @@ func boolParam(params map[string]any, key string) bool {
 	value, _ := params[key].(bool)
 	return value
 }
+
+func numberParam(params map[string]any, key string) any {
+	switch value := params[key].(type) {
+	case int:
+		return value
+	case int64:
+		return value
+	case float64:
+		if value == float64(int64(value)) {
+			return int64(value)
+		}
+		return value
+	case json.Number:
+		if integer, err := value.Int64(); err == nil {
+			return integer
+		}
+		if decimal, err := value.Float64(); err == nil {
+			return decimal
+		}
+	}
+	return params[key]
+}
