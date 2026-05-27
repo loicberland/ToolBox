@@ -99,13 +99,17 @@ func ValidateConfig(config Config) error {
 		}
 		for _, field := range action.Fields {
 			value, exists := params[field.Name]
+			if field.Required && (!exists || fieldValueIsEmpty(value)) {
+				label := strings.TrimSpace(field.Label)
+				if label == "" {
+					label = field.Name
+				}
+				errors = append(errors, fmt.Sprintf("Étape %d - %s : le champ %s est obligatoire et ne peut pas être vide.", index+1, step.Action, label))
+				continue
+			}
 			if !exists && field.Default != nil {
 				value = field.Default
 				exists = true
-			}
-			if field.Required && !exists {
-				errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: champ requis manquant", index, field.Name))
-				continue
 			}
 			if exists && !fieldValueMatchesType(value, field.Type) {
 				errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: type attendu %s", index, field.Name, field.Type))
@@ -116,6 +120,22 @@ func ValidateConfig(config Config) error {
 		return ValidationError{Items: errors}
 	}
 	return nil
+}
+
+func fieldValueIsEmpty(value any) bool {
+	if value == nil {
+		return true
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed) == ""
+	case []any:
+		return len(typed) == 0
+	case []string:
+		return len(typed) == 0
+	default:
+		return false
+	}
 }
 
 func fieldValueMatchesType(value any, expected string) bool {

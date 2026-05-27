@@ -197,6 +197,11 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setError(validation);
       return false;
     }
+    const requiredFieldsValidation = validatePipelineRequiredFields(config, actions);
+    if (requiredFieldsValidation) {
+      setError(requiredFieldsValidation);
+      return false;
+    }
     let saved = false;
     await run(async () => {
       const oldName = config.name;
@@ -383,6 +388,11 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }
     try {
       const parsed = normalizeConfig(JSON.parse(jsonText) as V10Config);
+      const validation = validateConfig(parsed) || validatePipelineRequiredFields(parsed, actions);
+      if (validation) {
+        setError(validation);
+        return;
+      }
       const saved = normalizeConfig(await v10LabApi.updateMaquette(selectedName || config.name, parsed));
       setConfig(saved);
       setSelectedName(saved.name);
@@ -485,7 +495,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
-  async function scanCfg(file: File, importExistingKeys: boolean) {
+  async function scanCfg(file: File, importExistingKeys: boolean, replaceExistingUnits: boolean) {
     if (!config) {
       return;
     }
@@ -501,9 +511,16 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       const units = { ...(config.gedixConfig[unitKey] ?? {}) };
       for (const unit of scannedUnits) {
         const existing = units[unit.name];
+        if (existing && !replaceExistingUnits) {
+          units[unit.name] = {
+            module: unit.module ? unit.module : (existing.module ?? ''),
+            rawConfig: existing.rawConfig ?? unit.rawConfig ?? '',
+          };
+          continue;
+        }
         units[unit.name] = {
-          module: unit.module ? unit.module : (existing?.module ?? ''),
-          rawConfig: importExistingKeys ? unit.rawConfig : (existing?.rawConfig ?? unit.rawConfig),
+          module: unit.module ?? '',
+          rawConfig: unit.rawConfig ?? '',
         };
       }
       updateConfig({
@@ -512,7 +529,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         gedixConfig: { ...config.gedixConfig, [unitKey]: units },
       });
       const warnings = result.warnings?.length ? ` ${result.warnings.join(' ')}` : '';
-      setMessage(`${scannedUnits.length} ${product.unitPluralLabel} détecté(s).${warnings}`);
+      const replaced = replaceExistingUnits ? ' Les éléments existants ont été remplacés.' : '';
+      setMessage(`${scannedUnits.length} ${product.unitPluralLabel} détecté(s).${replaced}${warnings}`);
     });
   }
 
@@ -652,7 +670,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
           {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
-          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file, importExistingKeys) => void scanCfg(file, importExistingKeys)} />}
+          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file, importExistingKeys, replaceExistingUnits) => void scanCfg(file, importExistingKeys, replaceExistingUnits)} />}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
               <ApiTokenEditor maquetteName={config.name} disabled={busy} />
@@ -1033,9 +1051,10 @@ function ExtraKeysEditor({ serviceKey, service, onChange }: { serviceKey: string
   );
 }
 
-function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void; onScanCfg: (file: File, importExistingKeys: boolean) => void }) {
+function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void; onScanCfg: (file: File, importExistingKeys: boolean, replaceExistingUnits: boolean) => void }) {
   const [rows, setRows] = useState<ConnectorFormRow[]>(() => unitRowsFromConfig(config, product));
   const [importExistingKeys, setImportExistingKeys] = useState(false);
+  const [replaceExistingUnits, setReplaceExistingUnits] = useState(false);
 
   useEffect(() => {
     setRows(unitRowsFromConfig(config, product));
@@ -1080,7 +1099,7 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               if (file) {
-                onScanCfg(file, importExistingKeys);
+                onScanCfg(file, importExistingKeys, replaceExistingUnits);
               }
               event.currentTarget.value = '';
             }}
@@ -1089,6 +1108,10 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
         <label className="checkbox-row v10-inline-checkbox">
           <input type="checkbox" checked={importExistingKeys} onChange={(event) => setImportExistingKeys(event.currentTarget.checked)} />
           Importer clés existantes
+        </label>
+        <label className="checkbox-row v10-inline-checkbox">
+          <input type="checkbox" checked={replaceExistingUnits} onChange={(event) => setReplaceExistingUnits(event.currentTarget.checked)} />
+          Remplacer si existant
         </label>
       </div>
       {duplicate && <p className="error">{m.duplicateConnector}</p>}
@@ -1514,6 +1537,43 @@ function validateConfig(config: V10Config): string {
     return m.duplicateConnector;
   }
   return '';
+}
+
+function validatePipelineRequiredFields(config: V10Config, actions: V10Action[]): string | null {
+  if (actions.length === 0) {
+    return null;
+  }
+  const byID = new Map(actions.map((action) => [action.id, action]));
+  for (const [index, step] of (config.pipeline ?? []).entries()) {
+    const action = byID.get(step.action);
+    if (!action) {
+      continue;
+    }
+    const params = step.params ?? {};
+    for (const field of action.fields ?? []) {
+      if (!field.required) {
+        continue;
+      }
+      if (isPipelineRequiredValueEmpty(params[field.name])) {
+        const fieldLabel = field.label?.trim() || field.name;
+        return `Étape ${index + 1} - ${step.action} : le champ ${fieldLabel} est obligatoire et ne peut pas être vide.`;
+      }
+    }
+  }
+  return null;
+}
+
+function isPipelineRequiredValueEmpty(value: unknown): boolean {
+  if (value === undefined || value === null) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.trim() === '';
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+  return false;
 }
 
 function formatDate(value: string) {

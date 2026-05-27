@@ -56,6 +56,45 @@ func TestValidateConfigReportsUnknownActionAndMissingField(t *testing.T) {
 	}
 }
 
+func TestValidateConfigRejectsEmptyRequiredActionField(t *testing.T) {
+	config := Config{
+		Name:    "ticket-T5808",
+		Product: GedixProdV10,
+		Pipeline: []PipelineStep{
+			{Action: "create-workshop", Params: map[string]any{
+				"entity_name": "   ",
+				"plant_id":    0,
+				"created_by":  0,
+			}},
+		},
+	}
+
+	err := ValidateConfig(config)
+	validationErr, ok := err.(ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T %v", err, err)
+	}
+	message := strings.Join(validationErr.Items, "\n")
+	if !strings.Contains(message, "Étape 1 - create-workshop") || !strings.Contains(message, "Nom de l'atelier") {
+		t.Fatalf("missing required field message: %#v", validationErr.Items)
+	}
+	if strings.Contains(message, "plant_id") || strings.Contains(message, "created_by") {
+		t.Fatalf("zero numeric values must not be treated as empty: %#v", validationErr.Items)
+	}
+}
+
+func TestFieldValueIsEmptyKeepsFalseAndZero(t *testing.T) {
+	if fieldValueIsEmpty(false) {
+		t.Fatal("false must not be treated as empty")
+	}
+	if fieldValueIsEmpty(0) {
+		t.Fatal("0 must not be treated as empty")
+	}
+	if !fieldValueIsEmpty([]string{}) {
+		t.Fatal("empty slices must be treated as empty")
+	}
+}
+
 func TestValidateConfigReportsInvalidDBTypeAndDuplicateDebugTarget(t *testing.T) {
 	config := Config{
 		Name:    "ticket-T5808",
@@ -86,9 +125,14 @@ func TestActionsForProductIncludesSystemAndGedixActions(t *testing.T) {
 		byID[action.ID] = true
 	}
 
-	for _, id := range []string{"create-env", "configure-gedix-cfg", "start-maquette", "stop-maquette", "kill-gx-processes", "update-env", "create-plant", "create-machine-group", "create-machine", "create-cnc-folder"} {
+	for _, id := range []string{"create-env", "configure-gedix-cfg", "start-maquette", "kill-gx-processes", "update-env", "create-plant", "create-workshop"} {
 		if !byID[id] {
 			t.Fatalf("expected action %s in product actions", id)
+		}
+	}
+	for _, id := range []string{"stop-maquette", "stop-services", "create-machine-group", "create-machine", "create-cnc-folder"} {
+		if byID[id] {
+			t.Fatalf("unexpected non-coded action %s in product actions", id)
 		}
 	}
 	for _, action := range ActionsForProduct(GedixWatchV10) {
@@ -695,7 +739,7 @@ func TestRunActionKeepsInternalUTF8Logs(t *testing.T) {
 		Product: GedixProdV10,
 	}
 
-	if err := RunAction(t.Context(), config, "stop-maquette", &output); err != nil {
+	if err := RunPipeline(t.Context(), config, &output); err != nil {
 		t.Fatal(err)
 	}
 	text := output.String()

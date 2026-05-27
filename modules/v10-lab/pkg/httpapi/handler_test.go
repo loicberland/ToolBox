@@ -155,7 +155,7 @@ func TestActionsByProduct(t *testing.T) {
 		}
 		byID[action.ID] = true
 	}
-	if !byID["create-plant"] || byID["create-machine"] {
+	if !byID["create-plant"] || !byID["create-workshop"] || byID["create-machine"] {
 		t.Fatalf("expected only visible API actions, got %#v", actions)
 	}
 }
@@ -163,10 +163,10 @@ func TestActionsByProduct(t *testing.T) {
 func TestAPIPipelineStepsDropsSystemActions(t *testing.T) {
 	steps := apiPipelineSteps([]lab.PipelineStep{
 		{Action: "create-env"},
-		{Action: "create-machine-group"},
+		{Action: "create-workshop"},
 		{Action: "configure-gedix-cfg"},
 	}, lab.GedixProdV10)
-	if len(steps) != 1 || steps[0].Action != "create-machine-group" {
+	if len(steps) != 1 || steps[0].Action != "create-workshop" {
 		t.Fatalf("expected only API steps, got %#v", steps)
 	}
 }
