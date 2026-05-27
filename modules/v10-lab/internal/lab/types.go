@@ -377,6 +377,9 @@ func ProductUnits(config Config) map[string]ProductUnitConfig {
 	ApplyDefaults(&config)
 	product, _ := ProductDefinitionByID(config.Product)
 	units := map[string]ProductUnitConfig{}
+	if !product.HasUnits() {
+		return units
+	}
 	for name, unit := range config.GedixConfig.Units {
 		units[name] = unit
 	}

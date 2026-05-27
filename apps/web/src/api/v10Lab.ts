@@ -14,12 +14,13 @@ export type V10Product = {
     hasDatabase: boolean;
     supportsExtraKeys: boolean;
   }>;
-  unitKind: 'connector' | 'agent';
+  unitKind?: 'connector' | 'agent' | '';
   unitSingularLabel: string;
   unitPluralLabel: string;
   unitCfgSectionName: string;
   unitFolderPrefix: string;
   unitExecutableName: string;
+  unitModuleExecutablePattern?: string;
 };
 
 export type V10ActionField = {
@@ -148,7 +149,7 @@ export type ImportExistingMaquettesResponse = {
 export type ScanCfgResponse = {
   envName: string;
   appName: string;
-  unitKind?: 'connector' | 'agent';
+  unitKind?: 'connector' | 'agent' | '';
   unitPluralLabel?: string;
   units?: Array<{ name: string; module?: string; rawConfig: string }>;
   connectors: Array<{ name: string; module?: string; rawConfig: string }>;

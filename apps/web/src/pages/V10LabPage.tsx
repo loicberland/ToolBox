@@ -43,6 +43,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [maquettes, setMaquettes] = useState<MaquetteSummary[]>([]);
   const [groups, setGroups] = useState<MaquetteGroup[]>([]);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [openUngrouped, setOpenUngrouped] = useState(true);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedName, setSelectedName] = useState('');
   const [config, setConfig] = useState<V10Config | null>(null);
@@ -105,9 +106,6 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       }
       setMessage(m.savingBeforeModuleChange);
       const saved = await saveCurrent();
-      if (!saved) {
-        setError(m.autosaveFailed);
-      }
       return saved;
     });
     return () => onBeforeLeaveChange(null);
@@ -115,6 +113,13 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
   const selectedSummary = maquettes.find((item) => item.name === selectedName);
   const currentProduct = productFor(config?.product ?? draft.product, products);
+  const visibleTabs = productHasUnits(currentProduct) ? tabs : tabs.filter((tab) => tab !== m.tabs.connectors);
+
+  useEffect(() => {
+    if (activeTab === m.tabs.connectors && !productHasUnits(currentProduct)) {
+      setActiveTab(m.tabs.general);
+    }
+  }, [activeTab, currentProduct.id, currentProduct.unitKind, currentProduct.unitCfgSectionName]);
 
   async function loadInitial() {
     await run(async () => {
@@ -194,11 +199,13 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }
     const validation = validateConfig(config);
     if (validation) {
+      setMessage('');
       setError(validation);
       return false;
     }
     const requiredFieldsValidation = validatePipelineRequiredFields(config, actions);
     if (requiredFieldsValidation) {
+      setMessage('');
       setError(requiredFieldsValidation);
       return false;
     }
@@ -224,7 +231,6 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setMessage(m.savingBeforeTabChange);
       const saved = await saveCurrent();
       if (!saved) {
-        setError(m.autosaveFailed);
         return;
       }
     }
@@ -390,6 +396,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       const parsed = normalizeConfig(JSON.parse(jsonText) as V10Config);
       const validation = validateConfig(parsed) || validatePipelineRequiredFields(parsed, actions);
       if (validation) {
+        setMessage('');
         setError(validation);
         return;
       }
@@ -513,7 +520,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         const existing = units[unit.name];
         if (existing && !replaceExistingUnits) {
           units[unit.name] = {
-            module: unit.module ? unit.module : (existing.module ?? ''),
+            module: existing.module ?? unit.module ?? '',
             rawConfig: existing.rawConfig ?? unit.rawConfig ?? '',
           };
           continue;
@@ -634,9 +641,22 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
                   {openGroups[group.name] && <MaquetteList items={group.items} selectedName={selectedName} onToggle={toggleMaquette} />}
                 </div>
               ))}
+              <div className="v10-group">
+                <div
+                  className="v10-group-header clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenUngrouped((value) => !value)}
+                  onKeyDown={(event) => handleToggleKey(event, () => setOpenUngrouped((value) => !value))}
+                >
+                  <span className="v10-chevron" aria-hidden="true">{openUngrouped ? '▾' : '▸'}</span>
+                  <strong>Sans groupe</strong>
+                  <span className="muted">{ungroupedMaquettes.length}</span>
+                  <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: '' }); setShowCreate(true); setOpenUngrouped(true); }}>Ajouter une maquette</Button>
+                </div>
+                {openUngrouped && <MaquetteList items={ungroupedMaquettes} selectedName={selectedName} onToggle={toggleMaquette} />}
+              </div>
             </div>
-            <h4>Sans groupe</h4>
-            <MaquetteList items={ungroupedMaquettes} selectedName={selectedName} onToggle={toggleMaquette} />
           </>
         )}
       </section>
@@ -660,7 +680,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           </div>
 
           <div className="v10-tabs">
-            {tabs.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button type="button" key={tab} className={tab === activeTab ? 'active' : ''} onClick={() => void changeTab(tab)}>
                 {tab === m.tabs.connectors ? (currentProduct.unitKind === 'agent' ? m.units.agents : m.units.connectors) : tab}
               </button>
@@ -670,7 +690,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
           {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
-          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file, importExistingKeys, replaceExistingUnits) => void scanCfg(file, importExistingKeys, replaceExistingUnits)} />}
+          {activeTab === m.tabs.connectors && productHasUnits(currentProduct) && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file, importExistingKeys, replaceExistingUnits) => void scanCfg(file, importExistingKeys, replaceExistingUnits)} />}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
               <ApiTokenEditor maquetteName={config.name} disabled={busy} />
@@ -1062,11 +1082,13 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
 
   useEffect(() => {
     setRows((current) => {
-      const existing = new Set(current.map((row) => row.name));
-      const missing = Object.entries(unitsForConfig(config, product))
-        .filter(([name]) => !existing.has(name))
-        .map(([name, connector]) => ({ id: makeID(), name, module: connector.module ?? '', rawConfig: connector.rawConfig }));
-      return missing.length > 0 ? [...current, ...missing] : current;
+      const ids = new Map(current.map((row) => [row.name, row.id]));
+      return Object.entries(unitsForConfig(config, product)).map(([name, connector]) => ({
+        id: ids.get(name) ?? makeID(),
+        name,
+        module: connector.module ?? '',
+        rawConfig: connector.rawConfig,
+      }));
     });
   }, [config.gedixConfig.connectors, config.gedixConfig.agents, config.gedixConfig.units, product.id]);
 
@@ -1408,13 +1430,15 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
   return (
     <div className="v10-execution">
       <details className="v10-execution-section v10-collapsible-section">
-        <summary>{m.execution.debugTitle.replace('connecteurs', product.unitPluralLabel)}</summary>
+        <summary>{productHasUnits(product) ? m.execution.debugTitle.replace('connecteurs', product.unitPluralLabel) : 'Services en debug'}</summary>
         <DebugTargetsEditor config={config} product={product} onChange={onConfigChange} />
       </details>
-      <details className="v10-execution-section v10-collapsible-section">
-        <summary>{product.unitKind === 'agent' ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</summary>
-        <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunModuleCommand} showTitle={false} />
-      </details>
+      {productSupportsModuleCommand(product) && (
+        <details className="v10-execution-section v10-collapsible-section">
+          <summary>{product.unitKind === 'agent' ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</summary>
+          <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunModuleCommand} showTitle={false} />
+        </details>
+      )}
       <section className="v10-execution-section">
         <h4>{m.execution.actionsTitle}</h4>
         <div className="button-row">
@@ -1611,9 +1635,20 @@ function unitRowsFromConfig(config: V10Config, product: V10Product): ConnectorFo
 }
 
 function unitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
+  if (!productHasUnits(product)) {
+    return {};
+  }
   const genericUnits = config.gedixConfig.units ?? {};
   const typedUnits = product.unitKind === 'agent' ? (config.gedixConfig.agents ?? {}) : (config.gedixConfig.connectors ?? {});
   return { ...genericUnits, ...typedUnits };
+}
+
+function productHasUnits(product: V10Product): boolean {
+  return (product.unitKind === 'connector' || product.unitKind === 'agent') && Boolean(product.unitCfgSectionName?.trim());
+}
+
+function productSupportsModuleCommand(product: V10Product): boolean {
+  return productHasUnits(product) && Boolean(product.unitModuleExecutablePattern?.trim());
 }
 
 function productFor(productId: string | undefined, products: V10Product[]): V10Product {
@@ -1639,6 +1674,7 @@ function productFor(productId: string | undefined, products: V10Product[]): V10P
     unitCfgSectionName: 'connectors',
     unitFolderPrefix: 'connector-',
     unitExecutableName: 'gx-connector.exe',
+    unitModuleExecutablePattern: 'gx-module-<unitName>.exe',
   };
 }
 

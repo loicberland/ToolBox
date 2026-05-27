@@ -239,6 +239,14 @@ func (p ProductDefinition) Service(name string) (ProductServiceDefinition, bool)
 	return ProductServiceDefinition{}, false
 }
 
+func (p ProductDefinition) HasUnits() bool {
+	return (p.UnitKind == UnitKindConnector || p.UnitKind == UnitKindAgent) && strings.TrimSpace(p.UnitCfgSectionName) != ""
+}
+
+func (p ProductDefinition) SupportsModuleCommand() bool {
+	return p.HasUnits() && strings.TrimSpace(p.UnitModuleExecutablePattern) != ""
+}
+
 func (p ProductDefinition) UnitModuleExecutableName(moduleName string) string {
 	pattern := strings.TrimSpace(p.UnitModuleExecutablePattern)
 	if pattern == "" {

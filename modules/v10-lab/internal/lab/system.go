@@ -213,6 +213,9 @@ func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Wri
 	if err != nil {
 		return err
 	}
+	if !product.SupportsModuleCommand() {
+		return fmt.Errorf("Ce produit ne supporte pas les commandes de module connecteur/agent.")
+	}
 	unitName := strings.TrimSpace(request.UnitName)
 	command := strings.TrimSpace(request.Command)
 	if unitName == "" {

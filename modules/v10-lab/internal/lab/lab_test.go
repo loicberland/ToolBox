@@ -474,6 +474,22 @@ func TestRunModuleCommandRequiresConfiguredModule(t *testing.T) {
 	}
 }
 
+func TestRunModuleCommandRejectsProductWithoutModulePattern(t *testing.T) {
+	var output bytes.Buffer
+	err := RunModuleCommand(Config{
+		Name:    "acass",
+		Product: GedixAcassV10,
+		GedixConfig: GedixConfig{
+			Connectors: map[string]ProductUnitConfig{
+				"connector-filesystem01": {Module: "filesystem"},
+			},
+		},
+	}, ModuleCommandRequest{UnitName: "connector-filesystem01", Command: "status"}, &output)
+	if err == nil || !strings.Contains(err.Error(), "Ce produit ne supporte pas les commandes de module connecteur/agent.") {
+		t.Fatalf("expected unsupported module command error, got %v", err)
+	}
+}
+
 func TestGXFrontDetectionPowerShellTargetsExactExecutable(t *testing.T) {
 	script := gxFrontDetectionPowerShell(`D:\Data\Gedix\gx-front.exe`)
 	for _, expected := range []string{
