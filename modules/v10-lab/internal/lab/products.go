@@ -7,10 +7,13 @@ import (
 )
 
 const (
-	GedixProdV10      = "gedix-prod-v10"
-	GedixToolStockV10 = "gedix-tool-stock-v10"
-	GedixWatchV10     = "gedix-watch-v10"
-	LegacyGedixV10    = "gedix-v10"
+	GedixProdV10         = "gedix-prod-v10"
+	GedixToolStockV10    = "gedix-tool-stock-v10"
+	GedixWatchV10        = "gedix-watch-v10"
+	GedixViewer          = "gedix-viewer"
+	GedixViewerSamson826 = "gedix-viewer-samson826"
+	GedixAcspcV10        = "gedix-acspc-v10"
+	GedixAcassV10        = "gedix-acass-v10"
 )
 
 type UnitKind string
@@ -47,6 +50,49 @@ type Product = ProductDefinition
 
 var productRegistry = []ProductDefinition{
 	{
+		ID:             GedixAcassV10,
+		Name:           "Gedix Acass V10",
+		Label:          "Gedix Acass V10",
+		Description:    "Produit Gedix Acass V10",
+		DefaultAppName: "acass",
+		Services: []ProductServiceDefinition{
+			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
+			{Name: "auth", Label: "auth", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "filestore", Label: "filestore", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "printer", Label: "printer", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
+		},
+		UnitKind:                    UnitKindConnector,
+		UnitSingularLabel:           "connecteur",
+		UnitPluralLabel:             "connecteurs",
+		UnitCfgSectionName:          "connectors",
+		UnitFolderPrefix:            "connector-",
+		UnitExecutableName:          "gx-connector.exe",
+		UnitModuleExecutablePattern: "",
+	},
+	{
+		ID:             GedixAcspcV10,
+		Name:           "Gedix Acspc V10",
+		Label:          "Gedix Acspc V10",
+		Description:    "Produit Gedix Acspc V10",
+		DefaultAppName: "acspc",
+		Services: []ProductServiceDefinition{
+			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
+			{Name: "auth", Label: "auth", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "filestore", Label: "filestore", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "printer", Label: "printer", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true},
+		},
+		UnitKind:                    UnitKindConnector,
+		UnitSingularLabel:           "connecteur",
+		UnitPluralLabel:             "connecteurs",
+		UnitCfgSectionName:          "connectors",
+		UnitFolderPrefix:            "connector-",
+		UnitExecutableName:          "gx-connector.exe",
+		UnitModuleExecutablePattern: "",
+	},
+	{
 		ID:             GedixProdV10,
 		Name:           "Gedix Prod V10",
 		Label:          "Gedix Prod V10",
@@ -72,9 +118,9 @@ var productRegistry = []ProductDefinition{
 	},
 	{
 		ID:             GedixToolStockV10,
-		Name:           "Tool Stock V10",
-		Label:          "Tool Stock V10",
-		Description:    "Produit Tool Stock V10",
+		Name:           "Gedix Tool Stock V10",
+		Label:          "Gedix Tool Stock V10",
+		Description:    "Produit Gedix Tool Stock V10",
 		DefaultAppName: "tool_stock",
 		Services: []ProductServiceDefinition{
 			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
@@ -93,10 +139,46 @@ var productRegistry = []ProductDefinition{
 		UnitModuleExecutablePattern: "gx-module-<unitName>.exe",
 	},
 	{
+		ID:             GedixViewer,
+		Name:           "Gedix Viewer",
+		Label:          "Gedix Viewer",
+		Description:    "Produit Gedix Viewer",
+		DefaultAppName: "viewer",
+		Services: []ProductServiceDefinition{
+			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
+			{Name: "legacy", Label: "legacy", HasDatabase: true, SupportsExtraKeys: true},
+		},
+		UnitKind:                    "",
+		UnitSingularLabel:           "",
+		UnitPluralLabel:             "",
+		UnitCfgSectionName:          "",
+		UnitFolderPrefix:            "",
+		UnitExecutableName:          "",
+		UnitModuleExecutablePattern: "",
+	},
+	{
+		ID:             GedixViewerSamson826,
+		Name:           "Gedix Viewer Samson826",
+		Label:          "Gedix Viewer Samson826",
+		Description:    "Produit Gedix Viewer Samson826",
+		DefaultAppName: "viewerSamson826",
+		Services: []ProductServiceDefinition{
+			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
+			{Name: "legacy", Label: "legacy", HasDatabase: true, SupportsExtraKeys: true},
+		},
+		UnitKind:                    "",
+		UnitSingularLabel:           "",
+		UnitPluralLabel:             "",
+		UnitCfgSectionName:          "",
+		UnitFolderPrefix:            "",
+		UnitExecutableName:          "",
+		UnitModuleExecutablePattern: "",
+	},
+	{
 		ID:             GedixWatchV10,
-		Name:           "Watch V10",
-		Label:          "Watch V10",
-		Description:    "Produit Watch V10",
+		Name:           "Gedix Watch V10",
+		Label:          "Gedix Watch V10",
+		Description:    "Produit Gedix Watch V10",
 		DefaultAppName: "watch",
 		Services: []ProductServiceDefinition{
 			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
@@ -105,7 +187,8 @@ var productRegistry = []ProductDefinition{
 			{Name: "filestore", Label: "filestore", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "m2m", Label: "m2m", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
-			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true}},
+			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true},
+		},
 		UnitKind:                    UnitKindAgent,
 		UnitSingularLabel:           "agent",
 		UnitPluralLabel:             "agents",
@@ -142,9 +225,6 @@ func ProductExists(productID string) bool {
 func NormalizeProductID(productID string) string {
 	productID = strings.TrimSpace(productID)
 	if productID == "" {
-		return GedixProdV10
-	}
-	if productID == LegacyGedixV10 {
 		return GedixProdV10
 	}
 	return productID

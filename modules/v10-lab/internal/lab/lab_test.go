@@ -288,9 +288,6 @@ func TestProductRegistryContainsV10Products(t *testing.T) {
 	if _, err := ProductDefinitionByID("unknown-product"); err == nil || !strings.Contains(err.Error(), "produit inconnu") {
 		t.Fatalf("expected clear unknown product error, got %v", err)
 	}
-	if NormalizeProductID(LegacyGedixV10) != GedixProdV10 {
-		t.Fatalf("legacy gedix-v10 should map to %s", GedixProdV10)
-	}
 }
 
 func TestProductServicesAreIsolated(t *testing.T) {
