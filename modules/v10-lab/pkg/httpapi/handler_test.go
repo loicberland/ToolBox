@@ -292,6 +292,86 @@ host = "localhost"
 	}
 }
 
+func TestScanCfgCanImportExistingRawKeys(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	config.Pipeline = nil
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	cfg := `[environments.demo.applications.prod.connectors.connector-filesystem01]
+# commented=true
+type="module-filesystem"
+host="localhost"
+
+[environments.demo.applications.prod.connectors.connector-dnc-01]
+type = module-focas
+`
+	var scan ScanCfgResponse
+	postMultipart(t, router, "/api/v10-lab/maquettes/ticket-T5808/scan-cfg", "gedix.cfg", []byte(cfg), map[string]string{"importExistingKeys": "true"}, &scan, http.StatusOK)
+	if len(scan.Connectors) != 2 || scan.Connectors[0].RawConfig != "type=\"module-filesystem\"\nhost=\"localhost\"" {
+		t.Fatalf("unexpected scan response: %#v", scan)
+	}
+}
+
+func TestMaquetteOpenURLReadsNonCommentedCfgKeys(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	target := filepath.Join(root, "Gedix")
+	mustWrite(t, filepath.Join(target, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(target, "env_live", "app_prod", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(target, "gedix.cfg"), "# fqdn=old\nfqdn=example.test\n# port=81\nport=8443\ntls=true\n")
+	config := testConfig()
+	config.Pipeline = nil
+	config.Maquette.TargetPath = target
+	config.Maquette.EnvName = "live"
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	var response MaquetteOpenURLResponse
+	getJSON(t, router, "/api/v10-lab/maquettes/ticket-T5808/open-url", &response, http.StatusOK)
+	if response.URL != "https://example.test:8443" {
+		t.Fatalf("unexpected open URL: %#v", response)
+	}
+}
+
+func TestImportExistingMaquettesSkipsKnownTargetAndDoesNotRecurse(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	scanRoot := filepath.Join(root, "clients")
+	maquetteRoot := filepath.Join(scanRoot, "Client", "Gedix")
+	mustWrite(t, filepath.Join(maquetteRoot, "gx.exe"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "license.enc"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "license.key"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "env_live", "app_prod", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "nested", "gx.exe"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "nested", "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "nested", "license.enc"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "nested", "license.key"), "")
+	mustWrite(t, filepath.Join(maquetteRoot, "nested", "env_live", "app_prod", "gx-app.exe"), "")
+
+	var first ImportExistingMaquettesResponse
+	postJSONInto(t, router, "/api/v10-lab/maquettes/import-existing", ImportExistingMaquettesRequest{RootPath: scanRoot}, &first, http.StatusOK)
+	if len(first.Imported) != 1 || first.Imported[0].Name != "Client" || first.Imported[0].TargetPath != maquetteRoot {
+		t.Fatalf("unexpected import response: %#v", first)
+	}
+
+	var second ImportExistingMaquettesResponse
+	postJSONInto(t, router, "/api/v10-lab/maquettes/import-existing", ImportExistingMaquettesRequest{RootPath: scanRoot}, &second, http.StatusOK)
+	if len(second.Imported) != 0 || len(second.Skipped) != 1 {
+		t.Fatalf("unexpected second import response: %#v", second)
+	}
+}
+
 func testConfig() lab.Config {
 	zipPath := filepath.Join(os.TempDir(), "v10-lab-test-release.zip")
 	_ = os.WriteFile(zipPath, []byte("zip"), 0644)

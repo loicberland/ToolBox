@@ -37,8 +37,10 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/db-templates", h.dbTemplates).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/default-target", h.defaultTarget).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/releases/select-path", h.selectReleasePath).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/folders/select-path", h.selectFolderPath).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes", h.listMaquettes).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes", h.createMaquette).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/import-existing", h.importExistingMaquettes).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquette-groups", h.listMaquetteGroups).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquette-groups", h.createMaquetteGroup).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquette-groups/{name}", h.updateMaquetteGroup).Methods(http.MethodPut)
@@ -53,6 +55,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run", h.runMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/actions/{actionId}/run", h.runMaquetteAction).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/module-command/run", h.runModuleCommand).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/open-url", h.maquetteOpenURL).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current/logs", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/scan-cfg", h.scanCfg).Methods(http.MethodPost)
@@ -106,6 +109,20 @@ type LogSummary struct {
 type SelectReleasePathResponse struct {
 	Path      string `json:"path,omitempty"`
 	Cancelled bool   `json:"cancelled"`
+}
+
+type ImportExistingMaquettesRequest struct {
+	RootPath string `json:"rootPath"`
+}
+
+type ImportExistingMaquettesResponse struct {
+	Imported []MaquetteSummary `json:"imported"`
+	Skipped  []string          `json:"skipped"`
+	Warnings []string          `json:"warnings"`
+}
+
+type MaquetteOpenURLResponse struct {
+	URL string `json:"url"`
 }
 
 type ScanUnit struct {
@@ -181,6 +198,19 @@ func (h *Handler) selectReleasePath(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, SelectReleasePathResponse{Path: path, Cancelled: cancelled})
 }
 
+func (h *Handler) selectFolderPath(w http.ResponseWriter, _ *http.Request) {
+	if runtime.GOOS != "windows" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "la selection graphique de dossier est disponible uniquement sous Windows; saisissez le chemin manuellement"})
+		return
+	}
+	path, cancelled, err := openWindowsFolderDialog()
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, SelectReleasePathResponse{Path: path, Cancelled: cancelled})
+}
+
 func (h *Handler) listMaquettes(w http.ResponseWriter, _ *http.Request) {
 	items, err := lab.ListMaquettes()
 	if err != nil {
@@ -213,6 +243,19 @@ func (h *Handler) createMaquette(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) importExistingMaquettes(w http.ResponseWriter, r *http.Request) {
+	var request ImportExistingMaquettesRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	result, err := importExistingMaquettes(request.RootPath)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) listMaquetteGroups(w http.ResponseWriter, _ *http.Request) {
@@ -388,6 +431,20 @@ func (h *Handler) runModuleCommand(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, run.snapshot())
 }
 
+func (h *Handler) maquetteOpenURL(w http.ResponseWriter, r *http.Request) {
+	config, _, err := lab.LoadRegisteredConfig(mux.Vars(r)["name"])
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	url, err := maquetteOpenURL(config)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, MaquetteOpenURLResponse{URL: url})
+}
+
 func (h *Handler) currentRun(w http.ResponseWriter, r *http.Request) {
 	run := h.getRun(mux.Vars(r)["name"])
 	if run == nil {
@@ -429,7 +486,8 @@ func (h *Handler) scanCfg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	appName := firstNonEmpty(r.FormValue("appName"), config.Maquette.AppName, product.DefaultAppName, "prod")
-	result, err := scanUnits(string(payload), envName, appName, product)
+	importExistingKeys := strings.EqualFold(r.FormValue("importExistingKeys"), "true")
+	result, err := scanUnits(string(payload), envName, appName, product, importExistingKeys)
 	if err != nil {
 		respondError(w, err)
 		return
@@ -695,7 +753,7 @@ func (r *currentRun) snapshot() ExecutionResponse {
 	}
 }
 
-func scanUnits(content string, envName string, appName string, product lab.ProductDefinition) (ScanCfgResponse, error) {
+func scanUnits(content string, envName string, appName string, product lab.ProductDefinition, importExistingKeys bool) (ScanCfgResponse, error) {
 	sectionPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.%s\.([^\]]+)\]\s*$`, regexp.QuoteMeta(product.UnitCfgSectionName)))
 	envs := map[string]bool{}
 	units := []ScanUnit{}
@@ -717,7 +775,11 @@ func scanUnits(content string, envName string, appName string, product lab.Produ
 		if module == "" {
 			warnings = append(warnings, fmt.Sprintf("type absent pour %s %s", product.UnitSingularLabel, matches[3]))
 		}
-		units = append(units, ScanUnit{Name: matches[3], Module: module, RawConfig: ""})
+		rawConfig := ""
+		if importExistingKeys {
+			rawConfig = scanUnitRawConfig(lines, index+1)
+		}
+		units = append(units, ScanUnit{Name: matches[3], Module: module, RawConfig: rawConfig})
 	}
 	if envName == "" {
 		if len(envs) == 1 {
@@ -740,8 +802,24 @@ func scanUnits(content string, envName string, appName string, product lab.Produ
 	return response, nil
 }
 
+func scanUnitRawConfig(lines []string, start int) string {
+	items := []string{}
+	for index := start; index < len(lines); index++ {
+		line := strings.TrimSpace(stripCfgComment(lines[index]))
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			break
+		}
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if _, _, ok := cfgKeyValue(line); ok {
+			items = append(items, line)
+		}
+	}
+	return strings.Join(items, "\n")
+}
+
 func scanUnitModule(lines []string, start int) string {
-	typePattern := regexp.MustCompile(`(?i)^\s*type\s*=\s*"?([^"]+?)"?\s*$`)
 	for index := start; index < len(lines); index++ {
 		line := strings.TrimSpace(stripCfgComment(lines[index]))
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
@@ -750,12 +828,302 @@ func scanUnitModule(lines []string, start int) string {
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
 			continue
 		}
-		matches := typePattern.FindStringSubmatch(line)
-		if len(matches) == 2 {
-			return lab.NormalizeModuleType(matches[1])
+		key, value, ok := cfgKeyValue(line)
+		if ok && strings.EqualFold(key, "type") {
+			return lab.NormalizeModuleType(value)
 		}
 	}
 	return ""
+}
+
+func cfgKeyValue(line string) (string, string, bool) {
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	key := strings.TrimSpace(parts[0])
+	value := strings.TrimSpace(parts[1])
+	if key == "" {
+		return "", "", false
+	}
+	value = strings.Trim(value, `"`)
+	value = strings.Trim(value, `'`)
+	value = strings.TrimSpace(value)
+	return key, value, true
+}
+
+func maquetteOpenURL(config lab.Config) (string, error) {
+	lab.ApplyDefaults(&config)
+	cfgPath, err := existingCfgPath(config)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return "", err
+	}
+	values := map[string]string{}
+	for _, rawLine := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(stripCfgComment(rawLine))
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		key, value, ok := cfgKeyValue(line)
+		if ok {
+			values[strings.ToLower(key)] = value
+		}
+	}
+	fqdn := strings.TrimSpace(values["fqdn"])
+	if fqdn == "" {
+		return "", fmt.Errorf("fqdn absent du fichier cfg")
+	}
+	port := strings.TrimSpace(values["port"])
+	if port == "" {
+		port = "80"
+	}
+	scheme := "http"
+	if strings.EqualFold(strings.TrimSpace(values["tls"]), "true") {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s:%s", scheme, fqdn, port), nil
+}
+
+func existingCfgPath(config lab.Config) (string, error) {
+	root := lab.ResolveMaquetteTargetPath(config)
+	frontExe := filepath.Join(root, "gx-front.exe")
+	if _, err := os.Stat(frontExe); err != nil {
+		return "", fmt.Errorf("gx-front.exe introuvable dans %s: %w", root, err)
+	}
+	envName := strings.TrimSpace(config.Maquette.EnvName)
+	if envName == "" {
+		envName = "live"
+	}
+	envDir := envName
+	if !strings.HasPrefix(strings.ToLower(envDir), "env_") {
+		envDir = "env_" + envDir
+	}
+	envPath := filepath.Join(root, envDir)
+	if info, err := os.Stat(envPath); err != nil || !info.IsDir() {
+		if err == nil {
+			err = fmt.Errorf("not a directory")
+		}
+		return "", fmt.Errorf("env configuré %q introuvable: %w", envName, err)
+	}
+	appName := strings.TrimSpace(config.Maquette.AppName)
+	if appName == "" {
+		product, _ := lab.ProductDefinitionByID(config.Product)
+		appName = firstNonEmpty(product.DefaultAppName, "prod")
+	}
+	appPath := filepath.Join(envPath, "app_"+appName)
+	if info, err := os.Stat(appPath); err != nil || !info.IsDir() {
+		if err == nil {
+			err = fmt.Errorf("not a directory")
+		}
+		return "", fmt.Errorf("application app_%s introuvable dans %s: %w", appName, envPath, err)
+	}
+	cfgs, err := filepath.Glob(filepath.Join(root, "*.cfg"))
+	if err != nil {
+		return "", err
+	}
+	for _, cfg := range cfgs {
+		if strings.EqualFold(filepath.Base(cfg), "gedix.cfg") {
+			return cfg, nil
+		}
+	}
+	if len(cfgs) == 1 {
+		return cfgs[0], nil
+	}
+	if len(cfgs) > 1 {
+		return "", fmt.Errorf("plusieurs fichiers .cfg trouvés dans %s; conservez gedix.cfg ou corrigez la maquette", root)
+	}
+	return "", fmt.Errorf("aucun fichier .cfg trouvé dans %s", root)
+}
+
+func importExistingMaquettes(rootPath string) (ImportExistingMaquettesResponse, error) {
+	rootPath = strings.TrimSpace(rootPath)
+	if rootPath == "" {
+		return ImportExistingMaquettesResponse{}, fmt.Errorf("rootPath requis")
+	}
+	rootPath = filepath.Clean(rootPath)
+	info, err := os.Stat(rootPath)
+	if err != nil {
+		return ImportExistingMaquettesResponse{}, err
+	}
+	if !info.IsDir() {
+		return ImportExistingMaquettesResponse{}, fmt.Errorf("rootPath doit être un dossier")
+	}
+	existingTargets, existingNames, err := registeredMaquetteIndexes()
+	if err != nil {
+		return ImportExistingMaquettesResponse{}, err
+	}
+	result := ImportExistingMaquettesResponse{Imported: []MaquetteSummary{}, Skipped: []string{}, Warnings: []string{}}
+	err = filepath.WalkDir(rootPath, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %v", path, walkErr))
+			if entry != nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !entry.IsDir() {
+			return nil
+		}
+		found, envName, appName, productID := detectExistingMaquette(path)
+		if !found {
+			return nil
+		}
+		key := cleanPathKey(path)
+		if existingTargets[key] {
+			result.Skipped = append(result.Skipped, path)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Maquette déjà connue, chemin ignoré: %s", path))
+			return filepath.SkipDir
+		}
+		name := uniqueMaquetteName(importedMaquetteBaseName(path), existingNames)
+		config := lab.Config{
+			Name:    name,
+			Product: productID,
+			Maquette: lab.MaquetteConfig{
+				TargetPath: path,
+				EnvName:    envName,
+				AppName:    appName,
+			},
+			GedixConfig: lab.GedixConfig{
+				Port:       80,
+				Services:   map[string]lab.ServiceDBConfig{},
+				Connectors: map[string]lab.ProductUnitConfig{},
+				Agents:     map[string]lab.ProductUnitConfig{},
+			},
+			Runtime:  lab.RuntimeConfig{OpenConsole: true},
+			Pipeline: []lab.PipelineStep{},
+		}
+		if _, err := lab.SaveRegisteredConfig(config); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Import impossible pour %s: %v", path, err))
+			return filepath.SkipDir
+		}
+		existingTargets[key] = true
+		existingNames[strings.ToLower(name)] = true
+		result.Imported = append(result.Imported, summaryFor(config))
+		return filepath.SkipDir
+	})
+	if err != nil {
+		return ImportExistingMaquettesResponse{}, err
+	}
+	return result, nil
+}
+
+func registeredMaquetteIndexes() (map[string]bool, map[string]bool, error) {
+	items, err := lab.ListMaquettes()
+	if err != nil {
+		return nil, nil, err
+	}
+	targets := map[string]bool{}
+	names := map[string]bool{}
+	for _, item := range items {
+		config, _, err := lab.LoadRegisteredConfig(item.Name)
+		if err != nil {
+			continue
+		}
+		targets[cleanPathKey(lab.ResolveMaquetteTargetPath(config))] = true
+		names[strings.ToLower(config.Name)] = true
+	}
+	return targets, names, nil
+}
+
+func detectExistingMaquette(path string) (bool, string, string, string) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, "", "", ""
+	}
+	hasGX := false
+	hasFront := false
+	hasEnc := false
+	hasKey := false
+	envs := []string{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			if strings.HasPrefix(strings.ToLower(name), "env_") {
+				envs = append(envs, name)
+			}
+			continue
+		}
+		switch {
+		case strings.EqualFold(name, "gx.exe"):
+			hasGX = true
+		case strings.EqualFold(name, "gx-front.exe"):
+			hasFront = true
+		case strings.EqualFold(filepath.Ext(name), ".enc"):
+			hasEnc = true
+		case strings.EqualFold(filepath.Ext(name), ".key"):
+			hasKey = true
+		}
+	}
+	if !hasGX || !hasFront || !hasEnc || !hasKey || len(envs) == 0 {
+		return false, "", "", ""
+	}
+	sort.Strings(envs)
+	envName := envs[0][len("env_"):]
+	appName, productID := detectImportedProduct(filepath.Join(path, envs[0]))
+	return true, envName, appName, productID
+}
+
+func detectImportedProduct(envPath string) (string, string) {
+	apps := []string{}
+	entries, err := os.ReadDir(envPath)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(strings.ToLower(entry.Name()), "app_") {
+				apps = append(apps, entry.Name()[len("app_"):])
+			}
+		}
+	}
+	defaultProduct, _ := lab.ProductDefinitionByID(lab.GedixProdV10)
+	defaultApp := firstNonEmpty(defaultProduct.DefaultAppName, "prod")
+	if len(apps) != 1 {
+		return defaultApp, lab.GedixProdV10
+	}
+	appName := apps[0]
+	matches := []lab.ProductDefinition{}
+	for _, product := range lab.Products() {
+		if strings.EqualFold(product.DefaultAppName, appName) {
+			matches = append(matches, product)
+		}
+	}
+	if len(matches) == 1 {
+		return appName, matches[0].ID
+	}
+	return appName, lab.GedixProdV10
+}
+
+func importedMaquetteBaseName(path string) string {
+	base := filepath.Base(path)
+	if strings.EqualFold(base, "Gedix") {
+		parent := filepath.Base(filepath.Dir(path))
+		if strings.TrimSpace(parent) != "" && parent != "." && parent != string(filepath.Separator) {
+			return parent
+		}
+	}
+	return base
+}
+
+func uniqueMaquetteName(base string, existing map[string]bool) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "Maquette"
+	}
+	candidate := base
+	for index := 2; existing[strings.ToLower(candidate)]; index++ {
+		candidate = fmt.Sprintf("%s-%d", base, index)
+	}
+	return candidate
+}
+
+func cleanPathKey(path string) string {
+	abs, err := filepath.Abs(filepath.Clean(path))
+	if err == nil {
+		path = abs
+	}
+	return strings.ToLower(path)
 }
 
 func stripCfgComment(line string) string {
@@ -780,6 +1148,26 @@ $dialog.CheckFileExists = $true
 $dialog.Multiselect = $false
 if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
     Write-Output $dialog.FileName
+}`
+	cmd := exec.Command("powershell", "-NoProfile", "-STA", "-Command", script)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", false, err
+	}
+	path := strings.TrimSpace(string(output))
+	if path == "" {
+		return "", true, nil
+	}
+	return path, false, nil
+}
+
+func openWindowsFolderDialog() (string, bool, error) {
+	script := `Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = "Selectionner le repertoire racine des maquettes Gedix V10"
+$dialog.ShowNewFolderButton = $false
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $dialog.SelectedPath
 }`
 	cmd := exec.Command("powershell", "-NoProfile", "-STA", "-Command", script)
 	output, err := cmd.Output()

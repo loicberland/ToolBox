@@ -1742,6 +1742,34 @@ textarea {
   margin: 0;
 }
 
+.v10-collapsible-section summary {
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.v10-collapsible-section[open] summary {
+  margin-bottom: 2px;
+}
+
+.v10-inline-checkbox {
+  width: auto;
+}
+
+.v10-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.v10-required-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--danger);
+  flex: 0 0 auto;
+}
+
 .readonly-notice.warning {
   display: grid;
   gap: 8px;

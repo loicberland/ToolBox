@@ -404,6 +404,35 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
+  async function importExistingMaquettes() {
+    await run(async () => {
+      const selected = await v10LabApi.selectFolderPath();
+      if (selected.cancelled || !selected.path) {
+        return;
+      }
+      const result = await v10LabApi.importExistingMaquettes(selected.path);
+      await reloadList();
+      setMessage(`${result.imported.length} maquette(s) importée(s), ${result.skipped.length} ignorée(s).${result.warnings.length ? ` ${result.warnings.join(' ')}` : ''}`);
+    });
+  }
+
+  async function openCurrentMaquetteURL(name = selectedName) {
+    if (!name) {
+      return;
+    }
+    if (config && isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
+    }
+    await run(async () => {
+      const result = await v10LabApi.getMaquetteOpenUrl(name);
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+      setMessage(`Ouverture de la maquette : ${result.url}`);
+    });
+  }
+
   async function closeMaquette() {
     if (isDirty) {
       const saved = await saveCurrent();
@@ -456,7 +485,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
-  async function scanCfg(file: File) {
+  async function scanCfg(file: File, importExistingKeys: boolean) {
     if (!config) {
       return;
     }
@@ -466,7 +495,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }
     await run(async () => {
       const product = productFor(config.product, products);
-      const result = await v10LabApi.scanCfg(config.name, file, config.maquette.envName, config.maquette.appName || product.defaultAppName || 'prod');
+      const result = await v10LabApi.scanCfg(config.name, file, config.maquette.envName, config.maquette.appName || product.defaultAppName || 'prod', importExistingKeys);
       const scannedUnits = result.units ?? result.connectors ?? [];
       const unitKey = product.unitKind === 'agent' ? 'agents' : 'connectors';
       const units = { ...(config.gedixConfig[unitKey] ?? {}) };
@@ -474,7 +503,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         const existing = units[unit.name];
         units[unit.name] = {
           module: unit.module ? unit.module : (existing?.module ?? ''),
-          rawConfig: existing?.rawConfig ?? unit.rawConfig,
+          rawConfig: importExistingKeys ? unit.rawConfig : (existing?.rawConfig ?? unit.rawConfig),
         };
       }
       updateConfig({
@@ -533,6 +562,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <p>{m.description}</p>
         </div>
         <div className="page-actions">
+          <Button type="button" variant="secondary" onClick={() => void importExistingMaquettes()} disabled={busy}>Scanner maquettes existantes</Button>
           <Button type="button" onClick={() => setShowCreate((value) => !value)}>{m.newMaquette}</Button>
         </div>
       </header>
@@ -622,7 +652,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
           {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
-          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file) => void scanCfg(file)} />}
+          {activeTab === m.tabs.connectors && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file, importExistingKeys) => void scanCfg(file, importExistingKeys)} />}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
               <ApiTokenEditor maquetteName={config.name} disabled={busy} />
@@ -643,6 +673,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               onUpdate={() => setConfirmUpdate(true)}
               onConfigure={() => void runSystemAction('configure-gedix-cfg')}
               onStart={() => void runSystemAction('start-maquette')}
+              onOpenMaquette={() => void openCurrentMaquetteURL()}
               onRunPipeline={() => void runCurrent()}
               onRunModuleCommand={(unitName, command) => void runModuleCommand(unitName, command)}
               onKill={() => setConfirmKill(true)}
@@ -1002,8 +1033,9 @@ function ExtraKeysEditor({ serviceKey, service, onChange }: { serviceKey: string
   );
 }
 
-function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void; onScanCfg: (file: File) => void }) {
+function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void; onScanCfg: (file: File, importExistingKeys: boolean) => void }) {
   const [rows, setRows] = useState<ConnectorFormRow[]>(() => unitRowsFromConfig(config, product));
+  const [importExistingKeys, setImportExistingKeys] = useState(false);
 
   useEffect(() => {
     setRows(unitRowsFromConfig(config, product));
@@ -1048,11 +1080,15 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               if (file) {
-                onScanCfg(file);
+                onScanCfg(file, importExistingKeys);
               }
               event.currentTarget.value = '';
             }}
           />
+        </label>
+        <label className="checkbox-row v10-inline-checkbox">
+          <input type="checkbox" checked={importExistingKeys} onChange={(event) => setImportExistingKeys(event.currentTarget.checked)} />
+          Importer clés existantes
         </label>
       </div>
       {duplicate && <p className="error">{m.duplicateConnector}</p>}
@@ -1258,22 +1294,32 @@ function ApiTokenEditor({ maquetteName, disabled }: { maquetteName: string; disa
 }
 
 function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields'][number]; value: unknown; onChange: (value: unknown) => void }) {
+  const label = <FieldLabel field={field} />;
   if (field.type === 'bool') {
-    return <label className="checkbox-row"><input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.currentTarget.checked)} />{field.label}</label>;
+    return <label className="checkbox-row"><input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.currentTarget.checked)} />{label}</label>;
   }
   if (field.type === 'string[]') {
-    return <label>{field.label}<input value={Array.isArray(value) ? value.join(',') : ''} onChange={(event) => onChange(event.currentTarget.value.split(',').map((item) => item.trim()).filter(Boolean))} /></label>;
+    return <label>{label}<input value={Array.isArray(value) ? value.join(',') : ''} onChange={(event) => onChange(event.currentTarget.value.split(',').map((item) => item.trim()).filter(Boolean))} /></label>;
   }
   if (field.type === 'text') {
-    return <label>{field.label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{field.description && <span className="muted">{field.description}</span>}</label>;
+    return <label>{label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{field.description && <span className="muted">{field.description}</span>}</label>;
   }
   if (field.type === 'number') {
-    return <label>{field.label}<input type="number" value={typeof value === 'number' ? value : ''} onChange={(event) => onChange(Number(event.currentTarget.value))} /></label>;
+    return <label>{label}<input type="number" value={typeof value === 'number' ? value : ''} onChange={(event) => onChange(Number(event.currentTarget.value))} /></label>;
   }
-  return <label>{field.label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
+  return <label>{label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
 }
 
-function ModuleCommandPanel({ config, product, disabled, onRun }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void }) {
+function FieldLabel({ field }: { field: V10Action['fields'][number] }) {
+  return (
+    <span className="v10-field-label">
+      {field.label}
+      {field.required && <span className="v10-required-dot" title="Champ obligatoire" aria-label="Champ obligatoire" role="img" />}
+    </span>
+  );
+}
+
+function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void; showTitle?: boolean }) {
   const unitNames = Object.keys(unitsForConfig(config, product)).sort((left, right) => left.localeCompare(right));
   const [unitName, setUnitName] = useState(unitNames[0] ?? '');
   const [command, setCommand] = useState('');
@@ -1288,7 +1334,7 @@ function ModuleCommandPanel({ config, product, disabled, onRun }: { config: V10C
 
   return (
     <div className="v10-module-command">
-      <h4>{isAgent ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</h4>
+      {showTitle && <h4>{isAgent ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</h4>}
       <p className="muted">{m.moduleCommand.help}</p>
       {unitNames.length === 0 ? (
         <p className="muted">{isAgent ? m.moduleCommand.noAgent : m.moduleCommand.noConnector}</p>
@@ -1314,7 +1360,7 @@ function ModuleCommandPanel({ config, product, disabled, onRun }: { config: V10C
   );
 }
 
-function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onRunPipeline, onRunModuleCommand, onKill, onRefreshLogs, onReadLog }: {
+function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onOpenMaquette, onRunPipeline, onRunModuleCommand, onKill, onRefreshLogs, onReadLog }: {
   config: V10Config;
   product: V10Product;
   busy: boolean;
@@ -1327,6 +1373,7 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
   onUpdate: () => void;
   onConfigure: () => void;
   onStart: () => void;
+  onOpenMaquette: () => void;
   onRunPipeline: () => void;
   onRunModuleCommand: (unitName: string, command: string) => void;
   onKill: () => void;
@@ -1337,13 +1384,14 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
   const disabled = busy || runState === 'running';
   return (
     <div className="v10-execution">
-      <section className="v10-execution-section">
-        <h4>{m.execution.debugTitle.replace('connecteurs', product.unitPluralLabel)}</h4>
+      <details className="v10-execution-section v10-collapsible-section">
+        <summary>{m.execution.debugTitle.replace('connecteurs', product.unitPluralLabel)}</summary>
         <DebugTargetsEditor config={config} product={product} onChange={onConfigChange} />
-      </section>
-      <section className="v10-execution-section">
-        <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunModuleCommand} />
-      </section>
+      </details>
+      <details className="v10-execution-section v10-collapsible-section">
+        <summary>{product.unitKind === 'agent' ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</summary>
+        <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunModuleCommand} showTitle={false} />
+      </details>
       <section className="v10-execution-section">
         <h4>{m.execution.actionsTitle}</h4>
         <div className="button-row">
@@ -1351,6 +1399,7 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
           <Button type="button" variant="secondary" onClick={onUpdate} disabled={disabled}>{m.execution.updateMaquette}</Button>
           <Button type="button" variant="secondary" onClick={onConfigure} disabled={disabled}>{m.execution.configureCfg}</Button>
           <Button type="button" variant="success" onClick={onStart} disabled={disabled}>{m.execution.startMaquette}</Button>
+          <Button type="button" variant="secondary" onClick={onOpenMaquette} disabled={disabled}>Ouvrir maquette</Button>
         </div>
       </section>
       <section className="v10-execution-section">

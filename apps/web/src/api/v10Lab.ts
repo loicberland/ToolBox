@@ -139,6 +139,12 @@ export type SelectReleasePathResponse = {
   cancelled: boolean;
 };
 
+export type ImportExistingMaquettesResponse = {
+  imported: MaquetteSummary[];
+  skipped: string[];
+  warnings: string[];
+};
+
 export type ScanCfgResponse = {
   envName: string;
   appName: string;
@@ -190,12 +196,14 @@ export const v10LabApi = {
   dbTemplates: () => request<DBTemplate[]>('/v10-lab/db-templates'),
   defaultTarget: (name: string) => request<{ targetPath: string }>(`/v10-lab/default-target?name=${encodeURIComponent(name)}`),
   selectReleasePath: () => request<SelectReleasePathResponse>('/v10-lab/releases/select-path', { method: 'POST' }),
+  selectFolderPath: () => request<SelectReleasePathResponse>('/v10-lab/folders/select-path', { method: 'POST' }),
   listMaquettes: () => request<MaquetteSummary[]>('/v10-lab/maquettes'),
   listMaquetteGroups: () => request<MaquetteGroup[]>('/v10-lab/maquette-groups'),
   createMaquetteGroup: (name: string) => request<MaquetteGroup>('/v10-lab/maquette-groups', jsonRequest('POST', { name })),
   updateMaquetteGroup: (name: string, nextName: string) => request<MaquetteGroup>(`/v10-lab/maquette-groups/${encodeURIComponent(name)}`, jsonRequest('PUT', { name: nextName })),
   deleteMaquetteGroup: (name: string) => request<void>(`/v10-lab/maquette-groups/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   createMaquette: (config: V10Config) => request('/v10-lab/maquettes', jsonRequest('POST', config)),
+  importExistingMaquettes: (rootPath: string) => request<ImportExistingMaquettesResponse>('/v10-lab/maquettes/import-existing', jsonRequest('POST', { rootPath })),
   getMaquette: (name: string) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`),
   updateMaquette: (name: string, config: V10Config) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, jsonRequest('PUT', config)),
   deleteMaquette: (name: string) => request<void>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, { method: 'DELETE' }),
@@ -206,9 +214,10 @@ export const v10LabApi = {
   runMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run`, { method: 'POST' }),
   runAction: (name: string, actionId: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/actions/${encodeURIComponent(actionId)}/run`, { method: 'POST' }),
   runModuleCommand: (name: string, unitName: string, command: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/module-command/run`, jsonRequest('POST', { unitName, command })),
+  getMaquetteOpenUrl: (name: string) => request<{ url: string }>(`/v10-lab/maquettes/${encodeURIComponent(name)}/open-url`),
   currentRun: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run/current`),
   logs: (name: string) => request<LogSummary[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/logs`),
-  scanCfg: (name: string, file: File, envName: string, appName: string) => scanCfg(name, file, envName, appName),
+  scanCfg: (name: string, file: File, envName: string, appName: string, importExistingKeys = false) => scanCfg(name, file, envName, appName, importExistingKeys),
   logFile: async (name: string, logFile: string) => {
     const response = await fetch(`${API_BASE_URL}/v10-lab/maquettes/${encodeURIComponent(name)}/logs/${encodeURIComponent(logFile)}`);
     if (!response.ok) {
@@ -219,11 +228,12 @@ export const v10LabApi = {
   killGXProcesses: () => request<ExecutionResponse>('/v10-lab/kill-gx-processes', jsonRequest('POST', { force: true })),
 };
 
-async function scanCfg(name: string, file: File, envName: string, appName: string): Promise<ScanCfgResponse> {
+async function scanCfg(name: string, file: File, envName: string, appName: string, importExistingKeys: boolean): Promise<ScanCfgResponse> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('envName', envName);
   formData.append('appName', appName);
+  formData.append('importExistingKeys', importExistingKeys ? 'true' : 'false');
   const response = await fetch(`${API_BASE_URL}/v10-lab/maquettes/${encodeURIComponent(name)}/scan-cfg`, {
     method: 'POST',
     body: formData,
