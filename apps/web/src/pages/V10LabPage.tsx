@@ -65,7 +65,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [confirmUpdate, setConfirmUpdate] = useState(false);
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
   const currentMaquetteRef = useRef<HTMLElement | null>(null);
+  const maquetteSelectorRef = useRef<HTMLElement | null>(null);
   const scrollToCurrentMaquetteAfterTabChange = useRef(false);
+  const scrollToMaquetteSelectorAfterOpen = useRef(false);
 
   useEffect(() => {
     void loadInitial();
@@ -96,6 +98,16 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       currentMaquetteRef.current?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
     });
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!showMaquetteSelector || !scrollToMaquetteSelectorAfterOpen.current || !config) {
+      return;
+    }
+    scrollToMaquetteSelectorAfterOpen.current = false;
+    window.requestAnimationFrame(() => {
+      maquetteSelectorRef.current?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'smooth' });
+    });
+  }, [showMaquetteSelector, config]);
 
   useEffect(() => {
     if (!onBeforeLeaveChange) {
@@ -582,6 +594,14 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     action();
   }
 
+  function toggleMaquetteSelector() {
+    setShowMaquetteSelector((current) => {
+      const next = !current;
+      scrollToMaquetteSelectorAfterOpen.current = next;
+      return next;
+    });
+  }
+
   const groupedMaquettes = groups.map((group) => ({
     ...group,
     items: maquettes.filter((item) => item.groupName === group.name),
@@ -590,7 +610,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
   function renderMaquetteListSection() {
     return (
-      <section className="ui-card v10-section">
+      <section ref={maquetteSelectorRef} className="ui-card v10-section">
         <div className="ui-card-header">
           <h3>{m.registeredMaquettes}</h3>
           <Button type="button" variant="secondary" size="sm" onClick={() => void reloadList()} disabled={busy}>{m.refreshLogs}</Button>
@@ -687,8 +707,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
               <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
               <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
-              <Button type="button" variant="secondary" onClick={() => setShowMaquetteSelector((value) => !value)}>
-                {showMaquetteSelector ? 'Masquer la liste' : 'Changer de maquette'}
+              <Button type="button" variant="secondary" onClick={toggleMaquetteSelector}>
+                {showMaquetteSelector ? m.maquetteSelector.hide : m.maquetteSelector.show}
               </Button>
             </div>
           </div>
