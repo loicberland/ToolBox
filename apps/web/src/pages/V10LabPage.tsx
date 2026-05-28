@@ -43,7 +43,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [maquettes, setMaquettes] = useState<MaquetteSummary[]>([]);
   const [groups, setGroups] = useState<MaquetteGroup[]>([]);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const [openUngrouped, setOpenUngrouped] = useState(true);
+  const [openUngrouped, setOpenUngrouped] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedName, setSelectedName] = useState('');
   const [config, setConfig] = useState<V10Config | null>(null);
