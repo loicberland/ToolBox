@@ -698,10 +698,6 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       {config && (
         <section ref={currentMaquetteRef} className="ui-card v10-section">
           <div className="ui-card-header v10-current-maquette-header">
-            <div>
-              <h3>{config.name}</h3>
-              <p className="muted">{selectedSummary?.targetPath ?? config.maquette.targetPath}</p>
-            </div>
             <div className="button-row end">
               <Button type="button" variant="secondary" onClick={() => void closeMaquette()} disabled={busy}>{m.close}</Button>
               <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
@@ -710,6 +706,10 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               <Button type="button" variant="secondary" onClick={toggleMaquetteSelector}>
                 {showMaquetteSelector ? m.maquetteSelector.hide : m.maquetteSelector.show}
               </Button>
+            </div>
+            <div>
+              <h3>{config.name}</h3>
+              <p className="muted">{selectedSummary?.targetPath ?? config.maquette.targetPath}</p>
             </div>
           </div>
 

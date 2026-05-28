@@ -1501,6 +1501,7 @@ textarea {
 
 .v10-current-maquette-header {
   flex-wrap: wrap;
+  flex-direction: column;
 }
 
 .v10-form-grid {
