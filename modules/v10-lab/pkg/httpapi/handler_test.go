@@ -155,8 +155,13 @@ func TestActionsByProduct(t *testing.T) {
 		}
 		byID[action.ID] = true
 	}
-	if !byID["create-plant"] || !byID["create-workshop"] || byID["create-machine"] {
-		t.Fatalf("expected only visible API actions, got %#v", actions)
+	for _, id := range []string{"create-plant", "create-workshop", "create-machine-group", "create-target", "create-machine", "create-machining-job-default-states", "create-presetting-program-default-states", "create-document-default-states", "create-machining-job"} {
+		if !byID[id] {
+			t.Fatalf("expected visible API action %s, got %#v", id, actions)
+		}
+	}
+	if byID["create-cnc-folder"] || byID["stop-maquette"] || byID["stop-services"] {
+		t.Fatalf("unexpected placeholder action, got %#v", actions)
 	}
 }
 

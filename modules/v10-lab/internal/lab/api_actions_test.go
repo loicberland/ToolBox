@@ -1,0 +1,163 @@
+package lab
+
+import (
+	"net/url"
+	"reflect"
+	"testing"
+)
+
+func TestCreateMachineGroupPayload(t *testing.T) {
+	payload := createMachineGroupPayload(paramsWithDefaults(mustFindAction(t, "create-machine-group"), map[string]any{
+		"entity_name": "Groupe1",
+		"workshop_id": 2,
+	}))
+
+	if payload.EntityName != "Groupe1" || payload.CharsEOLDefault != "13,10" || payload.WorkshopID != 2 {
+		t.Fatalf("unexpected machine group payload: %#v", payload)
+	}
+	if payload.MachineGroupsFiles == nil || len(payload.MachineGroupsFiles) != 0 {
+		t.Fatalf("machine_groups_files must be an empty array: %#v", payload.MachineGroupsFiles)
+	}
+}
+
+func TestCreateTargetPayloadEmptyArrays(t *testing.T) {
+	payload := createTargetPayload(paramsWithDefaults(mustFindAction(t, "create-target"), map[string]any{
+		"entity_name":    "cible2",
+		"connector_name": "connector-focas-01",
+	}))
+
+	if payload.EntityName != "cible2" || payload.ConnectorName != "connector-focas-01" {
+		t.Fatalf("unexpected target payload: %#v", payload)
+	}
+	if len(payload.Configs) != 0 || len(payload.TunnelSteps) != 0 {
+		t.Fatalf("expected empty arrays, got %#v", payload)
+	}
+}
+
+func TestCreateTargetPayloadWithConfigsAndTunnelSteps(t *testing.T) {
+	payload := createTargetPayload(paramsWithDefaults(mustFindAction(t, "create-target"), map[string]any{
+		"entity_name":    "cible2",
+		"connector_name": "connector-focas-01",
+		"configs": []any{
+			map[string]any{"module_key": "remote-filepath", "module_value": "remote"},
+			map[string]any{"module_key": "subprogram-filepath", "module_value": "sub"},
+		},
+		"tunnel_steps": []any{
+			map[string]any{"entity_name": "relay-dnc-01", "rank": float64(1)},
+			map[string]any{"entity_name": "relay-dnc-02", "rank": float64(2)},
+		},
+	}))
+
+	if !reflect.DeepEqual(payload.Configs, []TargetConfig{{ModuleKey: "remote-filepath", ModuleValue: "remote"}, {ModuleKey: "subprogram-filepath", ModuleValue: "sub"}}) {
+		t.Fatalf("unexpected configs: %#v", payload.Configs)
+	}
+	if len(payload.TunnelSteps) != 2 || payload.TunnelSteps[0].EntityName != "relay-dnc-01" || payload.TunnelSteps[1].Rank != 2 {
+		t.Fatalf("unexpected tunnel steps: %#v", payload.TunnelSteps)
+	}
+}
+
+func TestCreateMachinePayloadEthernetWithGroup(t *testing.T) {
+	payload := createMachinePayload(paramsWithDefaults(mustFindAction(t, "create-machine"), map[string]any{
+		"entity_name":       "Machine",
+		"dnc_port_type":     "ethernet",
+		"machine_group_ids": []any{float64(2)},
+		"target_name_root":  "cible2",
+	}))
+
+	if payload.EntityName != "Machine" || payload.CharsEOL != "13,10" || payload.DNCPortType != "ethernet" {
+		t.Fatalf("unexpected machine payload: %#v", payload)
+	}
+	if !payload.IsFileDeletionAllowed || !payload.IsFileViewingAllowed || !payload.IsRootBrowsingAllowed {
+		t.Fatalf("expected ethernet defaults to allow file/root options: %#v", payload)
+	}
+	if !reflect.DeepEqual(payload.MachineGroupsMachines, []MachineGroupMachine{{MachineGroupID: 2}}) {
+		t.Fatalf("unexpected machine groups: %#v", payload.MachineGroupsMachines)
+	}
+}
+
+func TestCreateMachinePayloadSerial(t *testing.T) {
+	payload := createMachinePayload(paramsWithDefaults(mustFindAction(t, "create-machine"), map[string]any{
+		"entity_name":   "Machine",
+		"dnc_port_type": "serial",
+	}))
+
+	if payload.DNCPortType != "serial" || payload.TargetNameRoot != "cible2" {
+		t.Fatalf("hidden fields must keep backend defaults: %#v", payload)
+	}
+}
+
+func TestCreateMachinePayloadWithoutCommandProgram(t *testing.T) {
+	payload := createMachinePayload(paramsWithDefaults(mustFindAction(t, "create-machine"), map[string]any{
+		"entity_name":          "Machine",
+		"has_command_program":  false,
+		"command_program_name": "ignored-by-ui-but-kept",
+	}))
+
+	if payload.HasCommandProgram {
+		t.Fatalf("expected command program disabled: %#v", payload)
+	}
+	if payload.CommandProgramName != "ignored-by-ui-but-kept" {
+		t.Fatalf("backend builder should not drop provided hidden values: %#v", payload)
+	}
+}
+
+func TestCreateMachinePayloadWithCommandProgram(t *testing.T) {
+	payload := createMachinePayload(paramsWithDefaults(mustFindAction(t, "create-machine"), map[string]any{
+		"entity_name":                                "Machine",
+		"has_command_program":                        true,
+		"command_program_name":                       "CMD",
+		"wait_between_command_program_check_seconds": float64(45),
+		"command_program_regexp":                     "LOAD",
+		"command_program_regexp_load_value":          "L",
+		"command_program_regexp_unload_value":        "U",
+		"command_program_wait_before_load_seconds":   float64(5),
+		"command_program_error_template_id":          float64(7),
+		"target_name_command_program":                "cmd-target",
+		"is_command_program_ignored":                 true,
+	}))
+
+	if !payload.HasCommandProgram || payload.CommandProgramName != "CMD" || payload.CommandProgramErrorTemplateID != int64(7) || !payload.IsCommandProgramIgnored {
+		t.Fatalf("unexpected command program payload: %#v", payload)
+	}
+}
+
+func TestCreateMachiningJobQueryWithMachineGroup(t *testing.T) {
+	query := createMachiningJobQuery(paramsWithDefaults(mustFindAction(t, "create-machining-job"), map[string]any{
+		"entity_name":       "groupe 1",
+		"description":       `jai m'i des accen"`,
+		"machine_group_ids": "1",
+		"version":           float64(0),
+	}))
+
+	if query["machine_group_ids"] != "[1]" || query["overrideChecked"] != "false" {
+		t.Fatalf("unexpected machining job query: %#v", query)
+	}
+	encoded := url.Values{
+		"entity_name":       {query["entity_name"]},
+		"description":       {query["description"]},
+		"machine_group_ids": {query["machine_group_ids"]},
+	}.Encode()
+	if parsed, err := url.ParseQuery(encoded); err != nil || parsed.Get("entity_name") != "groupe 1" || parsed.Get("description") != `jai m'i des accen"` || parsed.Get("machine_group_ids") != "[1]" {
+		t.Fatalf("query must round-trip through url.Values: encoded=%s parsed=%#v err=%v", encoded, parsed, err)
+	}
+}
+
+func TestCreateMachiningJobQueryWithoutMachineGroup(t *testing.T) {
+	query := createMachiningJobQuery(paramsWithDefaults(mustFindAction(t, "create-machining-job"), map[string]any{
+		"entity_name":       "dossié 15 être",
+		"machine_group_ids": "",
+	}))
+
+	if query["machine_group_ids"] != "[]" || query["entity_name"] != "dossié 15 être" {
+		t.Fatalf("unexpected empty group query: %#v", query)
+	}
+}
+
+func mustFindAction(t *testing.T, id string) Action {
+	t.Helper()
+	action, ok := FindAction(id)
+	if !ok {
+		t.Fatalf("missing action %s", id)
+	}
+	return action
+}

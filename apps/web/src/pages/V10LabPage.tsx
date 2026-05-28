@@ -1222,7 +1222,7 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
       {actions.length === 0 && <p className="muted">{m.actionPlan.noActionsForProduct}</p>}
       {apiSteps.map((step, index) => {
         const action = byID[step.action];
-        const fields = action?.fields ?? [];
+        const fields = (action?.fields ?? []).filter((field) => !actionFieldHidden(field, step.params ?? {}));
         return (
           <div className="v10-pipeline-step" key={`${step.action}-${index}`}>
             <div className="v10-step-order">{index + 1}</div>
@@ -1248,6 +1248,8 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
                     <ActionFieldInput
                       field={field}
                       value={step.params?.[field.name]}
+                      config={config}
+                      params={step.params ?? {}}
                       key={field.name}
                       onChange={(value) => updateStep(index, { ...step, params: { ...(step.params ?? {}), [field.name]: value } })}
                     />
@@ -1374,13 +1376,30 @@ function ApiTokenEditor({ maquetteName, disabled }: { maquetteName: string; disa
   );
 }
 
-function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields'][number]; value: unknown; onChange: (value: unknown) => void }) {
+function ActionFieldInput({ field, value, config, params, onChange }: { field: V10Action['fields'][number]; value: unknown; config: V10Config; params: Record<string, unknown>; onChange: (value: unknown) => void }) {
   const label = <FieldLabel field={field} />;
+  const options = actionFieldOptions(field, config);
+  if (options.length > 0) {
+    return (
+      <label>{label}
+        <select value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)}>
+          <option value=""></option>
+          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+    );
+  }
   if (field.type === 'bool') {
     return <label className="checkbox-row"><input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.currentTarget.checked)} />{label}</label>;
   }
   if (field.type === 'string[]') {
     return <label>{label}<input value={Array.isArray(value) ? value.join(',') : ''} onChange={(event) => onChange(event.currentTarget.value.split(',').map((item) => item.trim()).filter(Boolean))} /></label>;
+  }
+  if (field.type === 'number[]') {
+    return <ActionNumberArrayField field={field} value={value} onChange={onChange} />;
+  }
+  if (field.type === 'object[]') {
+    return <ActionObjectArrayField field={field} value={value} config={config} params={params} onChange={onChange} />;
   }
   if (field.type === 'text') {
     return <label>{label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{field.description && <span className="muted">{field.description}</span>}</label>;
@@ -1391,6 +1410,64 @@ function ActionFieldInput({ field, value, onChange }: { field: V10Action['fields
   return <label>{label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
 }
 
+function ActionNumberArrayField({ field, value, onChange }: { field: V10Action['fields'][number]; value: unknown; onChange: (value: unknown) => void }) {
+  const rows = Array.isArray(value) ? value.map((item) => typeof item === 'number' ? item : Number(item)).filter(Number.isFinite) : [];
+  const updateRow = (index: number, nextValue: number) => {
+    onChange(rows.map((row, rowIndex) => rowIndex === index ? nextValue : row));
+  };
+  return (
+    <div className="span-2 v10-action-array">
+      <FieldLabel field={field} />
+      {rows.map((row, index) => (
+        <div className="v10-action-number-row" key={index}>
+          <input type="number" value={row} onChange={(event) => updateRow(index, Number(event.currentTarget.value))} />
+          <Button type="button" size="sm" variant="danger" onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}>{m.delete}</Button>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="secondary" onClick={() => onChange([...rows, 0])}>{m.addStep}</Button>
+      {field.description && <span className="muted">{field.description}</span>}
+    </div>
+  );
+}
+
+function ActionObjectArrayField({ field, value, config, params, onChange }: { field: V10Action['fields'][number]; value: unknown; config: V10Config; params: Record<string, unknown>; onChange: (value: unknown) => void }) {
+  const rows = Array.isArray(value) ? value.filter(isRecord) : [];
+  const itemFields = field.itemFields ?? [];
+  const updateRow = (index: number, key: string, nextValue: unknown) => {
+    onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: nextValue } : row));
+  };
+  const addRow = () => {
+    const row: Record<string, unknown> = {};
+    for (const itemField of itemFields) {
+      if (itemField.default !== undefined && itemField.default !== null) {
+        row[itemField.name] = itemField.default;
+      }
+    }
+    onChange([...rows, row]);
+  };
+  return (
+    <div className="span-2 v10-action-array">
+      <FieldLabel field={field} />
+      {rows.map((row, index) => (
+        <div className="v10-action-array-row" key={index}>
+          {itemFields.filter((itemField) => !actionFieldHidden(itemField, { ...params, ...row })).map((itemField) => (
+            <ActionFieldInput
+              key={itemField.name}
+              field={itemField}
+              value={row[itemField.name]}
+              config={config}
+              params={{ ...params, ...row }}
+              onChange={(nextValue) => updateRow(index, itemField.name, nextValue)}
+            />
+          ))}
+          <Button type="button" size="sm" variant="danger" onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}>{m.delete}</Button>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="secondary" onClick={addRow}>{m.addStep}</Button>
+    </div>
+  );
+}
+
 function FieldLabel({ field }: { field: V10Action['fields'][number] }) {
   return (
     <span className="v10-field-label">
@@ -1398,6 +1475,26 @@ function FieldLabel({ field }: { field: V10Action['fields'][number] }) {
       {field.required && <span className="v10-required-dot" title="Champ obligatoire" aria-label="Champ obligatoire" role="img" />}
     </span>
   );
+}
+
+function actionFieldOptions(field: V10Action['fields'][number], config: V10Config): Array<{ label: string; value: string }> {
+  if (field.options?.length) {
+    return field.options;
+  }
+  if (field.optionsSource === 'connectors') {
+    return Object.keys(config.gedixConfig.connectors ?? {})
+      .sort((left, right) => left.localeCompare(right))
+      .map((name) => ({ label: name, value: name }));
+  }
+  return [];
+}
+
+function actionFieldHidden(field: V10Action['fields'][number], params: Record<string, unknown>): boolean {
+  return Object.entries(field.hiddenWhen ?? {}).some(([key, expected]) => params[key] === expected);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void; showTitle?: boolean }) {
@@ -1611,6 +1708,9 @@ function validatePipelineRequiredFields(config: V10Config, actions: V10Action[])
     }
     const params = step.params ?? {};
     for (const field of action.fields ?? []) {
+      if (actionFieldHidden(field, params)) {
+        continue;
+      }
       if (!field.required) {
         continue;
       }

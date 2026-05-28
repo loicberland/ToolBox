@@ -22,12 +22,22 @@ const (
 )
 
 type ActionField struct {
-	Name        string `json:"name"`
-	Label       string `json:"label"`
-	Type        string `json:"type"`
-	Required    bool   `json:"required"`
-	Default     any    `json:"default"`
-	Description string `json:"description"`
+	Name          string         `json:"name"`
+	Label         string         `json:"label"`
+	Type          string         `json:"type"`
+	Required      bool           `json:"required"`
+	Default       any            `json:"default"`
+	Description   string         `json:"description"`
+	Options       []ActionOption `json:"options,omitempty"`
+	OptionsSource string         `json:"optionsSource,omitempty"`
+	HiddenWhen    map[string]any `json:"hiddenWhen,omitempty"`
+	ItemFields    []ActionField  `json:"itemFields,omitempty"`
+	Multiple      bool           `json:"multiple,omitempty"`
+}
+
+type ActionOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 type Action struct {

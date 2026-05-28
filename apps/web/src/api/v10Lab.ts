@@ -30,6 +30,11 @@ export type V10ActionField = {
   required: boolean;
   default: unknown;
   description: string;
+  options?: Array<{ label: string; value: string }>;
+  optionsSource?: string;
+  hiddenWhen?: Record<string, unknown>;
+  itemFields?: V10ActionField[];
+  multiple?: boolean;
 };
 
 export type V10Action = {

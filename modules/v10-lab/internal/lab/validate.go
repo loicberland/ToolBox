@@ -98,6 +98,9 @@ func ValidateConfig(config Config) error {
 			params = map[string]any{}
 		}
 		for _, field := range action.Fields {
+			if actionFieldHidden(field, params) {
+				continue
+			}
 			value, exists := params[field.Name]
 			if field.Required && (!exists || fieldValueIsEmpty(value)) {
 				label := strings.TrimSpace(field.Label)
@@ -138,6 +141,15 @@ func fieldValueIsEmpty(value any) bool {
 	}
 }
 
+func actionFieldHidden(field ActionField, params map[string]any) bool {
+	for key, expected := range field.HiddenWhen {
+		if fmt.Sprint(params[key]) == fmt.Sprint(expected) {
+			return true
+		}
+	}
+	return false
+}
+
 func fieldValueMatchesType(value any, expected string) bool {
 	switch expected {
 	case "", "any":
@@ -168,6 +180,29 @@ func fieldValueMatchesType(value any, expected string) bool {
 			}
 			return true
 		case []string:
+			return true
+		default:
+			return false
+		}
+	case "number[]":
+		switch items := value.(type) {
+		case []any:
+			for _, item := range items {
+				if _, ok := anyToInt(item); !ok {
+					return false
+				}
+			}
+			return true
+		case []int, []int64, []float64:
+			return true
+		case string:
+			return true
+		default:
+			return false
+		}
+	case "object[]":
+		switch value.(type) {
+		case []any, []map[string]any, string:
 			return true
 		default:
 			return false

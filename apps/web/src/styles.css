@@ -1512,6 +1512,26 @@ textarea {
   grid-column: 1 / -1;
 }
 
+.v10-action-array {
+  display: grid;
+  gap: 10px;
+}
+
+.v10-action-array-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.v10-action-number-row {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) auto;
+  gap: 10px;
+  align-items: end;
+  justify-content: start;
+}
+
 .checkbox-row {
   display: inline-flex !important;
   align-items: center;
