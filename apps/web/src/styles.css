@@ -1499,6 +1499,10 @@ textarea {
   gap: 16px;
 }
 
+.v10-current-maquette-header {
+  flex-wrap: wrap;
+}
+
 .v10-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

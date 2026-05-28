@@ -49,6 +49,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [config, setConfig] = useState<V10Config | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>(m.tabs.general);
   const [showCreate, setShowCreate] = useState(false);
+  const [showMaquetteSelector, setShowMaquetteSelector] = useState(true);
   const [draft, setDraft] = useState(() => defaultConfig());
   const [jsonText, setJsonText] = useState('');
   const [logs, setLogs] = useState<LogSummary[]>([]);
@@ -159,16 +160,24 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     setGroups(groupItems);
   }
 
+  function scrollToCurrentMaquette() {
+    window.requestAnimationFrame(() => {
+      currentMaquetteRef.current?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    });
+  }
+
   async function openMaquette(name: string) {
     await run(async () => {
       const loaded = normalizeConfig(await v10LabApi.getMaquette(name));
       setSelectedName(loaded.name);
       setConfig(loaded);
+      setShowMaquetteSelector(false);
       setIsDirty(false);
       setActiveTab(m.tabs.general);
       setExecution(null);
       setSelectedLog('');
       setLogs([]);
+      scrollToCurrentMaquette();
     });
   }
 
@@ -234,7 +243,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         return;
       }
     }
-    scrollToCurrentMaquetteAfterTabChange.current = true;
+    scrollToCurrentMaquetteAfterTabChange.current = false;
     setActiveTab(nextTab);
   }
 
@@ -459,6 +468,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }
     setSelectedName('');
     setConfig(null);
+    setShowMaquetteSelector(true);
     setExecution(null);
     setSelectedLog('');
     setLogs([]);
@@ -578,6 +588,62 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   }));
   const ungroupedMaquettes = maquettes.filter((item) => !item.groupName || !groups.some((group) => group.name === item.groupName));
 
+  function renderMaquetteListSection() {
+    return (
+      <section className="ui-card v10-section">
+        <div className="ui-card-header">
+          <h3>{m.registeredMaquettes}</h3>
+          <Button type="button" variant="secondary" size="sm" onClick={() => void reloadList()} disabled={busy}>{m.refreshLogs}</Button>
+        </div>
+        <div className="v10-file-row">
+          <input placeholder="Nom du groupe" value={newGroupName} onChange={(event) => setNewGroupName(event.currentTarget.value)} />
+          <Button type="button" variant="secondary" size="sm" onClick={() => void createGroup()} disabled={busy || !newGroupName.trim()}>Créer un groupe</Button>
+        </div>
+        {maquettes.length === 0 && groups.length === 0 ? (
+          <div className="empty-state">
+            <h3>{m.noMaquette}</h3>
+          </div>
+        ) : (
+          <div className="v10-group-list">
+            {groupedMaquettes.map((group) => (
+              <div className="v10-group" key={group.name}>
+                <div
+                  className="v10-group-header clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleGroup(group.name)}
+                  onKeyDown={(event) => handleToggleKey(event, () => toggleGroup(group.name))}
+                >
+                  <span className="v10-chevron" aria-hidden="true">{openGroups[group.name] ? '▾' : '▸'}</span>
+                  <strong>{group.name}</strong>
+                  <span className="muted">{group.items.length}</span>
+                  <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: group.name }); setShowCreate(true); setOpenGroups((current) => ({ ...current, [group.name]: true })); }}>Ajouter une maquette</Button>
+                  <Button type="button" size="sm" variant="danger" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void deleteGroup(group.name); }} disabled={group.items.length > 0}>Supprimer</Button>
+                </div>
+                {openGroups[group.name] && <MaquetteList items={group.items} selectedName={selectedName} onToggle={toggleMaquette} />}
+              </div>
+            ))}
+            <div className="v10-group">
+              <div
+                className="v10-group-header clickable"
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpenUngrouped((value) => !value)}
+                onKeyDown={(event) => handleToggleKey(event, () => setOpenUngrouped((value) => !value))}
+              >
+                <span className="v10-chevron" aria-hidden="true">{openUngrouped ? '▾' : '▸'}</span>
+                <strong>Sans groupe</strong>
+                <span className="muted">{ungroupedMaquettes.length}</span>
+                <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: '' }); setShowCreate(true); setOpenUngrouped(true); }}>Ajouter une maquette</Button>
+              </div>
+              {openUngrouped && <MaquetteList items={ungroupedMaquettes} selectedName={selectedName} onToggle={toggleMaquette} />}
+            </div>
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <div className="workspace v10-lab-workspace">
       <header className="page-header">
@@ -606,67 +672,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         </section>
       )}
       
-
-      <section className="ui-card v10-section">
-        <div className="ui-card-header">
-          <h3>{m.registeredMaquettes}</h3>
-          <Button type="button" variant="secondary" size="sm" onClick={() => void reloadList()} disabled={busy}>{m.refreshLogs}</Button>
-        </div>
-        <div className="v10-file-row">
-          <input placeholder="Nom du groupe" value={newGroupName} onChange={(event) => setNewGroupName(event.currentTarget.value)} />
-          <Button type="button" variant="secondary" size="sm" onClick={() => void createGroup()} disabled={busy || !newGroupName.trim()}>Créer un groupe</Button>
-        </div>
-        {maquettes.length === 0 && groups.length === 0 ? (
-          <div className="empty-state">
-            <h3>{m.noMaquette}</h3>
-          </div>
-        ) : (
-          <>
-            <div className="v10-group-list">
-              {groupedMaquettes.map((group) => (
-                <div className="v10-group" key={group.name}>
-                  <div
-                    className="v10-group-header clickable"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => toggleGroup(group.name)}
-                    onKeyDown={(event) => handleToggleKey(event, () => toggleGroup(group.name))}
-                  >
-                    <span className="v10-chevron" aria-hidden="true">{openGroups[group.name] ? '▾' : '▸'}</span>
-                    <strong>{group.name}</strong>
-                    <span className="muted">{group.items.length}</span>
-                    <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: group.name }); setShowCreate(true); setOpenGroups((current) => ({ ...current, [group.name]: true })); }}>Ajouter une maquette</Button>
-                    <Button type="button" size="sm" variant="danger" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void deleteGroup(group.name); }} disabled={group.items.length > 0}>Supprimer</Button>
-                  </div>
-                  {openGroups[group.name] && <MaquetteList items={group.items} selectedName={selectedName} onToggle={toggleMaquette} />}
-                </div>
-              ))}
-              <div className="v10-group">
-                <div
-                  className="v10-group-header clickable"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setOpenUngrouped((value) => !value)}
-                  onKeyDown={(event) => handleToggleKey(event, () => setOpenUngrouped((value) => !value))}
-                >
-                  <span className="v10-chevron" aria-hidden="true">{openUngrouped ? '▾' : '▸'}</span>
-                  <strong>Sans groupe</strong>
-                  <span className="muted">{ungroupedMaquettes.length}</span>
-                  <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: '' }); setShowCreate(true); setOpenUngrouped(true); }}>Ajouter une maquette</Button>
-                </div>
-                {openUngrouped && <MaquetteList items={ungroupedMaquettes} selectedName={selectedName} onToggle={toggleMaquette} />}
-              </div>
-            </div>
-          </>
-        )}
-      </section>
-
       {error && <p className="error whitespace">{error}</p>}
       {message && <p className="info-message">{message}</p>}
       
       {config && (
         <section ref={currentMaquetteRef} className="ui-card v10-section">
-          <div className="ui-card-header">
+          <div className="ui-card-header v10-current-maquette-header">
             <div>
               <h3>{config.name}</h3>
               <p className="muted">{selectedSummary?.targetPath ?? config.maquette.targetPath}</p>
@@ -676,6 +687,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
               <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
               <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
+              <Button type="button" variant="secondary" onClick={() => setShowMaquetteSelector((value) => !value)}>
+                {showMaquetteSelector ? 'Masquer la liste' : 'Changer de maquette'}
+              </Button>
             </div>
           </div>
 
@@ -733,6 +747,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           )}
         </section>
       )}
+
+      {(!config || showMaquetteSelector) && renderMaquetteListSection()}
 
       <ConfirmDialog
         open={confirmDelete !== null}
