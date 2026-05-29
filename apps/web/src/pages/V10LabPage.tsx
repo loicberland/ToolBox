@@ -1790,7 +1790,7 @@ function validatePipelineRequiredFields(config: V10Config, actions: V10Action[])
       }
       const value = params[field.name] ?? field.default;
       if (field.type === 'number' && field.min !== undefined) {
-        const validation = validateNumberMin(value, field.min, field.label?.trim() || field.name);
+        const validation = validateNumberMin(value, field.min, field.label?.trim() || field.name, field.required);
         if (validation) {
           return validation;
         }
@@ -1834,9 +1834,9 @@ function validateNumberArrayMin(value: unknown, min: number): string {
   return '';
 }
 
-function validateNumberMin(value: unknown, min: number, label: string): string {
+function validateNumberMin(value: unknown, min: number, label: string, required = false): string {
   if (value === undefined || value === null || value === '') {
-    return '';
+    return required ? `Le champ "${label}" doit être supérieur ou égal à ${formatNumberForMessage(min)}.` : '';
   }
   const number = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(number) || number < min) {
