@@ -24,10 +24,10 @@ func TestCreateMachineGroupCatalogDefaults(t *testing.T) {
 	action := mustFindAction(t, "create-machine-group")
 	workshopID := mustFindField(t, action, "workshop_id")
 	createdBy := mustFindField(t, action, "created_by")
-	if !workshopID.Required || workshopID.Default != 1 {
+	if !workshopID.Required || workshopID.Default != 1 || workshopID.Min != 1 {
 		t.Fatalf("unexpected workshop_id metadata: %#v", workshopID)
 	}
-	if !createdBy.Required || createdBy.Default != 1 {
+	if !createdBy.Required || createdBy.Default != 1 || createdBy.Min != 1 {
 		t.Fatalf("unexpected created_by metadata: %#v", createdBy)
 	}
 	payload := createMachineGroupPayload(paramsWithDefaults(action, map[string]any{"entity_name": "Groupe1"}))
@@ -75,7 +75,7 @@ func TestCreateTargetPayloadWithConfigsAndTunnelSteps(t *testing.T) {
 func TestCreateTargetCatalogCreatedByRequired(t *testing.T) {
 	action := mustFindAction(t, "create-target")
 	createdBy := mustFindField(t, action, "created_by")
-	if !createdBy.Required || createdBy.Default != 1 {
+	if !createdBy.Required || createdBy.Default != 1 || createdBy.Min != 1 {
 		t.Fatalf("unexpected created_by metadata: %#v", createdBy)
 	}
 	payload := createTargetPayload(paramsWithDefaults(action, map[string]any{
@@ -84,6 +84,16 @@ func TestCreateTargetCatalogCreatedByRequired(t *testing.T) {
 	}))
 	if payload.CreatedBy != 1 {
 		t.Fatalf("expected created_by default in payload: %#v", payload)
+	}
+}
+
+func TestCreatedByCatalogMin(t *testing.T) {
+	for _, actionID := range []string{"create-plant", "create-workshop", "create-machine-group", "create-target", "create-machine"} {
+		action := mustFindAction(t, actionID)
+		createdBy := mustFindField(t, action, "created_by")
+		if !createdBy.Required || createdBy.Default != 1 || createdBy.Min != 1 {
+			t.Fatalf("unexpected created_by metadata for %s: %#v", actionID, createdBy)
+		}
 	}
 }
 
@@ -174,7 +184,7 @@ func TestCreateMachinePayloadWithCommandProgram(t *testing.T) {
 func TestCreateMachiningJobCatalogUserIDRequired(t *testing.T) {
 	action := mustFindAction(t, "create-machining-job")
 	userID := mustFindField(t, action, "user_id")
-	if !userID.Required || userID.Default != 1 {
+	if !userID.Required || userID.Default != 1 || userID.Min != 1 {
 		t.Fatalf("unexpected user_id metadata: %#v", userID)
 	}
 	query := createMachiningJobQuery(paramsWithDefaults(action, map[string]any{
@@ -182,6 +192,16 @@ func TestCreateMachiningJobCatalogUserIDRequired(t *testing.T) {
 	}))
 	if query["user_id"] != "1" {
 		t.Fatalf("expected user_id default in query: %#v", query)
+	}
+}
+
+func TestLifecycleActionsCatalogUserIDRequired(t *testing.T) {
+	for _, actionID := range []string{"create-machining-job-default-states", "create-presetting-program-default-states", "create-document-default-states"} {
+		action := mustFindAction(t, actionID)
+		userID := mustFindField(t, action, "user_id")
+		if !userID.Required || userID.Default != 1 || userID.Min != 1 {
+			t.Fatalf("unexpected user_id metadata for %s: %#v", actionID, userID)
+		}
 	}
 }
 

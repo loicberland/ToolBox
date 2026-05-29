@@ -64,7 +64,7 @@ func TestValidateConfigRejectsEmptyRequiredActionField(t *testing.T) {
 			{Action: "create-workshop", Params: map[string]any{
 				"entity_name": "   ",
 				"plant_id":    0,
-				"created_by":  0,
+				"created_by":  1,
 			}},
 		},
 	}
@@ -111,8 +111,56 @@ func TestValidateConfigRejectsMachineGroupIDsBelowItemMin(t *testing.T) {
 		t.Fatalf("expected ValidationError, got %T %v", err, err)
 	}
 	message := strings.Join(validationErr.Items, "\n")
-	if strings.Count(message, "supérieures à 0") != 2 {
+	if strings.Count(message, "supérieures ou égales à 1") != 2 {
 		t.Fatalf("missing itemMin validation errors: %#v", validationErr.Items)
+	}
+}
+
+func TestValidateConfigNumberMinRules(t *testing.T) {
+	validCases := []struct {
+		name   string
+		action string
+		params map[string]any
+	}{
+		{name: "created_by accepted", action: "create-plant", params: map[string]any{"entity_name": "Usine", "created_by": 1}},
+		{name: "user_id accepted", action: "create-machining-job", params: map[string]any{"entity_name": "Dossier", "user_id": 1}},
+		{name: "workshop_id accepted", action: "create-machine-group", params: map[string]any{"entity_name": "Groupe", "workshop_id": 1, "created_by": 1}},
+	}
+	for _, tc := range validCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := Config{Name: "ticket-T5808", Product: GedixProdV10, Pipeline: []PipelineStep{{Action: tc.action, Params: tc.params}}}
+			if err := ValidateConfig(config); err != nil {
+				t.Fatalf("expected valid config, got %v", err)
+			}
+		})
+	}
+
+	invalidCases := []struct {
+		name      string
+		action    string
+		fieldName string
+		params    map[string]any
+	}{
+		{name: "created_by zero rejected", action: "create-plant", fieldName: "Créé par", params: map[string]any{"entity_name": "Usine", "created_by": 0}},
+		{name: "created_by negative rejected", action: "create-plant", fieldName: "Créé par", params: map[string]any{"entity_name": "Usine", "created_by": -1}},
+		{name: "user_id zero rejected", action: "create-machining-job", fieldName: "Utilisateur ID", params: map[string]any{"entity_name": "Dossier", "user_id": 0}},
+		{name: "user_id negative rejected", action: "create-machining-job", fieldName: "Utilisateur ID", params: map[string]any{"entity_name": "Dossier", "user_id": -1}},
+		{name: "workshop_id zero rejected", action: "create-machine-group", fieldName: "Atelier ID", params: map[string]any{"entity_name": "Groupe", "workshop_id": 0, "created_by": 1}},
+		{name: "workshop_id negative rejected", action: "create-machine-group", fieldName: "Atelier ID", params: map[string]any{"entity_name": "Groupe", "workshop_id": -1, "created_by": 1}},
+	}
+	for _, tc := range invalidCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := Config{Name: "ticket-T5808", Product: GedixProdV10, Pipeline: []PipelineStep{{Action: tc.action, Params: tc.params}}}
+			err := ValidateConfig(config)
+			validationErr, ok := err.(ValidationError)
+			if !ok {
+				t.Fatalf("expected ValidationError, got %T %v", err, err)
+			}
+			message := strings.Join(validationErr.Items, "\n")
+			if !strings.Contains(message, tc.fieldName) || !strings.Contains(message, "supérieur ou égal à 1") {
+				t.Fatalf("missing min validation message: %#v", validationErr.Items)
+			}
+		})
 	}
 }
 
@@ -130,6 +178,20 @@ func TestValidateConfigAcceptsEmptyAndPositiveMachineGroupIDs(t *testing.T) {
 
 	if err := ValidateConfig(config); err != nil {
 		t.Fatalf("expected valid config, got %v", err)
+	}
+}
+
+func TestActionFieldHiddenWhenAnyUsesOrBetweenGroups(t *testing.T) {
+	action := mustFindAction(t, "create-machine")
+	field := mustFindField(t, action, "target_name_root")
+	if !actionFieldHidden(field, map[string]any{"dnc_port_type": "serial", "is_root_browsing_allowed": true}) {
+		t.Fatal("target_name_root must be hidden for serial DNC port")
+	}
+	if !actionFieldHidden(field, map[string]any{"dnc_port_type": "ethernet", "is_root_browsing_allowed": false}) {
+		t.Fatal("target_name_root must be hidden when root browsing is disabled")
+	}
+	if actionFieldHidden(field, map[string]any{"dnc_port_type": "ethernet", "is_root_browsing_allowed": true}) {
+		t.Fatal("target_name_root must stay visible when no hiddenWhenAny group matches")
 	}
 }
 

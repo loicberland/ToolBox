@@ -33,7 +33,9 @@ export type V10ActionField = {
   options?: Array<{ label: string; value: string }>;
   optionsSource?: string;
   hiddenWhen?: Record<string, unknown>;
+  hiddenWhenAny?: Array<Record<string, unknown>>;
   itemFields?: V10ActionField[];
+  min?: number;
   itemMin?: number;
   multiple?: boolean;
 };

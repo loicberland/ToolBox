@@ -1209,6 +1209,13 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
   const toggleStep = (index: number) => {
     setExpandedSteps((current) => ({ ...current, [index]: !current[index] }));
   };
+  const handleStepHeaderKey = (event: React.KeyboardEvent, index: number) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    toggleStep(index);
+  };
   const updateStep = (index: number, step: PipelineStep) => {
     onChange({ ...config, pipeline: apiSteps.map((item, itemIndex) => itemIndex === index ? step : item) });
   };
@@ -1246,8 +1253,15 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
           <div className="v10-pipeline-step" key={`${step.action}-${index}`}>
             <div className="v10-step-order">{index + 1}</div>
             <div className="v10-step-body">
-              <div className="v10-pipeline-step-header">
-                <button type="button" className="v10-chevron" aria-label={expanded ? 'Réduire action' : 'Agrandir action'} aria-expanded={expanded} onClick={() => toggleStep(index)}>
+              <div
+                className="v10-pipeline-step-header clickable"
+                role="button"
+                tabIndex={0}
+                aria-expanded={expanded}
+                onClick={() => toggleStep(index)}
+                onKeyDown={(event) => handleStepHeaderKey(event, index)}
+              >
+                <button type="button" className="v10-chevron" aria-label={expanded ? 'Réduire action' : 'Agrandir action'} aria-expanded={expanded} onClick={(event) => { event.stopPropagation(); toggleStep(index); }}>
                   {expanded ? '▾' : '▸'}
                 </button>
                 <div className="v10-pipeline-step-summary">
@@ -1255,9 +1269,9 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
                   <span className="muted">{step.action || action?.kind || m.chooseAction}</span>
                 </div>
                 <div className="button-row">
-                  <Button type="button" size="sm" variant="secondary" onClick={() => move(index, -1)}>{m.moveUp}</Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={() => move(index, 1)}>{m.moveDown}</Button>
-                  <Button type="button" size="sm" variant="danger" onClick={() => onChange({ ...config, pipeline: apiSteps.filter((_, itemIndex) => itemIndex !== index) })}>{m.delete}</Button>
+                  <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); move(index, -1); }}>{m.moveUp}</Button>
+                  <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); move(index, 1); }}>{m.moveDown}</Button>
+                  <Button type="button" size="sm" variant="danger" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onChange({ ...config, pipeline: apiSteps.filter((_, itemIndex) => itemIndex !== index) }); }}>{m.delete}</Button>
                 </div>
               </div>
               {expanded && (
@@ -1438,7 +1452,7 @@ function ActionFieldInput({ field, value, config, params, onChange }: { field: V
     return <label>{label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{field.description && <span className="muted">{field.description}</span>}</label>;
   }
   if (field.type === 'number') {
-    return <label>{label}<input type="number" value={typeof value === 'number' ? value : ''} onChange={(event) => onChange(Number(event.currentTarget.value))} /></label>;
+    return <label>{label}<input type="number" min={field.min} value={typeof value === 'number' ? value : ''} onChange={(event) => onChange(event.currentTarget.value === '' ? '' : Number(event.currentTarget.value))} /></label>;
   }
   return <label>{label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
 }
@@ -1526,11 +1540,19 @@ function actionFieldOptions(field: V10Action['fields'][number], config: V10Confi
 }
 
 function actionFieldHidden(field: V10Action['fields'][number], params: Record<string, unknown>): boolean {
-  return Object.entries(field.hiddenWhen ?? {}).some(([key, expected]) => actionValuesEqual(params[key], expected));
+  if (Object.entries(field.hiddenWhen ?? {}).some(([key, expected]) => actionValuesEqual(params[key], expected))) {
+    return true;
+  }
+  return (field.hiddenWhenAny ?? []).some((group) => actionHiddenGroupMatches(group, params));
 }
 
 function isActionFieldHidden(field: V10Action['fields'][number], params: Record<string, unknown>): boolean {
   return actionFieldHidden(field, params);
+}
+
+function actionHiddenGroupMatches(group: Record<string, unknown>, params: Record<string, unknown>): boolean {
+  const entries = Object.entries(group);
+  return entries.length > 0 && entries.every(([key, expected]) => actionValuesEqual(params[key], expected));
 }
 
 function actionValuesEqual(left: unknown, right: unknown): boolean {
@@ -1767,6 +1789,12 @@ function validatePipelineRequiredFields(config: V10Config, actions: V10Action[])
         continue;
       }
       const value = params[field.name] ?? field.default;
+      if (field.type === 'number' && field.min !== undefined) {
+        const validation = validateNumberMin(value, field.min, field.label?.trim() || field.name);
+        if (validation) {
+          return validation;
+        }
+      }
       if (field.type === 'number[]' && field.itemMin !== undefined) {
         const validation = validateNumberArrayMin(value, field.itemMin);
         if (validation) {
@@ -1801,9 +1829,24 @@ function isPipelineRequiredValueEmpty(value: unknown): boolean {
 function validateNumberArrayMin(value: unknown, min: number): string {
   const values = normalizeNumberArray(value);
   if (!values.valid || values.items.some((item) => item < min)) {
-    return 'Les IDs groupes machine doivent être supérieurs à 0.';
+    return `Les IDs groupes machine doivent être supérieurs ou égaux à ${formatNumberForMessage(min)}.`;
   }
   return '';
+}
+
+function validateNumberMin(value: unknown, min: number, label: string): string {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+  const number = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(number) || number < min) {
+    return `Le champ "${label}" doit être supérieur ou égal à ${formatNumberForMessage(min)}.`;
+  }
+  return '';
+}
+
+function formatNumberForMessage(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value);
 }
 
 function normalizeNumberArray(value: unknown): { items: number[]; valid: boolean } {

@@ -116,8 +116,23 @@ func validateNumberListMin(params map[string]any, key string, min int) error {
 	}
 	for _, item := range items {
 		if item < min {
-			return fmt.Errorf("Les IDs groupes machine doivent être supérieurs à 0.")
+			return fmt.Errorf("Les IDs groupes machine doivent être supérieurs ou égaux à %d.", min)
 		}
+	}
+	return nil
+}
+
+func validateNumberMin(params map[string]any, key string, label string, min float64) error {
+	value, exists := params[key]
+	if !exists || value == nil {
+		return nil
+	}
+	number, ok := anyToFloat(value)
+	if !ok {
+		return fmt.Errorf("Le champ %q doit être un nombre.", label)
+	}
+	if number < min {
+		return fmt.Errorf("Le champ %q doit être supérieur ou égal à %s.", label, formatMin(min))
 	}
 	return nil
 }

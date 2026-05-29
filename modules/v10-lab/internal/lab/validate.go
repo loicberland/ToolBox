@@ -115,6 +115,16 @@ func ValidateConfig(config Config) error {
 				errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: type attendu %s", index, field.Name, field.Type))
 				continue
 			}
+			if exists && field.Min != 0 && field.Type == "number" {
+				number, ok := anyToFloat(value)
+				if !ok {
+					errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: type attendu %s", index, field.Name, field.Type))
+					continue
+				}
+				if number < field.Min {
+					errors = append(errors, fmt.Sprintf("Étape %d - %s : le champ \"%s\" doit être supérieur ou égal à %s.", index+1, step.Action, firstNonEmpty(field.Label, field.Name), formatMin(field.Min)))
+				}
+			}
 			if exists && field.ItemMin != 0 && field.Type == "number[]" {
 				items, ok := numberListParamStrict(map[string]any{field.Name: value}, field.Name)
 				if !ok {
@@ -123,7 +133,7 @@ func ValidateConfig(config Config) error {
 				}
 				for _, item := range items {
 					if float64(item) < field.ItemMin {
-						errors = append(errors, fmt.Sprintf("Étape %d - %s : le champ %s doit contenir uniquement des valeurs supérieures à 0.", index+1, step.Action, firstNonEmpty(field.Label, field.Name)))
+						errors = append(errors, fmt.Sprintf("Étape %d - %s : le champ %s doit contenir uniquement des valeurs supérieures ou égales à %s.", index+1, step.Action, firstNonEmpty(field.Label, field.Name), formatMin(field.ItemMin)))
 						break
 					}
 				}
@@ -158,7 +168,24 @@ func actionFieldHidden(field ActionField, params map[string]any) bool {
 			return true
 		}
 	}
+	for _, group := range field.HiddenWhenAny {
+		if actionFieldHiddenGroupMatches(group, params) {
+			return true
+		}
+	}
 	return false
+}
+
+func actionFieldHiddenGroupMatches(group map[string]any, params map[string]any) bool {
+	if len(group) == 0 {
+		return false
+	}
+	for key, expected := range group {
+		if !actionValuesEqual(params[key], expected) {
+			return false
+		}
+	}
+	return true
 }
 
 func actionValuesEqual(left any, right any) bool {
@@ -180,6 +207,9 @@ func anyToFloat(value any) (float64, bool) {
 	case int64:
 		return float64(typed), true
 	case float64:
+		if typed != typed {
+			return 0, false
+		}
 		return typed, true
 	case json.Number:
 		number, err := typed.Float64()
@@ -191,6 +221,13 @@ func anyToFloat(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func formatMin(value float64) string {
+	if value == float64(int64(value)) {
+		return fmt.Sprint(int64(value))
+	}
+	return fmt.Sprint(value)
 }
 
 func fieldValueMatchesType(value any, expected string) bool {
@@ -207,12 +244,8 @@ func fieldValueMatchesType(value any, expected string) bool {
 		_, ok := value.(bool)
 		return ok
 	case "number":
-		switch value.(type) {
-		case int, int64, float64, json.Number:
-			return true
-		default:
-			return false
-		}
+		_, ok := anyToFloat(value)
+		return ok
 	case "string[]":
 		switch items := value.(type) {
 		case []any:
