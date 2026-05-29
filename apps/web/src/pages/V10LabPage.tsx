@@ -16,6 +16,7 @@ import {
 } from '../api/v10Lab';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Toast } from '../components/ui/Toast';
 import { messages } from '../i18n';
 
 const m = messages.v10Lab;
@@ -60,6 +61,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [isDirty, setIsDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [toastError, setToastError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
   const [confirmUpdate, setConfirmUpdate] = useState(false);
@@ -72,6 +74,14 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   useEffect(() => {
     void loadInitial();
   }, []);
+
+  useEffect(() => {
+    if (!toastError) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setToastError(''), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [toastError]);
 
   useEffect(() => {
     if (config) {
@@ -196,7 +206,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   async function createMaquette(groupName = draft.groupName ?? '') {
     const validation = validateConfig(draft);
     if (validation) {
-      setError(validation);
+      showError(validation);
       return;
     }
     await run(async () => {
@@ -221,13 +231,13 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     const validation = validateConfig(config);
     if (validation) {
       setMessage('');
-      setError(validation);
+      showError(validation);
       return false;
     }
     const requiredFieldsValidation = validatePipelineRequiredFields(config, actions);
     if (requiredFieldsValidation) {
       setMessage('');
-      setError(requiredFieldsValidation);
+      showError(requiredFieldsValidation);
       return false;
     }
     let saved = false;
@@ -333,7 +343,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       return;
     }
     if (moduleCommandHasUnsafeCharacters(command)) {
-      setError(m.moduleCommand.invalidCommand);
+      showError(m.moduleCommand.invalidCommand);
       return;
     }
     if (config && isDirty) {
@@ -418,7 +428,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       const validation = validateConfig(parsed) || validatePipelineRequiredFields(parsed, actions);
       if (validation) {
         setMessage('');
-        setError(validation);
+        showError(validation);
         return;
       }
       const saved = normalizeConfig(await v10LabApi.updateMaquette(selectedName || config.name, parsed));
@@ -429,7 +439,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setMessage(m.jsonSaved);
       setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'JSON invalide');
+      showError(err instanceof Error ? err.message : 'JSON invalide');
     }
   }
 
@@ -504,7 +514,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   async function createGroup() {
     const name = newGroupName.trim();
     if (!name) {
-      setError('Nom de groupe obligatoire.');
+      showError('Nom de groupe obligatoire.');
       return;
     }
     await run(async () => {
@@ -529,7 +539,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       return;
     }
     if (!stringsEqual(filepathExt(file.name), '.cfg')) {
-      setError(m.errors.cfgOnly);
+      showError(m.errors.cfgOnly);
       return;
     }
     await run(async () => {
@@ -571,10 +581,15 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       await task();
     } catch (err) {
       onError?.();
-      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+      showError(err instanceof Error ? err.message : 'Erreur inconnue');
     } finally {
       setBusy(false);
     }
+  }
+
+  function showError(nextError: string) {
+    setError(nextError);
+    setToastError(nextError);
   }
 
   function updateConfig(next: V10Config) {
@@ -666,6 +681,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
   return (
     <div className="workspace v10-lab-workspace">
+      <Toast message={toastError} type="error" onClose={() => setToastError('')} />
       <header className="page-header">
         <div className="page-title-group">
           <p className="page-eyebrow">{m.title}</p>

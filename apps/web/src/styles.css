@@ -1916,6 +1916,49 @@ textarea {
   font-weight: 800;
 }
 
+.toast {
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  z-index: 1000;
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--danger-soft);
+  border-left: 5px solid var(--danger);
+  border-radius: 8px;
+  padding: 12px 12px 12px 14px;
+  background: #fff5f5;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.toast-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.toast-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.toast-close:hover,
+.toast-close:focus-visible {
+  background: var(--danger-soft);
+}
+
 .form-error,
 .confirm-dialog .form-error {
   margin: 8px 0 12px;
