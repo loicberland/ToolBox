@@ -143,10 +143,10 @@ func TestValidateConfigNumberMinRules(t *testing.T) {
 	}{
 		{name: "created_by zero rejected", action: "create-plant", fieldName: "Créé par", params: map[string]any{"entity_name": "Usine", "created_by": 0}},
 		{name: "created_by negative rejected", action: "create-plant", fieldName: "Créé par", params: map[string]any{"entity_name": "Usine", "created_by": -1}},
-		{name: "user_id zero rejected", action: "create-machining-job", fieldName: "Utilisateur ID", params: map[string]any{"entity_name": "Dossier", "user_id": 0}},
-		{name: "user_id negative rejected", action: "create-machining-job", fieldName: "Utilisateur ID", params: map[string]any{"entity_name": "Dossier", "user_id": -1}},
-		{name: "workshop_id zero rejected", action: "create-machine-group", fieldName: "Atelier ID", params: map[string]any{"entity_name": "Groupe", "workshop_id": 0, "created_by": 1}},
-		{name: "workshop_id negative rejected", action: "create-machine-group", fieldName: "Atelier ID", params: map[string]any{"entity_name": "Groupe", "workshop_id": -1, "created_by": 1}},
+		{name: "user_id zero rejected", action: "create-machining-job", fieldName: "ID de l'utilisateur", params: map[string]any{"entity_name": "Dossier", "user_id": 0}},
+		{name: "user_id negative rejected", action: "create-machining-job", fieldName: "ID de l'utilisateur", params: map[string]any{"entity_name": "Dossier", "user_id": -1}},
+		{name: "workshop_id zero rejected", action: "create-machine-group", fieldName: "ID de l'atelier", params: map[string]any{"entity_name": "Groupe", "workshop_id": 0, "created_by": 1}},
+		{name: "workshop_id negative rejected", action: "create-machine-group", fieldName: "ID de l'atelier", params: map[string]any{"entity_name": "Groupe", "workshop_id": -1, "created_by": 1}},
 	}
 	for _, tc := range invalidCases {
 		t.Run(tc.name, func(t *testing.T) {

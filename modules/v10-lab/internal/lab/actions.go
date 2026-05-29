@@ -150,7 +150,7 @@ func Actions() []Action {
 					{Name: "entity_name", Label: "Nom relais", Type: "string"},
 					{Name: "rank", Label: "Ordre", Type: "number"},
 				}},
-				{Name: "configs", Label: "Cibles config", Type: "object[]", Default: []any{}, ItemFields: []ActionField{
+				{Name: "configs", Label: "Cibles config", Type: "object[]", Default: []any{}, UniqueItemField: "module_key", ItemFields: []ActionField{
 					{Name: "module_key", Label: "Clef", Type: "string", Options: []ActionOption{
 						{Label: "remote-filepath", Value: "remote-filepath"},
 						{Label: "subprogram-filepath", Value: "subprogram-filepath"},

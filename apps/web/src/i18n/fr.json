@@ -125,6 +125,7 @@
     "copy": "Copier",
     "saveJson": "Sauvegarder JSON",
     "addStep": "Ajouter une étape",
+    "addGroup": "Ajouter un groupe",
     "addAction": "Ajouter une action",
     "actionUsesGeneralSettings": "Cette action utilise les paramètres de l’onglet Général.",
     "chooseAction": "Choisir une action",

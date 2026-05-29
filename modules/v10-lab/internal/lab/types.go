@@ -22,20 +22,21 @@ const (
 )
 
 type ActionField struct {
-	Name          string           `json:"name"`
-	Label         string           `json:"label"`
-	Type          string           `json:"type"`
-	Required      bool             `json:"required"`
-	Default       any              `json:"default"`
-	Description   string           `json:"description"`
-	Options       []ActionOption   `json:"options,omitempty"`
-	OptionsSource string           `json:"optionsSource,omitempty"`
-	HiddenWhen    map[string]any   `json:"hiddenWhen,omitempty"`
-	HiddenWhenAny []map[string]any `json:"hiddenWhenAny,omitempty"`
-	ItemFields    []ActionField    `json:"itemFields,omitempty"`
-	Min           float64          `json:"min,omitempty"`
-	ItemMin       float64          `json:"itemMin,omitempty"`
-	Multiple      bool             `json:"multiple,omitempty"`
+	Name            string           `json:"name"`
+	Label           string           `json:"label"`
+	Type            string           `json:"type"`
+	Required        bool             `json:"required"`
+	Default         any              `json:"default"`
+	Description     string           `json:"description"`
+	Options         []ActionOption   `json:"options,omitempty"`
+	OptionsSource   string           `json:"optionsSource,omitempty"`
+	HiddenWhen      map[string]any   `json:"hiddenWhen,omitempty"`
+	HiddenWhenAny   []map[string]any `json:"hiddenWhenAny,omitempty"`
+	ItemFields      []ActionField    `json:"itemFields,omitempty"`
+	UniqueItemField string           `json:"uniqueItemField,omitempty"`
+	Min             float64          `json:"min,omitempty"`
+	ItemMin         float64          `json:"itemMin,omitempty"`
+	Multiple        bool             `json:"multiple,omitempty"`
 }
 
 type ActionOption struct {

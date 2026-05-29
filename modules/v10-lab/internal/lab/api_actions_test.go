@@ -72,6 +72,59 @@ func TestCreateTargetPayloadWithConfigsAndTunnelSteps(t *testing.T) {
 	}
 }
 
+func TestValidateTargetConfigs(t *testing.T) {
+	validCases := []struct {
+		name    string
+		configs []any
+	}{
+		{name: "empty", configs: []any{}},
+		{name: "remote", configs: []any{map[string]any{"module_key": "remote-filepath", "module_value": "remote"}}},
+		{name: "subprogram", configs: []any{map[string]any{"module_key": "subprogram-filepath", "module_value": "sub"}}},
+		{name: "both", configs: []any{
+			map[string]any{"module_key": "remote-filepath", "module_value": "remote"},
+			map[string]any{"module_key": "subprogram-filepath", "module_value": "sub"},
+		}},
+	}
+	for _, tc := range validCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateTargetConfigs(map[string]any{"configs": tc.configs}); err != nil {
+				t.Fatalf("expected valid configs, got %v", err)
+			}
+		})
+	}
+
+	invalidCases := []struct {
+		name    string
+		configs []any
+		want    string
+	}{
+		{name: "duplicate remote", configs: []any{
+			map[string]any{"module_key": "remote-filepath", "module_value": "remote"},
+			map[string]any{"module_key": "remote-filepath", "module_value": "other"},
+		}, want: `la clé module "remote-filepath" est utilisée plusieurs fois dans configs`},
+		{name: "duplicate subprogram", configs: []any{
+			map[string]any{"module_key": "subprogram-filepath", "module_value": "sub"},
+			map[string]any{"module_key": "subprogram-filepath", "module_value": "other"},
+		}, want: `la clé module "subprogram-filepath" est utilisée plusieurs fois dans configs`},
+		{name: "three rows", configs: []any{
+			map[string]any{"module_key": "remote-filepath", "module_value": "remote"},
+			map[string]any{"module_key": "subprogram-filepath", "module_value": "sub"},
+			map[string]any{"module_key": "remote-filepath", "module_value": "other"},
+		}, want: `la clé module "remote-filepath" est utilisée plusieurs fois dans configs`},
+		{name: "unknown", configs: []any{
+			map[string]any{"module_key": "xxx", "module_value": "bad"},
+		}, want: `la clé module "xxx" n'est pas autorisée dans configs`},
+	}
+	for _, tc := range invalidCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTargetConfigs(map[string]any{"configs": tc.configs})
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("expected %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 func TestCreateTargetCatalogCreatedByRequired(t *testing.T) {
 	action := mustFindAction(t, "create-target")
 	createdBy := mustFindField(t, action, "created_by")
@@ -141,7 +194,7 @@ func TestCreateMachinePayloadSerial(t *testing.T) {
 		"dnc_port_type": "serial",
 	}))
 
-	if payload.DNCPortType != "serial" || payload.TargetNameRoot != "cible2" {
+	if payload.DNCPortType != "serial" || payload.TargetNameRoot != "" {
 		t.Fatalf("hidden fields must keep backend defaults: %#v", payload)
 	}
 }

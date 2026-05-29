@@ -138,12 +138,53 @@ func ValidateConfig(config Config) error {
 					}
 				}
 			}
+			if exists && field.UniqueItemField != "" && field.Type == "object[]" {
+				if message := validateUniqueObjectArrayField(field, value); message != "" {
+					errors = append(errors, fmt.Sprintf("Étape %d - %s : %s", index+1, step.Action, message))
+				}
+			}
 		}
 	}
 	if len(errors) > 0 {
 		return ValidationError{Items: errors}
 	}
 	return nil
+}
+
+func validateUniqueObjectArrayField(field ActionField, value any) string {
+	rows := objectArrayParam(map[string]any{field.Name: value}, field.Name)
+	uniqueField, ok := findActionField(field.ItemFields, field.UniqueItemField)
+	if !ok {
+		return ""
+	}
+	allowed := map[string]bool{}
+	for _, option := range uniqueField.Options {
+		allowed[option.Value] = true
+	}
+	seen := map[string]bool{}
+	for _, row := range rows {
+		itemValue := strings.TrimSpace(fmt.Sprint(row[field.UniqueItemField]))
+		if itemValue == "" {
+			continue
+		}
+		if len(allowed) > 0 && !allowed[itemValue] {
+			return fmt.Sprintf("dans %q, la valeur %q n'est pas autorisée.", firstNonEmpty(field.Label, field.Name), itemValue)
+		}
+		if seen[itemValue] {
+			return fmt.Sprintf("dans %q, la valeur %q ne peut être utilisée qu'une seule fois.", firstNonEmpty(field.Label, field.Name), itemValue)
+		}
+		seen[itemValue] = true
+	}
+	return ""
+}
+
+func findActionField(fields []ActionField, name string) (ActionField, bool) {
+	for _, field := range fields {
+		if field.Name == name {
+			return field, true
+		}
+	}
+	return ActionField{}, false
 }
 
 func fieldValueIsEmpty(value any) bool {

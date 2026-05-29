@@ -35,6 +35,7 @@ export type V10ActionField = {
   hiddenWhen?: Record<string, unknown>;
   hiddenWhenAny?: Array<Record<string, unknown>>;
   itemFields?: V10ActionField[];
+  uniqueItemField?: string;
   min?: number;
   itemMin?: number;
   multiple?: boolean;

@@ -29,6 +29,9 @@ type TargetTunnelStep struct {
 
 func ExecuteCreateTarget() ActionExecute {
 	return func(ctx ActionContext, params map[string]any) error {
+		if err := validateTargetConfigs(params); err != nil {
+			return err
+		}
 		client, err := NewGedixAPIClient(ctx.Config, ctx.Writer)
 		if err != nil {
 			return err
@@ -40,6 +43,28 @@ func ExecuteCreateTarget() ActionExecute {
 		fmt.Fprintf(ctx.Writer, "[API] Cible créée avec succès : %s\n", payload.EntityName)
 		return nil
 	}
+}
+
+func validateTargetConfigs(params map[string]any) error {
+	allowed := map[string]bool{
+		"remote-filepath":     true,
+		"subprogram-filepath": true,
+	}
+	seen := map[string]bool{}
+	for _, row := range objectArrayParam(params, "configs") {
+		moduleKey := strings.TrimSpace(fmt.Sprint(row["module_key"]))
+		if moduleKey == "" {
+			continue
+		}
+		if !allowed[moduleKey] {
+			return fmt.Errorf("la clé module %q n'est pas autorisée dans configs", moduleKey)
+		}
+		if seen[moduleKey] {
+			return fmt.Errorf("la clé module %q est utilisée plusieurs fois dans configs", moduleKey)
+		}
+		seen[moduleKey] = true
+	}
+	return nil
 }
 
 func (c *GedixAPIClient) CreateTarget(payload CreateTargetPayload) error {

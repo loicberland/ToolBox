@@ -1458,7 +1458,7 @@ function ApiTokenEditor({ maquetteName, disabled }: { maquetteName: string; disa
   );
 }
 
-function ActionFieldInput({ field, value, config, params, onChange }: { field: V10Action['fields'][number]; value: unknown; config: V10Config; params: Record<string, unknown>; onChange: (value: unknown) => void }) {
+function ActionFieldInput({ field, value, config, params, disabledOptionValues, onChange }: { field: V10Action['fields'][number]; value: unknown; config: V10Config; params: Record<string, unknown>; disabledOptionValues?: Set<string>; onChange: (value: unknown) => void }) {
   const label = <FieldLabel field={field} />;
   const options = actionFieldOptions(field, config);
   if (options.length > 0) {
@@ -1466,7 +1466,7 @@ function ActionFieldInput({ field, value, config, params, onChange }: { field: V
       <label>{label}
         <select value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)}>
           <option value=""></option>
-          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {options.map((option) => <option key={option.value} value={option.value} disabled={disabledOptionValues?.has(option.value)}>{option.label}</option>)}
         </select>
       </label>
     );
@@ -1508,7 +1508,7 @@ function ActionNumberArrayField({ field, value, onChange }: { field: V10Action['
           <Button type="button" size="sm" variant="danger" onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" size="sm" variant="secondary" onClick={() => onChange([...rows, min ?? 0])}>{m.addStep}</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => onChange([...rows, min ?? 0])}>{m.addGroup}</Button>
       {hasInvalidValue && <span className="error">Les IDs groupes machine doivent être supérieurs à 0.</span>}
       {field.description && <span className="muted">{field.description}</span>}
     </div>
@@ -1518,6 +1518,11 @@ function ActionNumberArrayField({ field, value, onChange }: { field: V10Action['
 function ActionObjectArrayField({ field, value, config, params, onChange }: { field: V10Action['fields'][number]; value: unknown; config: V10Config; params: Record<string, unknown>; onChange: (value: unknown) => void }) {
   const rows = Array.isArray(value) ? value.filter(isRecord) : [];
   const itemFields = field.itemFields ?? [];
+  const uniqueFieldName = field.uniqueItemField;
+  const uniqueField = uniqueFieldName ? itemFields.find((itemField) => itemField.name === uniqueFieldName) : undefined;
+  const uniqueOptions = uniqueField ? actionFieldOptions(uniqueField, config) : [];
+  const usedUniqueValues = new Set(rows.map((row) => stringValue(row[uniqueFieldName ?? ''])).filter(Boolean));
+  const allUniqueValuesUsed = Boolean(uniqueFieldName && uniqueOptions.length > 0 && uniqueOptions.every((option) => usedUniqueValues.has(option.value)));
   const updateRow = (index: number, key: string, nextValue: unknown) => {
     onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: nextValue } : row));
   };
@@ -1528,6 +1533,12 @@ function ActionObjectArrayField({ field, value, config, params, onChange }: { fi
         row[itemField.name] = itemField.default;
       }
     }
+    if (uniqueFieldName && uniqueOptions.length > 0) {
+      const available = uniqueOptions.find((option) => !usedUniqueValues.has(option.value));
+      if (available) {
+        row[uniqueFieldName] = available.value;
+      }
+    }
     onChange([...rows, row]);
   };
   return (
@@ -1535,20 +1546,30 @@ function ActionObjectArrayField({ field, value, config, params, onChange }: { fi
       <FieldLabel field={field} />
       {rows.map((row, index) => (
         <div className="v10-action-array-row" key={index}>
-          {itemFields.filter((itemField) => !actionFieldHidden(itemField, { ...params, ...row })).map((itemField) => (
-            <ActionFieldInput
-              key={itemField.name}
-              field={itemField}
-              value={row[itemField.name]}
-              config={config}
-              params={{ ...params, ...row }}
-              onChange={(nextValue) => updateRow(index, itemField.name, nextValue)}
-            />
-          ))}
+          {itemFields.filter((itemField) => !actionFieldHidden(itemField, { ...params, ...row })).map((itemField) => {
+            const disabledOptionValues = itemField.name === uniqueFieldName
+              ? new Set(rows
+                .filter((_, rowIndex) => rowIndex !== index)
+                .map((otherRow) => stringValue(uniqueFieldName ? otherRow[uniqueFieldName] : undefined))
+                .filter(Boolean))
+              : undefined;
+            return (
+              <ActionFieldInput
+                key={itemField.name}
+                field={itemField}
+                value={row[itemField.name]}
+                config={config}
+                params={{ ...params, ...row }}
+                disabledOptionValues={disabledOptionValues}
+                onChange={(nextValue) => updateRow(index, itemField.name, nextValue)}
+              />
+            );
+          })}
           <Button type="button" size="sm" variant="danger" onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" size="sm" variant="secondary" onClick={addRow}>{m.addStep}</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={addRow} disabled={allUniqueValuesUsed}>{m.addStep}</Button>
+      {allUniqueValuesUsed && <span className="muted">Toutes les clés de configuration disponibles sont déjà utilisées.</span>}
     </div>
   );
 }
@@ -1836,6 +1857,12 @@ function validatePipelineRequiredFields(config: V10Config, actions: V10Action[])
           return validation;
         }
       }
+      if (field.type === 'object[]' && field.uniqueItemField) {
+        const validation = validateUniqueObjectArrayField(field, value);
+        if (validation) {
+          return validation;
+        }
+      }
       if (!field.required) {
         continue;
       }
@@ -1911,6 +1938,36 @@ function normalizeNumberArray(value: unknown): { items: number[]; valid: boolean
     return { items: [value], valid: Number.isInteger(value) };
   }
   return { items: [], valid: false };
+}
+
+function validateUniqueObjectArrayField(field: V10Action['fields'][number], value: unknown): string {
+  const rows = Array.isArray(value) ? value.filter(isRecord) : [];
+  const uniqueFieldName = field.uniqueItemField;
+  if (!uniqueFieldName) {
+    return '';
+  }
+  const uniqueField = field.itemFields?.find((itemField) => itemField.name === uniqueFieldName);
+  const options = uniqueField?.options ?? [];
+  const allowedValues = new Set(options.map((option) => option.value));
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const itemValue = stringValue(row[uniqueFieldName]);
+    if (!itemValue) {
+      continue;
+    }
+    if (allowedValues.size > 0 && !allowedValues.has(itemValue)) {
+      return `Dans "${field.label}", la valeur "${itemValue}" n'est pas autorisée.`;
+    }
+    if (seen.has(itemValue)) {
+      return `Dans "${field.label}", la valeur "${itemValue}" ne peut être utilisée qu'une seule fois.`;
+    }
+    seen.add(itemValue);
+  }
+  return '';
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function formatDate(value: string) {
