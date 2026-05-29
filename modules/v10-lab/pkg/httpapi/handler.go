@@ -38,6 +38,9 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/default-target", h.defaultTarget).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/releases/select-path", h.selectReleasePath).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/folders/select-path", h.selectFolderPath).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/action-plans", h.listActionPlans).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/action-plans", h.saveActionPlan).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/action-plans/{id}", h.deleteActionPlan).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes", h.listMaquettes).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes", h.createMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/import-existing", h.importExistingMaquettes).Methods(http.MethodPost)
@@ -158,6 +161,14 @@ type APITokenRequest struct {
 	Token string `json:"token"`
 }
 
+type SaveActionPlanRequest struct {
+	Name        string             `json:"name"`
+	ProductID   string             `json:"productId,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Actions     []lab.PipelineStep `json:"actions"`
+	Overwrite   bool               `json:"overwrite,omitempty"`
+}
+
 func (h *Handler) products(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, lab.Products())
 }
@@ -261,6 +272,38 @@ func (h *Handler) importExistingMaquettes(w http.ResponseWriter, r *http.Request
 func (h *Handler) listMaquetteGroups(w http.ResponseWriter, _ *http.Request) {
 	groups, err := lab.ListMaquetteGroups()
 	respond(w, groups, err)
+}
+
+func (h *Handler) listActionPlans(w http.ResponseWriter, r *http.Request) {
+	items, err := lab.ListSavedActionPlans(r.URL.Query().Get("productId"))
+	respond(w, items, err)
+}
+
+func (h *Handler) saveActionPlan(w http.ResponseWriter, r *http.Request) {
+	var request SaveActionPlanRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	plan, err := lab.SaveActionPlan(lab.SaveActionPlanInput{
+		Name:        request.Name,
+		ProductID:   request.ProductID,
+		Description: request.Description,
+		Actions:     request.Actions,
+		Overwrite:   request.Overwrite,
+	})
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, plan)
+}
+
+func (h *Handler) deleteActionPlan(w http.ResponseWriter, r *http.Request) {
+	if err := lab.DeleteSavedActionPlan(mux.Vars(r)["id"]); err != nil {
+		respondError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) createMaquetteGroup(w http.ResponseWriter, r *http.Request) {

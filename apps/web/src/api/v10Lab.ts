@@ -165,6 +165,24 @@ export type ScanCfgResponse = {
   warnings?: string[];
 };
 
+export type V10SavedActionPlan = {
+  id: string;
+  name: string;
+  productId?: string;
+  description?: string;
+  actions: PipelineStep[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveActionPlanPayload = {
+  name: string;
+  productId?: string;
+  description?: string;
+  actions: PipelineStep[];
+  overwrite?: boolean;
+};
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -208,6 +226,9 @@ export const v10LabApi = {
   selectReleasePath: () => request<SelectReleasePathResponse>('/v10-lab/releases/select-path', { method: 'POST' }),
   selectFolderPath: () => request<SelectReleasePathResponse>('/v10-lab/folders/select-path', { method: 'POST' }),
   listMaquettes: () => request<MaquetteSummary[]>('/v10-lab/maquettes'),
+  listSavedActionPlans: (productId?: string) => request<V10SavedActionPlan[]>(`/v10-lab/action-plans${productId ? `?productId=${encodeURIComponent(productId)}` : ''}`),
+  saveActionPlan: (payload: SaveActionPlanPayload) => request<V10SavedActionPlan>('/v10-lab/action-plans', jsonRequest('POST', payload)),
+  deleteSavedActionPlan: (id: string) => request<void>(`/v10-lab/action-plans/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   listMaquetteGroups: () => request<MaquetteGroup[]>('/v10-lab/maquette-groups'),
   createMaquetteGroup: (name: string) => request<MaquetteGroup>('/v10-lab/maquette-groups', jsonRequest('POST', { name })),
   updateMaquetteGroup: (name: string, nextName: string) => request<MaquetteGroup>(`/v10-lab/maquette-groups/${encodeURIComponent(name)}`, jsonRequest('PUT', { name: nextName })),

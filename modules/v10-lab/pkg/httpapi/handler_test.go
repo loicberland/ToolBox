@@ -135,6 +135,45 @@ func TestMaquetteGroups(t *testing.T) {
 	}
 }
 
+func TestSavedActionPlansHTTP(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	var empty []lab.SavedActionPlan
+	getJSON(t, router, "/api/v10-lab/action-plans?productId="+lab.GedixProdV10, &empty, http.StatusOK)
+	if len(empty) != 0 {
+		t.Fatalf("expected no saved plans, got %#v", empty)
+	}
+
+	var saved lab.SavedActionPlan
+	postJSONInto(t, router, "/api/v10-lab/action-plans", SaveActionPlanRequest{
+		Name:      "Initialisation",
+		ProductID: lab.GedixProdV10,
+		Actions:   []lab.PipelineStep{{Action: "create-workshop", Params: map[string]any{"entity_name": "Atelier"}}},
+	}, &saved, http.StatusOK)
+	if saved.ID == "" || len(saved.Actions) != 1 {
+		t.Fatalf("unexpected saved action plan: %#v", saved)
+	}
+
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/action-plans", SaveActionPlanRequest{Name: "Initialisation", ProductID: lab.GedixProdV10}, http.StatusBadRequest)
+	postJSONInto(t, router, "/api/v10-lab/action-plans", SaveActionPlanRequest{Name: "Initialisation", ProductID: lab.GedixProdV10, Overwrite: true}, &saved, http.StatusOK)
+
+	var items []lab.SavedActionPlan
+	getJSON(t, router, "/api/v10-lab/action-plans?productId="+lab.GedixProdV10, &items, http.StatusOK)
+	if len(items) != 1 || items[0].ID != saved.ID {
+		t.Fatalf("unexpected saved plans: %#v", items)
+	}
+
+	request := httptest.NewRequest(http.MethodDelete, "/api/v10-lab/action-plans/"+saved.ID, nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestActionsByProduct(t *testing.T) {
 	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
 	router := mux.NewRouter()

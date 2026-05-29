@@ -12,6 +12,7 @@ import {
   V10Action,
   V10Config,
   V10Product,
+  V10SavedActionPlan,
   v10LabApi,
 } from '../api/v10Lab';
 import { Button } from '../components/ui/Button';
@@ -43,6 +44,10 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [templates, setTemplates] = useState<DBTemplate[]>([]);
   const [maquettes, setMaquettes] = useState<MaquetteSummary[]>([]);
   const [groups, setGroups] = useState<MaquetteGroup[]>([]);
+  const [savedActionPlans, setSavedActionPlans] = useState<V10SavedActionPlan[]>([]);
+  const [selectedSavedActionPlanID, setSelectedSavedActionPlanID] = useState('');
+  const [showSaveActionPlan, setShowSaveActionPlan] = useState(false);
+  const [actionPlanName, setActionPlanName] = useState('');
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [openUngrouped, setOpenUngrouped] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -108,6 +113,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   useEffect(() => {
     if (config) {
       void loadActions(config.product);
+      void loadSavedActionPlans(config.product);
     }
   }, [config?.product]);
 
@@ -175,12 +181,23 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       const product = productItems.find((item) => item.id === DEFAULT_V10_PRODUCT_ID) ?? productItems[0];
       setDraft(defaultConfig(product?.id, product));
       await loadActions(product?.id ?? DEFAULT_V10_PRODUCT_ID);
+      await loadSavedActionPlans(product?.id ?? DEFAULT_V10_PRODUCT_ID);
     });
   }
 
   async function loadActions(product: string) {
     const items = await v10LabApi.actions(product || DEFAULT_V10_PRODUCT_ID);
     setActions(items);
+  }
+
+  async function loadSavedActionPlans(product: string) {
+    try {
+      const items = await v10LabApi.listSavedActionPlans(product || DEFAULT_V10_PRODUCT_ID);
+      setSavedActionPlans(items);
+      setSelectedSavedActionPlanID((current) => current && items.some((item) => item.id === current) ? current : (items[0]?.id ?? ''));
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Erreur chargement plans d\'actions');
+    }
   }
 
   async function loadDefaultTarget(name: string) {
@@ -268,6 +285,78 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       saved = true;
     });
     return saved;
+  }
+
+  async function saveCurrentActionPlan(overwrite = false) {
+    if (!config) {
+      return;
+    }
+    const name = actionPlanName.trim();
+    if (!name) {
+      showError('Nom du plan d\'actions obligatoire.');
+      return;
+    }
+    const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
+    await run(async () => {
+      let saved: V10SavedActionPlan;
+      try {
+        saved = await v10LabApi.saveActionPlan({
+          name,
+          productId: config.product,
+          actions: deepClonePipeline(apiSteps),
+          overwrite,
+        });
+      } catch (err) {
+        if (!overwrite && err instanceof Error && err.message.toLowerCase().includes('existe') && window.confirm('Un plan d\'actions avec ce nom existe déjà. Voulez-vous le remplacer ?')) {
+          saved = await v10LabApi.saveActionPlan({
+            name,
+            productId: config.product,
+            actions: deepClonePipeline(apiSteps),
+            overwrite: true,
+          });
+        } else {
+          throw err;
+        }
+      }
+      await loadSavedActionPlans(config.product);
+      setSelectedSavedActionPlanID(saved.id);
+      setShowSaveActionPlan(false);
+      setActionPlanName('');
+      setMessage('Plan d\'actions enregistré.');
+    });
+  }
+
+  function addSavedActionPlanToCurrent() {
+    if (!config) {
+      return;
+    }
+    const plan = savedActionPlans.find((item) => item.id === selectedSavedActionPlanID);
+    if (!plan) {
+      showError('Sélectionnez un plan d\'actions enregistré.');
+      return;
+    }
+    const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
+    updateConfig({ ...config, pipeline: [...apiSteps, ...deepClonePipeline(plan.actions)] });
+    setMessage('Plan d\'actions ajouté au plan actuel.');
+  }
+
+  async function deleteSavedActionPlan() {
+    if (!config) {
+      return;
+    }
+    const plan = savedActionPlans.find((item) => item.id === selectedSavedActionPlanID);
+    if (!plan) {
+      showError('Sélectionnez un plan d\'actions enregistré.');
+      return;
+    }
+    if (!window.confirm(`Supprimer le plan d'actions enregistré "${plan.name}" ?`)) {
+      return;
+    }
+    await run(async () => {
+      await v10LabApi.deleteSavedActionPlan(plan.id);
+      await loadSavedActionPlans(config.product);
+      setMessage('Plan d\'actions enregistré supprimé.');
+    });
   }
 
   async function changeTab(nextTab: Tab) {
@@ -763,7 +852,21 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
               <ApiTokenEditor maquetteName={config.name} disabled={busy} />
-              <PipelineBuilder config={config} actions={actions} onChange={updateConfig} />
+              <PipelineBuilder
+                config={config}
+                actions={actions}
+                savedActionPlans={savedActionPlans}
+                selectedSavedActionPlanID={selectedSavedActionPlanID}
+                showSaveActionPlan={showSaveActionPlan}
+                actionPlanName={actionPlanName}
+                onSelectedSavedActionPlanChange={setSelectedSavedActionPlanID}
+                onShowSaveActionPlanChange={setShowSaveActionPlan}
+                onActionPlanNameChange={setActionPlanName}
+                onSaveActionPlan={() => void saveCurrentActionPlan()}
+                onAddSavedActionPlan={addSavedActionPlanToCurrent}
+                onDeleteSavedActionPlan={() => void deleteSavedActionPlan()}
+                onChange={updateConfig}
+              />
             </LocalErrorBoundary>
           )}
           {activeTab === m.tabs.execution && (
@@ -1229,7 +1332,21 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
   );
 }
 
-function PipelineBuilder({ config, actions, onChange }: { config: V10Config; actions: V10Action[]; onChange: (config: V10Config) => void }) {
+function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActionPlanID, showSaveActionPlan, actionPlanName, onSelectedSavedActionPlanChange, onShowSaveActionPlanChange, onActionPlanNameChange, onSaveActionPlan, onAddSavedActionPlan, onDeleteSavedActionPlan, onChange }: {
+  config: V10Config;
+  actions: V10Action[];
+  savedActionPlans: V10SavedActionPlan[];
+  selectedSavedActionPlanID: string;
+  showSaveActionPlan: boolean;
+  actionPlanName: string;
+  onSelectedSavedActionPlanChange: (id: string) => void;
+  onShowSaveActionPlanChange: (show: boolean) => void;
+  onActionPlanNameChange: (name: string) => void;
+  onSaveActionPlan: () => void;
+  onAddSavedActionPlan: () => void;
+  onDeleteSavedActionPlan: () => void;
+  onChange: (config: V10Config) => void;
+}) {
   const byID = useMemo<Record<string, V10Action>>(() => Object.fromEntries(actions.map((action) => [action.id, action])), [actions]);
   const legacySteps = (config.pipeline ?? []).filter((step) => systemPipelineActions.has(step.action));
   const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
@@ -1267,6 +1384,38 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
   return (
     <div className="v10-pipeline">
       <p className="readonly-notice">{m.pipeline.help}</p>
+      <section className="v10-saved-plan-panel">
+        <div className="v10-saved-plan-header">
+          <h4>Plans enregistrés</h4>
+          <Button type="button" size="sm" variant="secondary" onClick={() => {
+            onActionPlanNameChange(config.name ? `${config.name} - Plan d'actions` : '');
+            onShowSaveActionPlanChange(!showSaveActionPlan);
+          }}>Sauvegarder le plan actuel</Button>
+        </div>
+        {showSaveActionPlan && (
+          <div className="v10-saved-plan-save">
+            <label>Nom du plan
+              <input value={actionPlanName} onChange={(event) => onActionPlanNameChange(event.currentTarget.value)} placeholder="Initialisation Prod V10" />
+            </label>
+            <div className="button-row">
+              <Button type="button" size="sm" onClick={onSaveActionPlan} disabled={!actionPlanName.trim()}>Sauvegarder</Button>
+              <Button type="button" size="sm" variant="secondary" onClick={() => onShowSaveActionPlanChange(false)}>Annuler</Button>
+            </div>
+          </div>
+        )}
+        <div className="v10-saved-plan-load">
+          <label>Plan enregistré
+            <select value={selectedSavedActionPlanID} onChange={(event) => onSelectedSavedActionPlanChange(event.currentTarget.value)} disabled={savedActionPlans.length === 0}>
+              <option value="">Aucun plan enregistré</option>
+              {savedActionPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+            </select>
+          </label>
+          <div className="button-row">
+            <Button type="button" size="sm" variant="secondary" onClick={onAddSavedActionPlan} disabled={!selectedSavedActionPlanID}>Ajouter au plan actuel</Button>
+            <Button type="button" size="sm" variant="danger" onClick={onDeleteSavedActionPlan} disabled={!selectedSavedActionPlanID}>Supprimer</Button>
+          </div>
+        </div>
+      </section>
       {legacySteps.length > 0 && (
         <div className="readonly-notice warning">
           <p>{m.pipeline.legacySystemActions}</p>
@@ -2096,6 +2245,10 @@ function paramsFromActionDefaults(action: V10Action): Record<string, unknown> {
     }
   }
   return params;
+}
+
+function deepClonePipeline(steps: PipelineStep[]): PipelineStep[] {
+  return JSON.parse(JSON.stringify(steps)) as PipelineStep[];
 }
 
 function debugFlagButtons(debugTargetFlags: Record<string, string[]>, removeCustomFlag: (target: string, flag: string) => void) {
