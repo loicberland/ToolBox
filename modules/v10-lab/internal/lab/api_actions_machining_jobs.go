@@ -13,6 +13,9 @@ func ExecuteCreateMachiningJob() ActionExecute {
 		if err != nil {
 			return err
 		}
+		if err := validateNumberListMin(params, "machine_group_ids", 1); err != nil {
+			return err
+		}
 		query := createMachiningJobQuery(params)
 		if err := client.CreateMachiningJob(query); err != nil {
 			return err

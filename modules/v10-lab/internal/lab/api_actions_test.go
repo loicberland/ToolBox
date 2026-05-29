@@ -20,6 +20,22 @@ func TestCreateMachineGroupPayload(t *testing.T) {
 	}
 }
 
+func TestCreateMachineGroupCatalogDefaults(t *testing.T) {
+	action := mustFindAction(t, "create-machine-group")
+	workshopID := mustFindField(t, action, "workshop_id")
+	createdBy := mustFindField(t, action, "created_by")
+	if !workshopID.Required || workshopID.Default != 1 {
+		t.Fatalf("unexpected workshop_id metadata: %#v", workshopID)
+	}
+	if !createdBy.Required || createdBy.Default != 1 {
+		t.Fatalf("unexpected created_by metadata: %#v", createdBy)
+	}
+	payload := createMachineGroupPayload(paramsWithDefaults(action, map[string]any{"entity_name": "Groupe1"}))
+	if payload.WorkshopID != 1 || payload.CreatedBy != 1 {
+		t.Fatalf("expected catalog defaults in payload: %#v", payload)
+	}
+}
+
 func TestCreateTargetPayloadEmptyArrays(t *testing.T) {
 	payload := createTargetPayload(paramsWithDefaults(mustFindAction(t, "create-target"), map[string]any{
 		"entity_name":    "cible2",
@@ -56,6 +72,21 @@ func TestCreateTargetPayloadWithConfigsAndTunnelSteps(t *testing.T) {
 	}
 }
 
+func TestCreateTargetCatalogCreatedByRequired(t *testing.T) {
+	action := mustFindAction(t, "create-target")
+	createdBy := mustFindField(t, action, "created_by")
+	if !createdBy.Required || createdBy.Default != 1 {
+		t.Fatalf("unexpected created_by metadata: %#v", createdBy)
+	}
+	payload := createTargetPayload(paramsWithDefaults(action, map[string]any{
+		"entity_name":    "cible2",
+		"connector_name": "connector-focas-01",
+	}))
+	if payload.CreatedBy != 1 {
+		t.Fatalf("expected created_by default in payload: %#v", payload)
+	}
+}
+
 func TestCreateMachinePayloadEthernetWithGroup(t *testing.T) {
 	payload := createMachinePayload(paramsWithDefaults(mustFindAction(t, "create-machine"), map[string]any{
 		"entity_name":       "Machine",
@@ -72,6 +103,25 @@ func TestCreateMachinePayloadEthernetWithGroup(t *testing.T) {
 	}
 	if !reflect.DeepEqual(payload.MachineGroupsMachines, []MachineGroupMachine{{MachineGroupID: 2}}) {
 		t.Fatalf("unexpected machine groups: %#v", payload.MachineGroupsMachines)
+	}
+}
+
+func TestCreateMachineMachineGroupIDsValidation(t *testing.T) {
+	for _, params := range []map[string]any{
+		{"machine_group_ids": []any{}},
+		{"machine_group_ids": []any{float64(1), float64(2)}},
+	} {
+		if err := validateNumberListMin(params, "machine_group_ids", 1); err != nil {
+			t.Fatalf("expected valid machine_group_ids %#v: %v", params, err)
+		}
+	}
+	for _, params := range []map[string]any{
+		{"machine_group_ids": []any{float64(0)}},
+		{"machine_group_ids": []any{float64(-1)}},
+	} {
+		if err := validateNumberListMin(params, "machine_group_ids", 1); err == nil {
+			t.Fatalf("expected invalid machine_group_ids %#v", params)
+		}
 	}
 }
 
@@ -121,6 +171,39 @@ func TestCreateMachinePayloadWithCommandProgram(t *testing.T) {
 	}
 }
 
+func TestCreateMachiningJobCatalogUserIDRequired(t *testing.T) {
+	action := mustFindAction(t, "create-machining-job")
+	userID := mustFindField(t, action, "user_id")
+	if !userID.Required || userID.Default != 1 {
+		t.Fatalf("unexpected user_id metadata: %#v", userID)
+	}
+	query := createMachiningJobQuery(paramsWithDefaults(action, map[string]any{
+		"entity_name": "dossier",
+	}))
+	if query["user_id"] != "1" {
+		t.Fatalf("expected user_id default in query: %#v", query)
+	}
+}
+
+func TestCreateMachiningJobMachineGroupIDsValidation(t *testing.T) {
+	for _, params := range []map[string]any{
+		{"machine_group_ids": []any{}},
+		{"machine_group_ids": []any{float64(1)}},
+	} {
+		if err := validateNumberListMin(params, "machine_group_ids", 1); err != nil {
+			t.Fatalf("expected valid machine_group_ids %#v: %v", params, err)
+		}
+	}
+	for _, params := range []map[string]any{
+		{"machine_group_ids": []any{float64(0)}},
+		{"machine_group_ids": []any{float64(-1)}},
+	} {
+		if err := validateNumberListMin(params, "machine_group_ids", 1); err == nil {
+			t.Fatalf("expected invalid machine_group_ids %#v", params)
+		}
+	}
+}
+
 func TestCreateMachiningJobQueryWithMachineGroup(t *testing.T) {
 	query := createMachiningJobQuery(paramsWithDefaults(mustFindAction(t, "create-machining-job"), map[string]any{
 		"entity_name":       "groupe 1",
@@ -160,4 +243,15 @@ func mustFindAction(t *testing.T, id string) Action {
 		t.Fatalf("missing action %s", id)
 	}
 	return action
+}
+
+func mustFindField(t *testing.T, action Action, name string) ActionField {
+	t.Helper()
+	for _, field := range action.Fields {
+		if field.Name == name {
+			return field
+		}
+	}
+	t.Fatalf("missing field %s on action %s", name, action.ID)
+	return ActionField{}
 }

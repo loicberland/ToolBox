@@ -26,40 +26,50 @@ func intParam(params map[string]any, key string) int {
 }
 
 func numberListParam(params map[string]any, key string) []int {
+	items, _ := numberListParamStrict(params, key)
+	return items
+}
+
+func numberListParamStrict(params map[string]any, key string) ([]int, bool) {
 	raw, exists := params[key]
 	if !exists || raw == nil {
-		return []int{}
+		return []int{}, true
 	}
 	switch typed := raw.(type) {
 	case []int:
-		return append([]int{}, typed...)
+		return append([]int{}, typed...), true
 	case []int64:
 		items := make([]int, 0, len(typed))
 		for _, item := range typed {
 			items = append(items, int(item))
 		}
-		return items
+		return items, true
 	case []float64:
 		items := make([]int, 0, len(typed))
 		for _, item := range typed {
+			if math.IsNaN(item) || math.IsInf(item, 0) || item != math.Trunc(item) {
+				return []int{}, false
+			}
 			items = append(items, int(item))
 		}
-		return items
+		return items, true
 	case []any:
 		items := []int{}
 		for _, item := range typed {
 			if value, ok := anyToInt(item); ok {
 				items = append(items, value)
+			} else {
+				return []int{}, false
 			}
 		}
-		return items
+		return items, true
 	case string:
-		return numberListFromString(typed)
+		return numberListFromStringStrict(typed)
 	default:
 		if value, ok := anyToInt(raw); ok {
-			return []int{value}
+			return []int{value}, true
 		}
-		return []int{}
+		return []int{}, false
 	}
 }
 
@@ -99,6 +109,19 @@ func numberListJSONParam(params map[string]any, key string) string {
 	return string(payload)
 }
 
+func validateNumberListMin(params map[string]any, key string, min int) error {
+	items, ok := numberListParamStrict(params, key)
+	if !ok {
+		return fmt.Errorf("%s: liste de nombres invalide", key)
+	}
+	for _, item := range items {
+		if item < min {
+			return fmt.Errorf("Les IDs groupes machine doivent être supérieurs à 0.")
+		}
+	}
+	return nil
+}
+
 func anyToInt(value any) (int, bool) {
 	switch typed := value.(type) {
 	case int:
@@ -106,7 +129,7 @@ func anyToInt(value any) (int, bool) {
 	case int64:
 		return int(typed), true
 	case float64:
-		if math.IsNaN(typed) || math.IsInf(typed, 0) {
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed != math.Trunc(typed) {
 			return 0, false
 		}
 		return int(typed), true
@@ -116,7 +139,7 @@ func anyToInt(value any) (int, bool) {
 			return int(integer), true
 		}
 		decimal, err := typed.Float64()
-		if err == nil {
+		if err == nil && decimal == math.Trunc(decimal) {
 			return int(decimal), true
 		}
 	case string:
@@ -129,9 +152,14 @@ func anyToInt(value any) (int, bool) {
 }
 
 func numberListFromString(value string) []int {
+	items, _ := numberListFromStringStrict(value)
+	return items
+}
+
+func numberListFromStringStrict(value string) ([]int, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return []int{}
+		return []int{}, true
 	}
 	if strings.HasPrefix(value, "[") {
 		var raw []any
@@ -140,19 +168,23 @@ func numberListFromString(value string) []int {
 			for _, item := range raw {
 				if integer, ok := anyToInt(item); ok {
 					items = append(items, integer)
+				} else {
+					return []int{}, false
 				}
 			}
-			return items
+			return items, true
 		}
+		return []int{}, false
 	}
 	items := []int{}
 	for _, part := range strings.Split(value, ",") {
 		integer, err := strconv.Atoi(strings.TrimSpace(part))
-		if err == nil {
-			items = append(items, integer)
+		if err != nil {
+			return []int{}, false
 		}
+		items = append(items, integer)
 	}
-	return items
+	return items, true
 }
 
 func queryNumberParam(params map[string]any, key string) string {

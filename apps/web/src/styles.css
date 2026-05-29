@@ -1754,6 +1754,31 @@ textarea {
   gap: 12px;
 }
 
+.v10-pipeline-step-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.v10-pipeline-step-header .button-row {
+  justify-content: flex-end;
+}
+
+.v10-pipeline-step-summary {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.v10-pipeline-step-summary strong,
+.v10-pipeline-step-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .v10-execution-section {
   display: grid;
   gap: 10px;
@@ -2016,6 +2041,15 @@ textarea {
 
   .v10-form-grid > .span-2 {
     grid-column: auto;
+  }
+
+  .v10-pipeline-step-header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .v10-pipeline-step-header .button-row {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .test-sheet-card,

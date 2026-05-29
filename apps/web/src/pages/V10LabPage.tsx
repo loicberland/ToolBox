@@ -1198,6 +1198,17 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
   const byID = useMemo<Record<string, V10Action>>(() => Object.fromEntries(actions.map((action) => [action.id, action])), [actions]);
   const legacySteps = (config.pipeline ?? []).filter((step) => systemPipelineActions.has(step.action));
   const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
+  const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
+  useEffect(() => {
+    setExpandedSteps({});
+  }, [config.name]);
+  const isExpanded = (index: number) => Boolean(expandedSteps[index]);
+  const setAllExpanded = (expanded: boolean) => {
+    setExpandedSteps(Object.fromEntries(apiSteps.map((_, index) => [index, expanded])));
+  };
+  const toggleStep = (index: number) => {
+    setExpandedSteps((current) => ({ ...current, [index]: !current[index] }));
+  };
   const updateStep = (index: number, step: PipelineStep) => {
     onChange({ ...config, pipeline: apiSteps.map((item, itemIndex) => itemIndex === index ? step : item) });
   };
@@ -1208,6 +1219,7 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
       return;
     }
     [next[index], next[target]] = [next[target], next[index]];
+    setExpandedSteps((current) => ({ ...current, [index]: Boolean(current[target]), [target]: Boolean(current[index]) }));
     onChange({ ...config, pipeline: next });
   };
   return (
@@ -1220,47 +1232,67 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
         </div>
       )}
       {actions.length === 0 && <p className="muted">{m.actionPlan.noActionsForProduct}</p>}
+      {apiSteps.length > 0 && (
+        <div className="button-row">
+          <Button type="button" size="sm" variant="secondary" onClick={() => setAllExpanded(false)}>Tout réduire</Button>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setAllExpanded(true)}>Tout agrandir</Button>
+        </div>
+      )}
       {apiSteps.map((step, index) => {
         const action = byID[step.action];
-        const fields = (action?.fields ?? []).filter((field) => !actionFieldHidden(field, step.params ?? {}));
+        const fields = (action?.fields ?? []).filter((field) => !isActionFieldHidden(field, step.params ?? {}));
+        const expanded = isExpanded(index);
         return (
           <div className="v10-pipeline-step" key={`${step.action}-${index}`}>
             <div className="v10-step-order">{index + 1}</div>
             <div className="v10-step-body">
-              <div className="form-grid v10-form-grid">
-                <label>{m.action}
-                  <select value={step.action} onChange={(event) => {
-                    const selected = byID[event.currentTarget.value];
-                    updateStep(index, { action: event.currentTarget.value, label: selected?.label ?? '', params: selected ? paramsFromActionDefaults(selected) : {} });
-                  }}>
-                    <option value="">{m.chooseAction}</option>
-                    {actions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                  </select>
-                </label>
-                <label>{m.label}
-                  <input value={step.label} onChange={(event) => updateStep(index, { ...step, label: event.currentTarget.value })} />
-                </label>
-              </div>
-              {step.action === 'create-env' && <p className="readonly-notice">{m.actionUsesGeneralSettings}</p>}
-              {fields.length > 0 && (
-                <div className="form-grid v10-form-grid">
-                  {fields.map((field) => (
-                    <ActionFieldInput
-                      field={field}
-                      value={step.params?.[field.name]}
-                      config={config}
-                      params={step.params ?? {}}
-                      key={field.name}
-                      onChange={(value) => updateStep(index, { ...step, params: { ...(step.params ?? {}), [field.name]: value } })}
-                    />
-                  ))}
+              <div className="v10-pipeline-step-header">
+                <button type="button" className="v10-chevron" aria-label={expanded ? 'Réduire action' : 'Agrandir action'} aria-expanded={expanded} onClick={() => toggleStep(index)}>
+                  {expanded ? '▾' : '▸'}
+                </button>
+                <div className="v10-pipeline-step-summary">
+                  <strong>{step.label || action?.label || m.chooseAction}</strong>
+                  <span className="muted">{step.action || action?.kind || m.chooseAction}</span>
                 </div>
-              )}
-              <div className="button-row">
-                <Button type="button" size="sm" variant="secondary" onClick={() => move(index, -1)}>{m.moveUp}</Button>
-                <Button type="button" size="sm" variant="secondary" onClick={() => move(index, 1)}>{m.moveDown}</Button>
-                <Button type="button" size="sm" variant="danger" onClick={() => onChange({ ...config, pipeline: apiSteps.filter((_, itemIndex) => itemIndex !== index) })}>{m.delete}</Button>
+                <div className="button-row">
+                  <Button type="button" size="sm" variant="secondary" onClick={() => move(index, -1)}>{m.moveUp}</Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => move(index, 1)}>{m.moveDown}</Button>
+                  <Button type="button" size="sm" variant="danger" onClick={() => onChange({ ...config, pipeline: apiSteps.filter((_, itemIndex) => itemIndex !== index) })}>{m.delete}</Button>
+                </div>
               </div>
+              {expanded && (
+                <>
+                  <div className="form-grid v10-form-grid">
+                    <label>{m.action}
+                      <select value={step.action} onChange={(event) => {
+                        const selected = byID[event.currentTarget.value];
+                        updateStep(index, { action: event.currentTarget.value, label: selected?.label ?? '', params: selected ? paramsFromActionDefaults(selected) : {} });
+                      }}>
+                        <option value="">{m.chooseAction}</option>
+                        {actions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                      </select>
+                    </label>
+                    <label>{m.label}
+                      <input value={step.label} onChange={(event) => updateStep(index, { ...step, label: event.currentTarget.value })} />
+                    </label>
+                  </div>
+                  {step.action === 'create-env' && <p className="readonly-notice">{m.actionUsesGeneralSettings}</p>}
+                  {fields.length > 0 && (
+                    <div className="form-grid v10-form-grid">
+                      {fields.map((field) => (
+                        <ActionFieldInput
+                          field={field}
+                          value={step.params?.[field.name]}
+                          config={config}
+                          params={step.params ?? {}}
+                          key={field.name}
+                          onChange={(value) => updateStep(index, { ...step, params: { ...(step.params ?? {}), [field.name]: value } })}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         );
@@ -1268,6 +1300,7 @@ function PipelineBuilder({ config, actions, onChange }: { config: V10Config; act
       <div className="button-row">
         <Button type="button" variant="secondary" onClick={() => {
           const action = actions[0];
+          setExpandedSteps((current) => ({ ...current, [apiSteps.length]: true }));
           onChange({ ...config, pipeline: [...apiSteps, { action: action?.id ?? '', label: action?.label ?? '', params: action ? paramsFromActionDefaults(action) : {} }] });
         }} disabled={actions.length === 0}>{m.addAction}</Button>
       </div>
@@ -1412,6 +1445,8 @@ function ActionFieldInput({ field, value, config, params, onChange }: { field: V
 
 function ActionNumberArrayField({ field, value, onChange }: { field: V10Action['fields'][number]; value: unknown; onChange: (value: unknown) => void }) {
   const rows = Array.isArray(value) ? value.map((item) => typeof item === 'number' ? item : Number(item)).filter(Number.isFinite) : [];
+  const min = field.itemMin;
+  const hasInvalidValue = min !== undefined && rows.some((row) => row < min);
   const updateRow = (index: number, nextValue: number) => {
     onChange(rows.map((row, rowIndex) => rowIndex === index ? nextValue : row));
   };
@@ -1420,11 +1455,12 @@ function ActionNumberArrayField({ field, value, onChange }: { field: V10Action['
       <FieldLabel field={field} />
       {rows.map((row, index) => (
         <div className="v10-action-number-row" key={index}>
-          <input type="number" value={row} onChange={(event) => updateRow(index, Number(event.currentTarget.value))} />
+          <input type="number" min={min} value={row} onChange={(event) => updateRow(index, Number(event.currentTarget.value))} />
           <Button type="button" size="sm" variant="danger" onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" size="sm" variant="secondary" onClick={() => onChange([...rows, 0])}>{m.addStep}</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => onChange([...rows, min ?? 0])}>{m.addStep}</Button>
+      {hasInvalidValue && <span className="error">Les IDs groupes machine doivent être supérieurs à 0.</span>}
       {field.description && <span className="muted">{field.description}</span>}
     </div>
   );
@@ -1490,7 +1526,26 @@ function actionFieldOptions(field: V10Action['fields'][number], config: V10Confi
 }
 
 function actionFieldHidden(field: V10Action['fields'][number], params: Record<string, unknown>): boolean {
-  return Object.entries(field.hiddenWhen ?? {}).some(([key, expected]) => params[key] === expected);
+  return Object.entries(field.hiddenWhen ?? {}).some(([key, expected]) => actionValuesEqual(params[key], expected));
+}
+
+function isActionFieldHidden(field: V10Action['fields'][number], params: Record<string, unknown>): boolean {
+  return actionFieldHidden(field, params);
+}
+
+function actionValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (typeof left === 'boolean' || typeof right === 'boolean') {
+    return String(left).toLowerCase() === String(right).toLowerCase();
+  }
+  const leftNumber = typeof left === 'number' ? left : Number(left);
+  const rightNumber = typeof right === 'number' ? right : Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber === rightNumber;
+  }
+  return String(left) === String(right);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1711,10 +1766,17 @@ function validatePipelineRequiredFields(config: V10Config, actions: V10Action[])
       if (actionFieldHidden(field, params)) {
         continue;
       }
+      const value = params[field.name] ?? field.default;
+      if (field.type === 'number[]' && field.itemMin !== undefined) {
+        const validation = validateNumberArrayMin(value, field.itemMin);
+        if (validation) {
+          return validation;
+        }
+      }
       if (!field.required) {
         continue;
       }
-      if (isPipelineRequiredValueEmpty(params[field.name])) {
+      if (isPipelineRequiredValueEmpty(value)) {
         const fieldLabel = field.label?.trim() || field.name;
         return `Étape ${index + 1} - ${step.action} : le champ ${fieldLabel} est obligatoire et ne peut pas être vide.`;
       }
@@ -1734,6 +1796,43 @@ function isPipelineRequiredValueEmpty(value: unknown): boolean {
     return value.length === 0;
   }
   return false;
+}
+
+function validateNumberArrayMin(value: unknown, min: number): string {
+  const values = normalizeNumberArray(value);
+  if (!values.valid || values.items.some((item) => item < min)) {
+    return 'Les IDs groupes machine doivent être supérieurs à 0.';
+  }
+  return '';
+}
+
+function normalizeNumberArray(value: unknown): { items: number[]; valid: boolean } {
+  if (value === undefined || value === null || value === '') {
+    return { items: [], valid: true };
+  }
+  if (Array.isArray(value)) {
+    const items = value.map((item) => typeof item === 'number' ? item : Number(item));
+    return { items, valid: items.every((item) => Number.isInteger(item)) };
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return { items: [], valid: true };
+    }
+    try {
+      if (trimmed.startsWith('[')) {
+        return normalizeNumberArray(JSON.parse(trimmed) as unknown);
+      }
+    } catch {
+      return { items: [], valid: false };
+    }
+    const items = trimmed.split(',').map((item) => Number(item.trim()));
+    return { items, valid: items.every((item) => Number.isInteger(item)) };
+  }
+  if (typeof value === 'number') {
+    return { items: [value], valid: Number.isInteger(value) };
+  }
+  return { items: [], valid: false };
 }
 
 function formatDate(value: string) {

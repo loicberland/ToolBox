@@ -93,10 +93,7 @@ func ValidateConfig(config Config) error {
 		if step.Action == "create-env" && strings.TrimSpace(config.Release.ZipPath) == "" && strings.TrimSpace(stringParam(step.Params, "zipPath")) == "" {
 			errors = append(errors, fmt.Sprintf("pipeline[%d].release.zipPath: champ requis pour create-env", index))
 		}
-		params := step.Params
-		if params == nil {
-			params = map[string]any{}
-		}
+		params := paramsWithDefaults(action, step.Params)
 		for _, field := range action.Fields {
 			if actionFieldHidden(field, params) {
 				continue
@@ -116,6 +113,20 @@ func ValidateConfig(config Config) error {
 			}
 			if exists && !fieldValueMatchesType(value, field.Type) {
 				errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: type attendu %s", index, field.Name, field.Type))
+				continue
+			}
+			if exists && field.ItemMin != 0 && field.Type == "number[]" {
+				items, ok := numberListParamStrict(map[string]any{field.Name: value}, field.Name)
+				if !ok {
+					errors = append(errors, fmt.Sprintf("pipeline[%d].params.%s: type attendu %s", index, field.Name, field.Type))
+					continue
+				}
+				for _, item := range items {
+					if float64(item) < field.ItemMin {
+						errors = append(errors, fmt.Sprintf("Étape %d - %s : le champ %s doit contenir uniquement des valeurs supérieures à 0.", index+1, step.Action, firstNonEmpty(field.Label, field.Name)))
+						break
+					}
+				}
 			}
 		}
 	}
@@ -143,11 +154,43 @@ func fieldValueIsEmpty(value any) bool {
 
 func actionFieldHidden(field ActionField, params map[string]any) bool {
 	for key, expected := range field.HiddenWhen {
-		if fmt.Sprint(params[key]) == fmt.Sprint(expected) {
+		if actionValuesEqual(params[key], expected) {
 			return true
 		}
 	}
 	return false
+}
+
+func actionValuesEqual(left any, right any) bool {
+	if fmt.Sprint(left) == fmt.Sprint(right) {
+		return true
+	}
+	leftNumber, leftIsNumber := anyToFloat(left)
+	rightNumber, rightIsNumber := anyToFloat(right)
+	if leftIsNumber && rightIsNumber {
+		return leftNumber == rightNumber
+	}
+	return false
+}
+
+func anyToFloat(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case float64:
+		return typed, true
+	case json.Number:
+		number, err := typed.Float64()
+		return number, err == nil
+	case string:
+		var number json.Number = json.Number(strings.TrimSpace(typed))
+		parsed, err := number.Float64()
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func fieldValueMatchesType(value any, expected string) bool {
@@ -185,21 +228,8 @@ func fieldValueMatchesType(value any, expected string) bool {
 			return false
 		}
 	case "number[]":
-		switch items := value.(type) {
-		case []any:
-			for _, item := range items {
-				if _, ok := anyToInt(item); !ok {
-					return false
-				}
-			}
-			return true
-		case []int, []int64, []float64:
-			return true
-		case string:
-			return true
-		default:
-			return false
-		}
+		_, ok := numberListParamStrict(map[string]any{"value": value}, "value")
+		return ok
 	case "object[]":
 		switch value.(type) {
 		case []any, []map[string]any, string:

@@ -32,6 +32,7 @@ type ActionField struct {
 	OptionsSource string         `json:"optionsSource,omitempty"`
 	HiddenWhen    map[string]any `json:"hiddenWhen,omitempty"`
 	ItemFields    []ActionField  `json:"itemFields,omitempty"`
+	ItemMin       float64        `json:"itemMin,omitempty"`
 	Multiple      bool           `json:"multiple,omitempty"`
 }
 

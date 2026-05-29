@@ -53,6 +53,9 @@ func ExecuteCreateMachine() ActionExecute {
 		if err != nil {
 			return err
 		}
+		if err := validateNumberListMin(params, "machine_group_ids", 1); err != nil {
+			return err
+		}
 		payload := createMachinePayload(params)
 		if err := client.CreateMachine(payload); err != nil {
 			return err

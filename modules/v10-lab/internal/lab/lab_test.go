@@ -42,7 +42,7 @@ func TestValidateConfigReportsUnknownActionAndMissingField(t *testing.T) {
 		Product: GedixProdV10,
 		Pipeline: []PipelineStep{
 			{Action: "create-foo"},
-			{Action: "create-machine", Params: map[string]any{"name": "FANUC"}},
+			{Action: "create-machining-job", Params: map[string]any{"name": "FANUC"}},
 		},
 	}
 
@@ -92,6 +92,44 @@ func TestFieldValueIsEmptyKeepsFalseAndZero(t *testing.T) {
 	}
 	if !fieldValueIsEmpty([]string{}) {
 		t.Fatal("empty slices must be treated as empty")
+	}
+}
+
+func TestValidateConfigRejectsMachineGroupIDsBelowItemMin(t *testing.T) {
+	config := Config{
+		Name:    "ticket-T5808",
+		Product: GedixProdV10,
+		Pipeline: []PipelineStep{
+			{Action: "create-machine", Params: map[string]any{"entity_name": "Machine", "machine_group_ids": []any{float64(0)}}},
+			{Action: "create-machining-job", Params: map[string]any{"entity_name": "Dossier", "user_id": 1, "machine_group_ids": []any{float64(-1)}}},
+		},
+	}
+
+	err := ValidateConfig(config)
+	validationErr, ok := err.(ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T %v", err, err)
+	}
+	message := strings.Join(validationErr.Items, "\n")
+	if strings.Count(message, "supérieures à 0") != 2 {
+		t.Fatalf("missing itemMin validation errors: %#v", validationErr.Items)
+	}
+}
+
+func TestValidateConfigAcceptsEmptyAndPositiveMachineGroupIDs(t *testing.T) {
+	config := Config{
+		Name:    "ticket-T5808",
+		Product: GedixProdV10,
+		Pipeline: []PipelineStep{
+			{Action: "create-machine", Params: map[string]any{"entity_name": "Machine", "machine_group_ids": []any{}}},
+			{Action: "create-machine", Params: map[string]any{"entity_name": "Machine", "machine_group_ids": []any{float64(1), float64(2)}}},
+			{Action: "create-machining-job", Params: map[string]any{"entity_name": "Dossier", "user_id": 1, "machine_group_ids": []any{}}},
+			{Action: "create-machining-job", Params: map[string]any{"entity_name": "Dossier", "user_id": 1, "machine_group_ids": []any{float64(1)}}},
+		},
+	}
+
+	if err := ValidateConfig(config); err != nil {
+		t.Fatalf("expected valid config, got %v", err)
 	}
 }
 
