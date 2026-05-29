@@ -61,6 +61,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [isDirty, setIsDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [toastInfo, setToastInfo] = useState('');
   const [toastError, setToastError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
@@ -82,6 +83,21 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     const timeout = window.setTimeout(() => setToastError(''), 7000);
     return () => window.clearTimeout(timeout);
   }, [toastError]);
+
+  useEffect(() => {
+    if (!message) {
+      return;
+    }
+    setToastInfo(message);
+  }, [message]);
+
+  useEffect(() => {
+    if (!toastInfo) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setToastInfo(''), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [toastInfo]);
 
   useEffect(() => {
     if (config) {
@@ -681,7 +697,10 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
   return (
     <div className="workspace v10-lab-workspace">
-      <Toast message={toastError} type="error" onClose={() => setToastError('')} />
+      <div className="toast-stack" aria-live="polite">
+        <Toast message={toastError} type="error" onClose={() => setToastError('')} />
+        <Toast message={toastInfo} type="info" onClose={() => setToastInfo('')} />
+      </div>
       <header className="page-header">
         <div className="page-title-group">
           <p className="page-eyebrow">{m.title}</p>

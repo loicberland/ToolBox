@@ -1916,12 +1916,17 @@ textarea {
   font-weight: 800;
 }
 
-.toast {
+.toast-stack {
   position: fixed;
   top: 22px;
   right: 22px;
   z-index: 1000;
   width: min(420px, calc(100vw - 32px));
+  display: grid;
+  gap: 10px;
+}
+
+.toast {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
@@ -1934,6 +1939,13 @@ textarea {
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
   color: var(--danger);
   font-weight: 800;
+}
+
+.toast.info {
+  border-color: #fde68a;
+  border-left-color: #d97706;
+  background: var(--warning-soft);
+  color: #92400e;
 }
 
 .toast-content {
@@ -1954,9 +1966,19 @@ textarea {
   font-weight: 900;
 }
 
+.toast.info .toast-close {
+  border-color: rgba(217, 119, 6, 0.28);
+  color: #92400e;
+}
+
 .toast-close:hover,
 .toast-close:focus-visible {
   background: var(--danger-soft);
+}
+
+.toast.info .toast-close:hover,
+.toast.info .toast-close:focus-visible {
+  background: #fde68a;
 }
 
 .form-error,

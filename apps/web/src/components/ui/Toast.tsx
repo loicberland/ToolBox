@@ -1,6 +1,6 @@
 import React from 'react';
 
-type ToastType = 'error';
+type ToastType = 'error' | 'info';
 
 type Props = {
   message: string;
