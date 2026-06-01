@@ -42,7 +42,7 @@ func install(parentDir string, forceConfig, cleanExe bool) error {
 			"api-toolbox.exe",
 			"web-server-toolbox.exe",
 			filepath.Join("modules", "test-sheet", "test-sheet.exe"),
-			filepath.Join("modules", "test-env", "test-env.exe"),
+			filepath.Join("modules", "v10-lab", "v10-lab.exe"),
 		} {
 			if err := os.Remove(filepath.Join(root, rel)); err != nil && !os.IsNotExist(err) {
 				return err
@@ -57,6 +57,9 @@ func install(parentDir string, forceConfig, cleanExe bool) error {
 		return err
 	}
 	if err := ensureConfig(root, forceConfig); err != nil {
+		return err
+	}
+	if err := ensureStartScript(root); err != nil {
 		return err
 	}
 
@@ -147,8 +150,8 @@ func ensureRuntimeDirs(root string) error {
 		filepath.Join(root, "modules", "test-sheet", "data"),
 		filepath.Join(root, "modules", "test-sheet", "files", "documents"),
 		filepath.Join(root, "modules", "test-sheet", "files", "runs"),
-		filepath.Join(root, "modules", "test-env", "data"),
-		filepath.Join(root, "modules", "test-env", "files"),
+		filepath.Join(root, "modules", "v10-lab", "data", "maquettes"),
+		filepath.Join(root, "modules", "v10-lab", "files"),
 	} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
@@ -167,4 +170,24 @@ func ensureConfig(root string, force bool) error {
 		}
 	}
 	return os.WriteFile(path, []byte(toolboxconfig.DefaultConfigFile), 0644)
+}
+
+func ensureStartScript(root string) error {
+	if err := os.WriteFile(filepath.Join(root, "ToolBox Start.bat"), []byte(startScriptContent()), 0644); err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(root, "ToolBox Url.ps1")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func startScriptContent() string {
+	return "@echo off\r\n" +
+		"cd /d \"%~dp0\"\r\n" +
+		"\r\n" +
+		"start \"ToolBox api\" cmd /k \"\"%~dp0api-toolbox.exe\" server --config \"%~dp0toolbox.cfg\"\"\r\n" +
+		"start \"ToolBox front\" cmd /k \"\"%~dp0web-server-toolbox.exe\" start --config \"%~dp0toolbox.cfg\" --open\"\r\n" +
+		"\r\n" +
+		"exit\r\n"
 }

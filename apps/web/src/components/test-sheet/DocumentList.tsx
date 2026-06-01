@@ -58,7 +58,7 @@ export function DocumentFilePicker({ id, file, inputRef, onFileChange, label = m
         className="document-file-input"
         type="file"
         accept={accept}
-        onChange={(event) => onFileChange(event.target.files?.[0])}
+        onChange={(event) => onFileChange(event.currentTarget.files?.[0])}
       />
       <label className="ui-button secondary document-file-button" htmlFor={id}>
         {label}

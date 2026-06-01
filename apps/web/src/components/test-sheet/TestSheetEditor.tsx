@@ -389,7 +389,7 @@ function DocumentAssociationPanel({
         }}
       />
       <div className="document-upload-row">
-        <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.target.value)} disabled={availableDocuments.length === 0}>
+        <select value={selectedDocumentId} onChange={(event) => setSelectedDocumentId(event.currentTarget.value)} disabled={availableDocuments.length === 0}>
           <option value="">{messages.testSheet.documents.associateExistingDocument}</option>
           {availableDocuments.map((document) => (
             <option key={document.id} value={document.id}>{document.originalName}</option>

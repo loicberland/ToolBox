@@ -38,11 +38,11 @@ export function TestPlanForm({ plan, onSubmit }: Props) {
     >
       <label>
         {messages.testSheet.edit.name}
-        <input value={value.name} onChange={(event) => setValue({ ...value, name: event.target.value })} required />
+        <input value={value.name} onChange={(event) => setValue({ ...value, name: event.currentTarget.value })} required />
       </label>
       <label>
         {messages.testSheet.edit.description}
-        <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} />
+        <textarea value={value.description} onChange={(event) => setValue({ ...value, description: event.currentTarget.value })} />
       </label>
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">

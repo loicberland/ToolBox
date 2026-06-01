@@ -1,19 +1,20 @@
 {
     "compilerOptions": {
-        "target": "es6", // Cible de compilation
-        "module": "commonjs", // Module système
-        "jsx": "react", // Support pour JSX
-        "strict": true, // Active toutes les vérifications de type strictes
-        "esModuleInterop": true, // Facilite l'importation des modules CommonJS
+        "target": "ES2019",
+        "lib": ["DOM", "DOM.Iterable", "ES2019"],
+        "module": "commonjs",
+        "jsx": "react",
+        "strict": true,
+        "esModuleInterop": true,
         "resolveJsonModule": true,
-        "skipLibCheck": true, // Ignore les vérifications de type pour les fichiers de définition
-        "forceConsistentCasingInFileNames": true // Force une casse cohérente dans les noms de fichiers
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
     },
     "include": [
         "src/**/*"
-    ], // Inclure tous les fichiers dans le dossier src
+    ],
     "exclude": [
         "node_modules",
         "dist"
-    ] // Exclure les fichiers de node_modules et dist
+    ]
 }

@@ -81,7 +81,7 @@ export function MarkdownTextarea({
           disabled={disabled}
           readOnly={readOnly}
           required={required}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => onChange(event.currentTarget.value)}
         />
       </div>
     </div>

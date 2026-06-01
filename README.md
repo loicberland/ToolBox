@@ -8,7 +8,7 @@ ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go,
 - `apps/web` : front React/TypeScript.
 - `apps/web-server` : serveur Go statique pour servir le build du front.
 - `modules/test-sheet` : module Cobra pour les fiches de test.
-- `modules/test-env` : module Cobra pour les maquettes de test.
+- `modules/v10-lab` : module Cobra pour les maquettes Gedix V10.
 - `pkg/modulecontract` : contrat JSON partage entre API, front et modules.
 - `pkg/toolboxruntime` : resolution des chemins runtime installes.
 - `_build` : binaires generes.
@@ -43,6 +43,7 @@ L'installation cree cette architecture :
 
 ```text
 ToolBox/
+├─ ToolBox Start.bat
 ├─ api-toolbox.exe
 ├─ web-server-toolbox.exe
 ├─ toolbox.cfg
@@ -54,13 +55,23 @@ ToolBox/
    │  └─ files/
    │     ├─ documents/
    │     └─ runs/
-   └─ test-env/
-      ├─ test-env.exe
+   └─ v10-lab/
+      ├─ v10-lab.exe
       ├─ data/
       └─ files/
 ```
 
 Lors d'une mise a jour, l'installeur remplace les exe et conserve `toolbox.cfg`, `data/` et `files/`. `toolbox.cfg` est cree uniquement s'il n'existe pas, sauf avec `--force-config`. Les donnees utilisateur sont dans `modules/*/data` et `modules/*/files`.
+
+Apres installation, lancer `ToolBox Start.bat` dans le dossier `ToolBox`. Ce script demarre l'API et le serveur web avec `toolbox.cfg`, puis ouvre l'interface dans le navigateur.
+
+L'URL par defaut est :
+
+```text
+http://localhost:20251
+```
+
+`ToolBox Start.bat` lance `web-server-toolbox.exe start --config toolbox.cfg --open`. Le serveur web lit `[platform] fqdn`, `port` et `tls`, puis ouvre l'URL construite sous la forme `http(s)://<fqdn>:<port>`.
 
 ## API
 
@@ -226,6 +237,12 @@ api-toolbox.exe server --config toolbox.cfg
 web-server-toolbox.exe start --config toolbox.cfg
 ```
 
+Pour ouvrir automatiquement le navigateur sur l'URL publique lue depuis `toolbox.cfg` :
+
+```bat
+web-server-toolbox.exe start --config toolbox.cfg --open
+```
+
 Depuis un autre poste, ouvrir `http://192.168.1.50:20251`. Le navigateur ne voit
 pas `localhost:20250` : il appelle `/api`, et le web-server proxy vers l'API
 locale.
@@ -239,10 +256,144 @@ go run ./modules/test-sheet/cmd/test-sheet info --json
 go run ./modules/test-sheet/cmd/test-sheet actions --json
 go run ./modules/test-sheet/cmd/test-sheet run init-db --json
 
-go run ./modules/test-env/cmd/test-env info --json
-go run ./modules/test-env/cmd/test-env actions --json
-go run ./modules/test-env/cmd/test-env run init-config --json
+go run ./modules/v10-lab/cmd/v10-lab info --json
+go run ./modules/v10-lab/cmd/v10-lab products
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-prod-v10
+go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab register --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab list
 ```
+
+## V10 Lab
+
+V10 Lab est un generateur et gestionnaire de maquettes V10.
+
+## Produits V10 Lab
+
+V10 Lab supporte plusieurs produits.
+
+Produits actuels :
+
+- `gedix-prod-v10` : Gedix Prod V10
+- `gedix-tool-stock-v10` : Tool Stock V10
+- `gedix-watch-v10` : Watch V10
+
+Chaque produit definit :
+
+- son `appName` par defaut
+- ses services
+- le terme utilise pour les connecteurs ou agents
+- le nom de section cfg a scanner/modifier
+- les futures actions compatibles dans le Plan d'actions
+
+Note developpeur :
+
+Pour ajouter un produit, ajouter une entree dans le registre produit avec :
+
+- `ID`
+- `Label`
+- `DefaultAppName`
+- `Services`
+- `UnitKind`
+- `UnitCfgSectionName`
+- `UnitFolderPrefix`
+- `UnitExecutableName`
+- `UnitModuleExecutablePattern`
+
+Phase 1 :
+
+- registre de produits
+- registre d'actions
+- validation de fichier JSON
+- execution fictive de plan d'actions
+- base multi-maquettes
+
+Phase 2 - Actions systeme Gedix :
+
+- creation d'une maquette depuis une release ZIP
+- detection du dossier Gedix, de `env_*` et de `app_prod`
+- generation si besoin puis modification controlee du `gedix.cfg`
+- demarrage standard de la maquette
+- demarrage avec exclusions pour debug
+- lancement de services/connecteurs en debug
+- action manuelle "Couper les services GX"
+
+Phase 3 - Interface V10 Lab :
+
+- page web V10 Lab
+- liste des maquettes
+- creation / edition d'une maquette
+- edition de la configuration Gedix
+- edition services/connecteurs
+- builder graphique de plan d'actions
+- validation et lancement depuis le front
+- consultation des logs
+
+Notes phase 3 :
+
+- le ZIP de release reste a son emplacement d'origine ; l'interface memorise uniquement son chemin
+- le bouton Parcourir ouvre une selection de fichier locale cote API Windows
+- la suppression d'une maquette supprime seulement l'enregistrement V10 Lab, pas le dossier Gedix physique
+- "Couper les services GX" reste une action manuelle avec confirmation
+
+## Commande module connecteur/agent
+
+V10 Lab permet de lancer une commande sur un module Gedix sans demarrer toute la maquette.
+
+La commande :
+
+- utilise le connecteur ou l'agent selectionne
+- lance automatiquement `gx-front.exe listen` si necessaire
+- execute `gx-module-<nom>.exe` dans le dossier du connecteur/agent
+- ouvre une console Windows dediee
+
+Exemple :
+
+```bat
+gx-module-connector-focas-01.exe import --file test.json
+```
+
+## Mise à jour d'une maquette
+
+La mise à jour utilise une nouvelle release ZIP sélectionnée dans l'onglet Général.
+
+Étapes :
+
+1. décompression de la release
+2. exécution de `gx.exe install` sans `--write-config`
+3. copie du dossier `Gedix` généré vers la maquette existante
+4. conservation du fichier `gedix.cfg`
+5. conservation des dossiers `log`
+6. nettoyage du dossier temporaire
+
+La mise à jour ne supprime pas le dossier cible et n'utilise pas de miroir `/MIR`.
+
+Exemples :
+
+```bash
+go run ./modules/v10-lab/cmd/v10-lab products
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-prod-v10
+go run ./modules/v10-lab/cmd/v10-lab actions --product gedix-prod-v10 --json
+go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab register --config ./examples/v10-lab/ticket-T5808.json
+go run ./modules/v10-lab/cmd/v10-lab list
+go run ./modules/v10-lab/cmd/v10-lab db-templates
+go run ./modules/v10-lab/cmd/v10-lab validate --config ./examples/v10-lab/ticket-T5808-system.json
+go run ./modules/v10-lab/cmd/v10-lab run --config ./examples/v10-lab/ticket-T5808-system.json
+go run ./modules/v10-lab/cmd/v10-lab kill-gx-processes --force
+```
+
+Debug Gedix :
+
+```bat
+gx-app.exe run -e auth connector-focas-01
+gx-auth.exe listen --debug -v2
+connector-focas-01\gx-connector.exe listen --debug -v2
+```
+
+`kill-gx-processes` est volontairement manuel et ne doit pas etre appele automatiquement par `stop-maquette`.
 
 ## Build
 
@@ -255,7 +406,7 @@ build.bat all
 build.bat api
 build.bat web-server
 build.bat module test-sheet
-build.bat module test-env
+build.bat module v10-lab
 build.bat installer
 build.bat package
 ```
@@ -267,7 +418,7 @@ go run ./tools/build api
 go run ./tools/build web
 go run ./tools/build web-server
 go run ./tools/build module test-sheet
-go run ./tools/build module test-env
+go run ./tools/build module v10-lab
 go run ./tools/build modules
 go run ./tools/build installer
 go run ./tools/build package

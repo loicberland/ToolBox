@@ -198,7 +198,7 @@ func (b builder) buildInstaller() error {
 	if err := copyFile(filepath.Join(b.root, "_build", executableName("web-server-toolbox")), filepath.Join(payloadRoot, executableName("web-server-toolbox"))); err != nil {
 		return err
 	}
-	for _, name := range []string{"test-sheet", "test-env"} {
+	for _, name := range []string{"test-sheet", "v10-lab"} {
 		if err := copyFile(
 			filepath.Join(b.root, "_build", executableName(name)),
 			filepath.Join(payloadRoot, "modules", name, executableName(name)),
@@ -222,7 +222,7 @@ func (b builder) buildInstaller() error {
 	if err := resetInstallerPayload(payloadDir); err != nil {
 		return err
 	}
-	for _, name := range []string{"api-toolbox", "web-server-toolbox", "test-sheet", "test-env"} {
+	for _, name := range []string{"api-toolbox", "web-server-toolbox", "test-sheet", "v10-lab"} {
 		if err := os.Remove(filepath.Join(b.root, "_build", executableName(name))); err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -271,7 +271,7 @@ func (b builder) buildWebServer() error {
 }
 
 func (b builder) buildModules() error {
-	for _, name := range []string{"test-sheet", "test-env"} {
+	for _, name := range []string{"test-sheet", "v10-lab"} {
 		if err := b.buildModule(name); err != nil {
 			return err
 		}
@@ -411,7 +411,7 @@ func verifyInstallerPayload(payloadRoot string) error {
 		executableName("api-toolbox"),
 		executableName("web-server-toolbox"),
 		filepath.Join("modules", "test-sheet", executableName("test-sheet")),
-		filepath.Join("modules", "test-env", executableName("test-env")),
+		filepath.Join("modules", "v10-lab", executableName("v10-lab")),
 	} {
 		path := filepath.Join(payloadRoot, rel)
 		info, err := os.Stat(path)

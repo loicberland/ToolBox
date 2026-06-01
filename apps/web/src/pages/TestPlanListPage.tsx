@@ -117,8 +117,8 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
       {info && <p className="info-message">{info}</p>}
 
       <div className="plan-toolbar">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={messages.testSheet.plans.search} />
-        <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
+        <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={messages.testSheet.plans.search} />
+        <select value={sortKey} onChange={(event) => setSortKey(event.currentTarget.value as SortKey)}>
           <option value="latestRun">{messages.testSheet.plans.latestRun}</option>
           <option value="updatedAt">{messages.testSheet.plans.latestUpdate}</option>
           <option value="status">Statut</option>
@@ -144,7 +144,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
           <input
             type="checkbox"
             checked={showDeletedPlans}
-            onChange={(event) => setShowDeletedPlans(event.target.checked)}
+            onChange={(event) => setShowDeletedPlans(event.currentTarget.checked)}
           />
           {messages.testSheet.plans.showHiddenPlans}
         </label>
@@ -247,7 +247,7 @@ export function TestPlanListPage({ onEdit, onRun, onReport }: Props) {
               {messages.testSheet.dialogs.deletePlanConfirmation} <strong>{planToPermanentDelete.name}</strong>
               <input
                 value={permanentDeleteConfirmation}
-                onChange={(event) => setPermanentDeleteConfirmation(event.target.value)}
+                onChange={(event) => setPermanentDeleteConfirmation(event.currentTarget.value)}
                 autoFocus
               />
             </label>
@@ -371,8 +371,8 @@ function ImportPlanDialog({
   return (
     <div className="dialog-backdrop" role="presentation">
       <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="import-plan-title">
-        <h3 id="import-plan-title">Importer un plan</h3>
-        <p className="dialog-help">Sélectionnez le fichier ZIP généré par l'export d'un plan de test.</p>
+        <h3 id="import-plan-title">{messages.testSheet.plans.import}</h3>
+        <p className="dialog-help">{messages.testSheet.plans.importDialog}</p>
         <DocumentFilePicker
           id={fileInputId}
           file={file}
@@ -390,7 +390,7 @@ function ImportPlanDialog({
             <input
               value={importPlanName}
               onChange={(event) => {
-                setImportPlanName(event.target.value);
+                setImportPlanName(event.currentTarget.value);
                 setImportError('');
               }}
             />

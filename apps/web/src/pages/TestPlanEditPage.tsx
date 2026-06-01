@@ -513,7 +513,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               <input
                 value={newGroupName}
                 onChange={(event) => {
-                  setNewGroupName(event.target.value);
+                  setNewGroupName(event.currentTarget.value);
                   setCreateGroupError('');
                 }}
                 onKeyDown={(event) => {
@@ -566,7 +566,7 @@ export function TestPlanEditPage({ planId, onBack, onRun }: Props) {
               <input
                 value={editGroupName}
                 onChange={(event) => {
-                  setEditGroupName(event.target.value);
+                  setEditGroupName(event.currentTarget.value);
                   setEditGroupError('');
                 }}
                 onKeyDown={(event) => {
@@ -686,7 +686,7 @@ function PlanDocumentsPanel({
           onFileChange={setFile}
           label={`+ ${messages.testSheet.documents.chooseFile}`}
         />
-        <input value={description} onChange={(event) => setDescription(event.target.value)} />
+        <input value={description} onChange={(event) => setDescription(event.currentTarget.value)} />
         <Button type="button" disabled={!file || uploading || deletingDocumentId !== undefined} onClick={upload}>{uploading ? messages.testSheet.documents.importing : `+ ${messages.testSheet.documents.addDocument}`}</Button>
       </div>
     </div>

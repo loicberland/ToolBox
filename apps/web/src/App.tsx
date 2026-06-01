@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchModules, ModuleInfo } from './api/modules';
 import { TestPlanEditPage } from './pages/TestPlanEditPage';
 import { TestPlanListPage } from './pages/TestPlanListPage';
 import { TestRunPage } from './pages/TestRunPage';
 import { TestRunReportPage } from './pages/TestRunReportPage';
+import { V10LabPage } from './pages/V10LabPage';
 
 type View =
   | { name: 'module' }
@@ -12,11 +13,14 @@ type View =
   | { name: 'test-run'; runId: number }
   | { name: 'test-report'; runId: number; returnTo: 'plans' | 'run' };
 
+export type BeforeLeaveHandler = () => Promise<boolean>;
+
 const App = () => {
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string>('test-sheet');
   const [view, setView] = useState<View>({ name: 'test-plans' });
   const [error, setError] = useState<string>('');
+  const beforeLeaveHandlers = useRef<Record<string, BeforeLeaveHandler | undefined>>({});
 
   useEffect(() => {
     fetchModules()
@@ -30,6 +34,27 @@ const App = () => {
   }, []);
 
   const selectedModule = modules.find((item) => item.id === selectedModuleId);
+  const registerBeforeLeave = useCallback((moduleId: string, handler: BeforeLeaveHandler | null) => {
+    beforeLeaveHandlers.current[moduleId] = handler ?? undefined;
+  }, []);
+
+  const switchModule = async (nextModuleId: string) => {
+    if (nextModuleId === selectedModuleId) {
+      return;
+    }
+    setError('');
+    const handler = beforeLeaveHandlers.current[selectedModuleId];
+    if (handler) {
+      const canLeave = await handler();
+      if (!canLeave) {
+        return;
+      }
+    }
+    setSelectedModuleId(nextModuleId);
+    if (nextModuleId === 'test-sheet' && view.name === 'module') {
+      setView({ name: 'test-plans' });
+    }
+  };
 
   return (
     <main className="app-shell">
@@ -42,8 +67,7 @@ const App = () => {
               className={module.id === selectedModuleId ? 'active' : ''}
               type="button"
               onClick={() => {
-                setSelectedModuleId(module.id);
-                setView(module.id === 'test-sheet' ? { name: 'test-plans' } : { name: 'module' });
+                void switchModule(module.id);
               }}
             >
               {module.name}
@@ -54,8 +78,7 @@ const App = () => {
 
       <section className="module-view">
         {error && <p className="error">{error}</p>}
-        {selectedModuleId === 'test-sheet' ? (
-          <>
+        <div style={{ display: selectedModuleId === 'test-sheet' ? undefined : 'none' }}>
             {view.name === 'test-plans' && (
               <TestPlanListPage
                 onEdit={(planId) => setView({ name: 'test-plan-edit', planId })}
@@ -83,8 +106,11 @@ const App = () => {
                 onBack={() => setView(view.returnTo === 'run' ? { name: 'test-run', runId: view.runId } : { name: 'test-plans' })}
               />
             )}
-          </>
-        ) : (
+        </div>
+        <div style={{ display: selectedModuleId === 'v10-lab' ? undefined : 'none' }}>
+          <V10LabPage onBeforeLeaveChange={(handler) => registerBeforeLeave('v10-lab', handler)} />
+        </div>
+        {selectedModuleId !== 'test-sheet' && selectedModuleId !== 'v10-lab' && (
           selectedModule && (
             <>
               <header>

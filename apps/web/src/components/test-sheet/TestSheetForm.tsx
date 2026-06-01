@@ -65,11 +65,11 @@ export const TestSheetForm = forwardRef<TestSheetFormHandle, Props>(function Tes
     >
       <label>
         {messages.testSheet.edit.name}
-        <input value={value.name} onChange={(event) => updateValue({ ...value, name: event.target.value })} required />
+        <input value={value.name} onChange={(event) => updateValue({ ...value, name: event.currentTarget.value })} required />
       </label>
       <label>
         {messages.testSheet.edit.description}
-        <textarea value={value.description} onChange={(event) => updateValue({ ...value, description: event.target.value })} />
+        <textarea value={value.description} onChange={(event) => updateValue({ ...value, description: event.currentTarget.value })} />
       </label>
       <MarkdownTextarea
         label={messages.testSheet.edit.prerequisites}
