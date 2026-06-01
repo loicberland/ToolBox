@@ -449,6 +449,24 @@ func TestProductServicesAreIsolated(t *testing.T) {
 	}
 }
 
+func TestProductExecutablePatterns(t *testing.T) {
+	prod, _ := ProductDefinitionByID(GedixProdV10)
+	if got := prod.UnitRuntimeExecutableName("connector-filesystem01", "module-filesystem"); got != "gx-connector.exe" {
+		t.Fatalf("unexpected prod runtime executable: %s", got)
+	}
+	if got := prod.UnitModuleExecutableName("module-filesystem"); got != "gx-module-filesystem.exe" {
+		t.Fatalf("unexpected prod module executable: %s", got)
+	}
+
+	toolStock, _ := ProductDefinitionByID(GedixToolStockV10)
+	if got := toolStock.UnitRuntimeExecutableName("connector-lista-01", "connector-lista"); got != "connector-lista.exe" {
+		t.Fatalf("unexpected tool stock runtime executable: %s", got)
+	}
+	if got := toolStock.UnitModuleExecutableName("connector-lista"); got != "connector-lista.exe" {
+		t.Fatalf("unexpected tool stock module executable: %s", got)
+	}
+}
+
 func TestDetectEnvAndDebugTargets(t *testing.T) {
 	root := t.TempDir()
 	mustMkdir(t, filepath.Join(root, "env_demo", "app_prod", "connector-focas-01"))
@@ -502,9 +520,62 @@ func TestDetectDebugTargetUsesProductUnitExecutable(t *testing.T) {
 		t.Fatal(err)
 	}
 	product, _ := ProductDefinitionByID(GedixWatchV10)
-	agent, err := DetectDebugTargetForProduct(paths, "agent-watch-01", product)
+	agent, err := DetectDebugTargetForProduct(paths, "agent-watch-01", product, nil)
 	if err != nil || agent.Kind != DebugTargetAgent || !strings.HasSuffix(agent.ExePath, filepath.Join("agent-watch-01", "gx-agent.exe")) {
 		t.Fatalf("expected agent target, got %#v err=%v", agent, err)
+	}
+}
+
+func TestDetectDebugTargetUsesUnitRuntimeModulePattern(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_tool_stock", "connector-lista-01"))
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_tool_stock", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_tool_stock", "connector-lista-01", "connector-lista.exe"), "")
+
+	paths, err := DetectGedixPaths(Config{Name: "tool-stock", Product: GedixToolStockV10, Maquette: MaquetteConfig{TargetPath: root, AppName: "tool_stock"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, _ := ProductDefinitionByID(GedixToolStockV10)
+	target, err := DetectDebugTargetForProduct(paths, "connector-lista-01", product, map[string]ProductUnitConfig{
+		"connector-lista-01": {Module: "connector-lista"},
+	})
+	if err != nil || target.Kind != DebugTargetConnector || !strings.HasSuffix(target.ExePath, filepath.Join("connector-lista-01", "connector-lista.exe")) {
+		t.Fatalf("expected tool stock connector target, got %#v err=%v", target, err)
+	}
+}
+
+func TestDetectDebugTargetRequiresModuleForModuleRuntimePattern(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_tool_stock", "connector-lista-01"))
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_tool_stock", "gx-app.exe"), "")
+
+	paths, err := DetectGedixPaths(Config{Name: "tool-stock", Product: GedixToolStockV10, Maquette: MaquetteConfig{TargetPath: root, AppName: "tool_stock"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, _ := ProductDefinitionByID(GedixToolStockV10)
+	_, err = DetectDebugTargetForProduct(paths, "connector-lista-01", product, map[string]ProductUnitConfig{
+		"connector-lista-01": {Module: ""},
+	})
+	if err == nil || !strings.Contains(err.Error(), "module/type non renseigné pour le connecteur connector-lista-01") {
+		t.Fatalf("expected missing module/type error, got %v", err)
+	}
+
+	agentProduct := ProductDefinition{
+		UnitKind:                     UnitKindAgent,
+		UnitSingularLabel:            "agent",
+		UnitRuntimeExecutablePattern: "<moduleName>.exe",
+	}
+	_, err = DetectDebugTargetForProduct(paths, "agent-watch-01", agentProduct, map[string]ProductUnitConfig{
+		"agent-watch-01": {Module: ""},
+	})
+	if err == nil || !strings.Contains(err.Error(), "module/type non renseigné pour l'agent agent-watch-01") {
+		t.Fatalf("expected missing agent module/type error, got %v", err)
 	}
 }
 
@@ -528,6 +599,24 @@ func TestDetectModuleCommandTargetUsesProductUnitModuleExecutable(t *testing.T) 
 	watchProduct, _ := ProductDefinitionByID(GedixWatchV10)
 	if got := watchProduct.UnitModuleExecutableName("module-watch"); got != "gx-module-watch.exe" {
 		t.Fatalf("unexpected agent module executable: %s", got)
+	}
+}
+
+func TestToolStockModuleCommandTargetUsesModuleExecutable(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_tool_stock", "connector-lista-01"))
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_tool_stock", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_tool_stock", "connector-lista-01", "connector-lista.exe"), "")
+	paths, err := DetectGedixPaths(Config{Name: "tool-stock", Product: GedixToolStockV10, Maquette: MaquetteConfig{TargetPath: root, AppName: "tool_stock"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, _ := ProductDefinitionByID(GedixToolStockV10)
+	target, err := DetectModuleCommandTarget(paths, product, "connector-lista-01", "connector-lista")
+	if err != nil || target.Kind != DebugTargetConnector || !strings.HasSuffix(target.ExePath, filepath.Join("connector-lista-01", "connector-lista.exe")) {
+		t.Fatalf("expected tool stock module target, got %#v err=%v", target, err)
 	}
 }
 

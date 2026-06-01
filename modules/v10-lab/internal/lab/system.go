@@ -166,6 +166,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 		return err
 	}
 	debugTargets := RuntimeDebugLaunchTargets(config.Runtime)
+	units := ProductUnits(config)
 	if len(debugTargets) > 0 {
 		fmt.Fprintf(writer, "[INFO] Cibles debug : %s\n", strings.Join(debugTargets, ", "))
 	}
@@ -184,7 +185,7 @@ func StartMaquette(config Config, writer io.Writer) error {
 		return err
 	}
 	for _, target := range debugTargets {
-		debugTarget, err := DetectDebugTargetForProduct(paths, target, product)
+		debugTarget, err := DetectDebugTargetForProduct(paths, target, product, units)
 		if err != nil {
 			return err
 		}

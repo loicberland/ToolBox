@@ -130,18 +130,26 @@ func detectOrCreateCfg(root string, frontExePath string) (string, error) {
 
 func DetectDebugTarget(paths GedixPaths, target string) (DebugTarget, error) {
 	return DetectDebugTargetForProduct(paths, target, ProductDefinition{
-		UnitKind:           UnitKindConnector,
-		UnitSingularLabel:  "connecteur",
-		UnitExecutableName: "gx-connector.exe",
-	})
+		UnitKind:                     UnitKindConnector,
+		UnitSingularLabel:            "connecteur",
+		UnitRuntimeExecutablePattern: "gx-connector.exe",
+	}, nil)
 }
 
-func DetectDebugTargetForProduct(paths GedixPaths, target string, product ProductDefinition) (DebugTarget, error) {
+func DetectDebugTargetForProduct(paths GedixPaths, target string, product ProductDefinition, units map[string]ProductUnitConfig) (DebugTarget, error) {
 	serviceExe := filepath.Join(paths.AppPath, "gx-"+target+".exe")
 	if info, err := os.Stat(serviceExe); err == nil && !info.IsDir() {
 		return DebugTarget{Name: target, Kind: DebugTargetService, WorkDir: paths.AppPath, ExePath: serviceExe}, nil
 	}
-	unitExeName := firstNonEmpty(product.UnitExecutableName, "gx-connector.exe")
+	unit := ProductUnitConfig{}
+	if units != nil {
+		unit = units[target]
+	}
+	pattern := firstNonEmpty(product.UnitRuntimeExecutablePattern, "gx-connector.exe")
+	if patternRequiresModuleName(pattern) && NormalizeModuleType(unit.Module) == "" {
+		return DebugTarget{}, fmt.Errorf("module/type non renseigné pour %s %s", unitArticle(product), target)
+	}
+	unitExeName := product.UnitRuntimeExecutableName(target, unit.Module)
 	unitExe := filepath.Join(paths.AppPath, target, unitExeName)
 	if info, err := os.Stat(unitExe); err == nil && !info.IsDir() {
 		kind := DebugTargetConnector
