@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,5 +39,24 @@ func TestEnsureStartScriptRemovesLegacyURLScript(t *testing.T) {
 	}
 	if _, err := os.Stat(legacyScriptPath); !os.IsNotExist(err) {
 		t.Fatalf("expected legacy PowerShell URL script to be removed, got %v", err)
+	}
+}
+
+func TestPayloadMarkerUsesPackageName(t *testing.T) {
+	if string(payloadMarker) != "TOOLBOX_PACKAGE_PAYLOAD_V1" {
+		t.Fatalf("unexpected payload marker: %s", string(payloadMarker))
+	}
+}
+
+func TestTargetAccessErrorExplainsPermissionProblem(t *testing.T) {
+	err := targetAccessError(`C:\Program Files\ToolBox`, os.ErrPermission)
+	if err == nil {
+		t.Fatal("expected permission error")
+	}
+	if !strings.Contains(err.Error(), "Accès refusé au dossier cible") {
+		t.Fatalf("missing access denied guidance: %v", err)
+	}
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("expected original permission error to be wrapped: %v", err)
 	}
 }

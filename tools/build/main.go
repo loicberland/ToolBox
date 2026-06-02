@@ -14,6 +14,7 @@ import (
 )
 
 const moduleLine = "module toolBox"
+const packageOutputName = "toolbox-package"
 
 type builder struct {
 	root string
@@ -217,7 +218,7 @@ func (b builder) buildInstaller() error {
 	if err := b.goBuildInstaller(); err != nil {
 		return err
 	}
-	if err := appendInstallerPayload(filepath.Join(b.root, "_build", executableName("toolbox-setup")), payloadZip); err != nil {
+	if err := appendInstallerPayload(filepath.Join(b.root, "_build", executableName(packageOutputName)), payloadZip); err != nil {
 		return err
 	}
 	if err := resetInstallerPayload(payloadDir); err != nil {
@@ -228,7 +229,7 @@ func (b builder) buildInstaller() error {
 			return err
 		}
 	}
-	return cleanBuildDirForInstaller(filepath.Join(b.root, "_build"), executableName("toolbox-setup"))
+	return cleanBuildDirForInstaller(filepath.Join(b.root, "_build"), executableName(packageOutputName))
 }
 
 func (b builder) buildAPI() error {
@@ -341,14 +342,14 @@ func gitCommit(root string) string {
 }
 
 func buildDate() string {
-	return time.Now().Format("2006-01-02")
+	return time.Now().Format("2006-01-02T15:04:05")
 }
 
 func (b builder) goBuildInstaller() error {
 	if err := os.MkdirAll(filepath.Join(b.root, "_build"), 0755); err != nil {
 		return fmt.Errorf("create _build failed: %w", err)
 	}
-	output := filepath.Join(b.root, "_build", executableName("toolbox-setup"))
+	output := filepath.Join(b.root, "_build", executableName(packageOutputName))
 	args := []string{"build", "-a", "-o", output, "./" + filepath.ToSlash(filepath.Join("apps", "installer", "cmd", "toolbox-setup"))}
 	if err := runCommand(b.root, []string{"CGO_ENABLED=0"}, "go", args...); err != nil {
 		return fmt.Errorf("installer build failed: %w", err)
@@ -523,7 +524,7 @@ func appendInstallerPayload(installerPath, payloadZip string) error {
 		return err
 	}
 	defer out.Close()
-	if _, err := out.Write([]byte("TOOLBOX_SETUP_PAYLOAD_V1")); err != nil {
+	if _, err := out.Write([]byte("TOOLBOX_PACKAGE_PAYLOAD_V1")); err != nil {
 		return err
 	}
 	_, err = out.Write(payload)

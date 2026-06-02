@@ -15,7 +15,7 @@ ToolBox est organise pour accueillir un front React/TypeScript, une API HTTP Go,
 
 ## Installation Runtime
 
-Le build final produit un installeur autonome :
+Le build final produit un paquet autonome :
 
 ```bat
 build.bat installer
@@ -27,16 +27,16 @@ ou :
 go run ./tools/build installer
 ```
 
-Le resultat final visible est `_build/toolbox-setup.exe`. Lancer cet exe installe ToolBox dans `.\ToolBox` par defaut :
+Le resultat final visible est `_build/toolbox-package.exe`. Lancer cet exe installe ToolBox dans `.\ToolBox` par defaut :
 
 ```bat
-_build\toolbox-setup.exe
+_build\toolbox-package.exe
 ```
 
 Pour choisir le dossier parent :
 
 ```bat
-_build\toolbox-setup.exe --dir C:\Apps
+_build\toolbox-package.exe --dir C:\Apps
 ```
 
 L'installation cree cette architecture :
@@ -61,7 +61,30 @@ ToolBox/
       └─ files/
 ```
 
-Lors d'une mise a jour, l'installeur remplace les exe et conserve `toolbox.cfg`, `data/` et `files/`. `toolbox.cfg` est cree uniquement s'il n'existe pas, sauf avec `--force-config`. Les donnees utilisateur sont dans `modules/*/data` et `modules/*/files`.
+Lors d'une mise a jour, le paquet remplace les exe et conserve `toolbox.cfg`, `data/` et `files/`. `toolbox.cfg` est cree uniquement s'il n'existe pas, sauf avec `--force-config`. Les donnees utilisateur sont dans `modules/*/data` et `modules/*/files`.
+
+### Manifest Windows
+
+`toolbox-package.exe` embarque un manifest Windows `asInvoker` pour eviter une demande administrateur automatique quand le dossier cible est accessible a l'utilisateur courant. Les sources sont dans :
+
+- `apps/installer/cmd/toolbox-setup/toolbox-package.manifest`
+- `apps/installer/cmd/toolbox-setup/toolbox-package.rc`
+- `apps/installer/cmd/toolbox-setup/toolbox-package_windows_amd64.syso`
+
+Pour regenerer la ressource apres modification du manifest :
+
+```bat
+cd apps\installer\cmd\toolbox-setup
+windres -O coff -F pe-x86-64 -i toolbox-package.rc -o toolbox-package_windows_amd64.syso
+```
+
+### Signature Windows
+
+La signature n'est pas imposee par le build si aucun certificat n'est configure.
+
+Si les executables contenus dans le payload doivent eux-memes etre signes, signer d'abord les binaires generes (`api-toolbox.exe`, `web-server-toolbox.exe`, `test-sheet.exe`, `v10-lab.exe`) avant la creation du zip payload.
+
+L'exe final `_build/toolbox-package.exe` doit etre signe uniquement apres l'ajout du payload par `appendInstallerPayload`. Signer avant cet append invaliderait la signature.
 
 Apres installation, lancer `ToolBox Start.bat` dans le dossier `ToolBox`. Ce script demarre l'API et le serveur web avec `toolbox.cfg`, puis ouvre l'interface dans le navigateur.
 
@@ -397,7 +420,7 @@ connector-focas-01\gx-connector.exe listen --debug -v2
 
 ## Build
 
-Le build principal est un outil Go cross-platform, utilisable depuis Windows sans Git Bash. Pour distribuer ToolBox, utilisez `installer` ou `package`, qui produisent uniquement `_build/toolbox-setup.exe`.
+Le build principal est un outil Go cross-platform, utilisable depuis Windows sans Git Bash. Pour distribuer ToolBox, utilisez `installer` ou `package`, qui produisent uniquement `_build/toolbox-package.exe`.
 
 Commandes Windows :
 
