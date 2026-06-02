@@ -1,12 +1,17 @@
 package actions
 
-import "toolBox/pkg/modulecontract"
+import (
+	"toolBox/pkg/modulecontract"
+	"toolBox/pkg/toolboxversion"
+)
 
 func Info() modulecontract.ModuleInfo {
 	return modulecontract.ModuleInfo{
 		ID:          "test-sheet",
 		Name:        "Fiches de test",
 		Description: "Creation et traitement de fiches de test",
+		Version:     toolboxversion.TestSheetVersion,
+		Build:       toolboxversion.ModuleBuild(),
 		Actions:     Actions(),
 	}
 }

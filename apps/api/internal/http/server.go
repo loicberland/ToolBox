@@ -18,6 +18,7 @@ import (
 	v10labapi "toolBox/modules/v10-lab/pkg/httpapi"
 	"toolBox/pkg/modulecontract"
 	"toolBox/pkg/toolboxruntime"
+	"toolBox/pkg/toolboxversion"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -89,6 +90,7 @@ func (s *Server) Routes() http.Handler {
 	testsheetapi.NewHandler(service.New(s.testSheetRepo)).Register(r)
 	v10labapi.NewHandler().Register(r)
 	r.HandleFunc("/api/health", s.health).Methods(http.MethodGet)
+	r.HandleFunc("/api/version", s.version).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules", s.listModules).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules/{moduleId}", s.getModule).Methods(http.MethodGet)
 	r.HandleFunc("/api/modules/{moduleId}/actions/{actionId}", s.runAction).Methods(http.MethodPost)
@@ -98,6 +100,12 @@ func (s *Server) Routes() http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]toolboxversion.VersionInfo{
+		"api": toolboxversion.Info(toolboxversion.APIVersion),
+	})
 }
 
 func (s *Server) listModules(w http.ResponseWriter, _ *http.Request) {

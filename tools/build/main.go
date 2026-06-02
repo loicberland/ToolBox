@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const moduleLine = "module toolBox"
@@ -306,7 +307,7 @@ func (b builder) goBuild(label, outputName, packageRel string, cgo bool) error {
 		return fmt.Errorf("create _build failed: %w", err)
 	}
 	output := filepath.Join(b.root, "_build", executableName(outputName))
-	args := []string{"build", "-o", output, "./" + filepath.ToSlash(packageRel)}
+	args := []string{"build", "-ldflags", buildLDFlags(b.root), "-o", output, "./" + filepath.ToSlash(packageRel)}
 	env := []string{}
 	if cgo {
 		env = append(env, "CGO_ENABLED=1")
@@ -315,6 +316,32 @@ func (b builder) goBuild(label, outputName, packageRel string, cgo bool) error {
 		return fmt.Errorf("%s build failed: %w", label, err)
 	}
 	return nil
+}
+
+func buildLDFlags(root string) string {
+	return fmt.Sprintf(
+		"-X toolBox/pkg/toolboxversion.Commit=%s -X toolBox/pkg/toolboxversion.BuildDate=%s",
+		gitCommit(root),
+		buildDate(),
+	)
+}
+
+func gitCommit(root string) string {
+	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
+	cmd.Dir = root
+	output, err := cmd.Output()
+	if err != nil {
+		return "unknown"
+	}
+	commit := strings.TrimSpace(string(output))
+	if commit == "" {
+		return "unknown"
+	}
+	return commit
+}
+
+func buildDate() string {
+	return time.Now().Format("2006-01-02")
 }
 
 func (b builder) goBuildInstaller() error {

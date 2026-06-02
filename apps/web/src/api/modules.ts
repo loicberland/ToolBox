@@ -6,10 +6,17 @@ export type ModuleAction = {
   description: string;
 };
 
+export type ModuleBuildInfo = {
+  commit?: string;
+  buildDate?: string;
+};
+
 export type ModuleInfo = {
   id: string;
   name: string;
   description: string;
+  version?: string;
+  build?: ModuleBuildInfo;
   actions: ModuleAction[];
 };
 

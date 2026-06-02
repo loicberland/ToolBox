@@ -70,7 +70,8 @@ const App = () => {
                 void switchModule(module.id);
               }}
             >
-              {module.name}
+              <span className="module-menu-name">{module.name}</span>
+              {module.version && <span className="module-menu-version">v{module.version}</span>}
             </button>
           ))}
         </nav>
@@ -114,7 +115,10 @@ const App = () => {
           selectedModule && (
             <>
               <header>
-                <h2>{selectedModule.name}</h2>
+                <h2>
+                  {selectedModule.name}
+                  {selectedModule.version && <span className="module-title-version">v{selectedModule.version}</span>}
+                </h2>
                 <p>{selectedModule.description}</p>
               </header>
               <div className="actions">

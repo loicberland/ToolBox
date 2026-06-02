@@ -37,6 +37,14 @@ type ExtraKeyRow = {
   value: string;
 };
 type BeforeLeaveHandler = () => Promise<boolean>;
+type ImportableActionPlan = {
+  schema?: string;
+  version?: number;
+  name?: string;
+  productId?: string;
+  actions?: PipelineStep[];
+  pipeline?: PipelineStep[];
+};
 
 export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (handler: BeforeLeaveHandler | null) => void }) {
   const [products, setProducts] = useState<V10Product[]>([]);
@@ -74,6 +82,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
   const currentMaquetteRef = useRef<HTMLElement | null>(null);
   const maquetteSelectorRef = useRef<HTMLElement | null>(null);
+  const actionPlanImportInputRef = useRef<HTMLInputElement | null>(null);
   const scrollToCurrentMaquetteAfterTabChange = useRef(false);
   const scrollToMaquetteSelectorAfterOpen = useRef(false);
 
@@ -338,6 +347,68 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
     updateConfig({ ...config, pipeline: [...apiSteps, ...deepClonePipeline(plan.actions)] });
     setMessage('Plan d\'actions ajouté au plan actuel.');
+  }
+
+  function exportCurrentActionPlan() {
+    if (!config) {
+      return;
+    }
+    const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
+    const payload: ImportableActionPlan = {
+      schema: 'toolbox-v10-lab-action-plan',
+      version: 1,
+      name: actionPlanName.trim() || defaultActionPlanName(config.name),
+      productId: config.product,
+      actions: deepClonePipeline(apiSteps),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `plan-actions-${safeFileName(actionPlanName.trim() || config.name || config.product)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    setMessage(m.pipeline.exported);
+  }
+
+  function openActionPlanImport() {
+    actionPlanImportInputRef.current?.click();
+  }
+
+  async function importActionPlanFile(file: File | null) {
+    if (!config || !file) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(await file.text()) as ImportableActionPlan;
+      const importedSteps = extractImportedActionPlanSteps(parsed);
+      if (parsed.productId && parsed.productId !== config.product) {
+        showError(formatMessage(m.pipeline.productMismatch, { product: parsed.productId, currentProduct: config.product }));
+        return;
+      }
+      if (importedSteps.length === 0) {
+        showError(m.pipeline.noImportedActions);
+        return;
+      }
+      const availableActionIDs = new Set(actions.map((action) => action.id));
+      const invalidStep = importedSteps.find((step) => !availableActionIDs.has(step.action));
+      if (invalidStep) {
+        showError(formatMessage(m.pipeline.incompatibleAction, { action: invalidStep.action || m.chooseAction }));
+        return;
+      }
+      const legacySteps = (config.pipeline ?? []).filter((step) => systemPipelineActions.has(step.action));
+      updateConfig({ ...config, pipeline: [...legacySteps, ...deepClonePipeline(importedSteps)] });
+      setActionPlanName(parsed.name ?? '');
+      setMessage(m.pipeline.importedUnsaved);
+    } catch (err) {
+      showError(err instanceof SyntaxError ? m.pipeline.invalidImportFile : (err instanceof Error ? err.message : m.pipeline.invalidImportFile));
+    } finally {
+      if (actionPlanImportInputRef.current) {
+        actionPlanImportInputRef.current.value = '';
+      }
+    }
   }
 
   async function deleteSavedActionPlan() {
@@ -864,7 +935,11 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
                 onActionPlanNameChange={setActionPlanName}
                 onSaveActionPlan={() => void saveCurrentActionPlan()}
                 onAddSavedActionPlan={addSavedActionPlanToCurrent}
+                onExportActionPlan={exportCurrentActionPlan}
+                onOpenImportActionPlan={openActionPlanImport}
+                onImportActionPlan={(file) => void importActionPlanFile(file)}
                 onDeleteSavedActionPlan={() => void deleteSavedActionPlan()}
+                importInputRef={actionPlanImportInputRef}
                 onChange={updateConfig}
               />
             </LocalErrorBoundary>
@@ -1332,7 +1407,7 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
   );
 }
 
-function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActionPlanID, showSaveActionPlan, actionPlanName, onSelectedSavedActionPlanChange, onShowSaveActionPlanChange, onActionPlanNameChange, onSaveActionPlan, onAddSavedActionPlan, onDeleteSavedActionPlan, onChange }: {
+function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActionPlanID, showSaveActionPlan, actionPlanName, onSelectedSavedActionPlanChange, onShowSaveActionPlanChange, onActionPlanNameChange, onSaveActionPlan, onAddSavedActionPlan, onExportActionPlan, onOpenImportActionPlan, onImportActionPlan, onDeleteSavedActionPlan, importInputRef, onChange }: {
   config: V10Config;
   actions: V10Action[];
   savedActionPlans: V10SavedActionPlan[];
@@ -1344,7 +1419,11 @@ function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActio
   onActionPlanNameChange: (name: string) => void;
   onSaveActionPlan: () => void;
   onAddSavedActionPlan: () => void;
+  onExportActionPlan: () => void;
+  onOpenImportActionPlan: () => void;
+  onImportActionPlan: (file: File | null) => void;
   onDeleteSavedActionPlan: () => void;
+  importInputRef: React.RefObject<HTMLInputElement>;
   onChange: (config: V10Config) => void;
 }) {
   const byID = useMemo<Record<string, V10Action>>(() => Object.fromEntries(actions.map((action) => [action.id, action])), [actions]);
@@ -1386,33 +1465,44 @@ function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActio
       <p className="readonly-notice">{m.pipeline.help}</p>
       <section className="v10-saved-plan-panel">
         <div className="v10-saved-plan-header">
-          <h4>Plans enregistrés</h4>
-          <Button type="button" size="sm" variant="secondary" onClick={() => {
-            onActionPlanNameChange(config.name ? `${config.name} - Plan d'actions` : '');
-            onShowSaveActionPlanChange(!showSaveActionPlan);
-          }}>Sauvegarder le plan actuel</Button>
+          <h4>{m.pipeline.savedPlansTitle}</h4>
+          <div className="button-row">
+            <Button type="button" size="sm" variant="secondary" onClick={() => {
+              onActionPlanNameChange(defaultActionPlanName(config.name));
+              onShowSaveActionPlanChange(!showSaveActionPlan);
+            }}>{m.pipeline.saveCurrent}</Button>
+            <Button type="button" size="sm" variant="secondary" onClick={onExportActionPlan}>{m.pipeline.export}</Button>
+            <Button type="button" size="sm" variant="secondary" onClick={onOpenImportActionPlan}>{m.pipeline.import}</Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden-file-input"
+              onChange={(event) => onImportActionPlan(event.currentTarget.files?.[0] ?? null)}
+            />
+          </div>
         </div>
         {showSaveActionPlan && (
           <div className="v10-saved-plan-save">
-            <label>Nom du plan
-              <input value={actionPlanName} onChange={(event) => onActionPlanNameChange(event.currentTarget.value)} placeholder="Initialisation Prod V10" />
+            <label>{m.pipeline.planName}
+              <input value={actionPlanName} onChange={(event) => onActionPlanNameChange(event.currentTarget.value)} placeholder={m.pipeline.planNamePlaceholder} />
             </label>
             <div className="button-row">
-              <Button type="button" size="sm" onClick={onSaveActionPlan} disabled={!actionPlanName.trim()}>Sauvegarder</Button>
-              <Button type="button" size="sm" variant="secondary" onClick={() => onShowSaveActionPlanChange(false)}>Annuler</Button>
+              <Button type="button" size="sm" onClick={onSaveActionPlan} disabled={!actionPlanName.trim()}>{m.save}</Button>
+              <Button type="button" size="sm" variant="secondary" onClick={() => onShowSaveActionPlanChange(false)}>{messages.common.cancel}</Button>
             </div>
           </div>
         )}
         <div className="v10-saved-plan-load">
-          <label>Plan enregistré
+          <label>{m.pipeline.savedPlan}
             <select value={selectedSavedActionPlanID} onChange={(event) => onSelectedSavedActionPlanChange(event.currentTarget.value)} disabled={savedActionPlans.length === 0}>
-              <option value="">Aucun plan enregistré</option>
+              <option value="">{m.pipeline.noSavedPlan}</option>
               {savedActionPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
             </select>
           </label>
           <div className="button-row">
-            <Button type="button" size="sm" variant="secondary" onClick={onAddSavedActionPlan} disabled={!selectedSavedActionPlanID}>Ajouter au plan actuel</Button>
-            <Button type="button" size="sm" variant="danger" onClick={onDeleteSavedActionPlan} disabled={!selectedSavedActionPlanID}>Supprimer</Button>
+            <Button type="button" size="sm" variant="secondary" onClick={onAddSavedActionPlan} disabled={!selectedSavedActionPlanID}>{m.pipeline.addToCurrent}</Button>
+            <Button type="button" size="sm" variant="danger" onClick={onDeleteSavedActionPlan} disabled={!selectedSavedActionPlanID}>{m.delete}</Button>
           </div>
         </div>
       </section>
@@ -2249,6 +2339,45 @@ function paramsFromActionDefaults(action: V10Action): Record<string, unknown> {
 
 function deepClonePipeline(steps: PipelineStep[]): PipelineStep[] {
   return JSON.parse(JSON.stringify(steps)) as PipelineStep[];
+}
+
+function extractImportedActionPlanSteps(payload: ImportableActionPlan): PipelineStep[] {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error(m.pipeline.invalidImportFile);
+  }
+  const steps = Array.isArray(payload.actions) ? payload.actions : (Array.isArray(payload.pipeline) ? payload.pipeline : []);
+  return steps.filter(isPipelineStep).map((step) => ({
+    action: step.action,
+    label: typeof step.label === 'string' ? step.label : '',
+    params: step.params && typeof step.params === 'object' && !Array.isArray(step.params) ? step.params : {},
+  }));
+}
+
+function isPipelineStep(value: unknown): value is PipelineStep {
+  return Boolean(value && typeof value === 'object' && typeof (value as PipelineStep).action === 'string');
+}
+
+function safeFileName(value: string): string {
+  const invalidFileNameChars = /[<>:"/\\|?*]/;
+  const cleaned = Array.from(value.trim())
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || invalidFileNameChars.test(char) ? '-' : char;
+    })
+    .join('')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^\.+$/, '');
+  return cleaned || 'plan-actions';
+}
+
+function defaultActionPlanName(maquetteName: string): string {
+  const name = maquetteName.trim();
+  return name ? formatMessage(m.pipeline.defaultPlanName, { name }) : '';
+}
+
+function formatMessage(template: string, values: Record<string, string>): string {
+  return Object.entries(values).reduce((message, [key, value]) => message.split(`{{${key}}}`).join(value), template);
 }
 
 function debugFlagButtons(debugTargetFlags: Record<string, string[]>, removeCustomFlag: (target: string, flag: string) => void) {

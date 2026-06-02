@@ -3,16 +3,16 @@ package cmd
 import (
 	"os"
 
+	"toolBox/pkg/toolboxversion"
+
 	"github.com/spf13/cobra"
 )
-
-var version = "0.0.1"
 
 var rootCmd = &cobra.Command{
 	Use:     "api",
 	Short:   "api toolbox",
 	Long:    ``,
-	Version: version,
+	Version: toolboxversion.APIVersion,
 }
 
 func Execute() {

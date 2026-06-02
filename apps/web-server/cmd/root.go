@@ -16,6 +16,7 @@ import (
 
 	"toolBox/pkg/toolboxconfig"
 	"toolBox/pkg/toolboxruntime"
+	"toolBox/pkg/toolboxversion"
 
 	"github.com/spf13/cobra"
 )
@@ -23,7 +24,6 @@ import (
 //go:embed dist/*
 var embeddedDist embed.FS
 
-var version = "1.0.0"
 var distDirFlag string
 var configPathFlag string
 var addrFlag string
@@ -35,13 +35,14 @@ var openBrowserFlag bool
 var rootCmd = &cobra.Command{
 	Use:     "web-server",
 	Short:   "ToolBox web static server",
-	Version: version,
+	Version: toolboxversion.WebServerVersion,
 }
 
 var serverCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the web server",
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(toolboxversion.Banner("ToolBox Web Server", toolboxversion.WebServerVersion))
 		configPath, err := resolveConfigPath(configPathFlag)
 		if err != nil {
 			log.Fatal(err)

@@ -1,9 +1,16 @@
 package modulecontract
 
+type BuildInfo struct {
+	Commit    string `json:"commit,omitempty"`
+	BuildDate string `json:"buildDate,omitempty"`
+}
+
 type ModuleInfo struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
+	Version     string         `json:"version,omitempty"`
+	Build       BuildInfo      `json:"build,omitempty"`
 	Actions     []ModuleAction `json:"actions"`
 }
 

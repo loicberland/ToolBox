@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 
 	apihttp "toolBox/apps/api/internal/http"
+	"toolBox/pkg/toolboxversion"
 
 	"github.com/spf13/cobra"
 )
@@ -25,6 +27,7 @@ func init() {
 }
 
 func startServer(configPath string) {
+	fmt.Println(toolboxversion.Banner("ToolBox API", toolboxversion.APIVersion))
 	if err := apihttp.ListenAndServe(configPath); err != nil {
 		log.Fatal(err)
 	}

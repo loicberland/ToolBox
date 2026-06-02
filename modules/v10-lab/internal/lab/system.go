@@ -27,6 +27,11 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	if _, err := os.Stat(zipPath); err != nil {
 		return fmt.Errorf("ZIP release introuvable %s: %w", zipPath, err)
 	}
+	target := ResolveMaquetteTargetPath(config)
+	fmt.Fprintf(ctx.Writer, "[INFO] Vérification du dossier cible : %s\n", target)
+	if err := checkCreateTargetAvailable(target, overwrite); err != nil {
+		return err
+	}
 	tempRoot := ""
 	if workDir == "" {
 		temp, err := os.MkdirTemp("", "v10-lab-")
@@ -39,7 +44,6 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	} else {
 		tempRoot = filepath.Join(workDir, safeDirName(config.Name)+"-"+time.Now().Format("20060102-150405"))
 	}
-	target := ResolveMaquetteTargetPath(config)
 	if err := os.MkdirAll(tempRoot, 0755); err != nil {
 		return err
 	}
@@ -723,6 +727,21 @@ func prepareTargetDirectory(target string, overwrite bool) error {
 		return err
 	}
 	return os.MkdirAll(filepath.Dir(target), 0755)
+}
+
+func checkCreateTargetAvailable(target string, overwrite bool) error {
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("targetPath vide")
+	}
+	if overwrite {
+		return nil
+	}
+	if _, err := os.Stat(target); err == nil {
+		return fmt.Errorf("le dossier cible existe déjà: %s (overwrite=false)", target)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func validateUpdateEnvInputs(zipPath string, target string) error {

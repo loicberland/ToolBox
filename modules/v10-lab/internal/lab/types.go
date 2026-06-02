@@ -11,6 +11,7 @@ import (
 
 	"toolBox/pkg/modulecontract"
 	"toolBox/pkg/toolboxruntime"
+	"toolBox/pkg/toolboxversion"
 )
 
 const (
@@ -192,6 +193,8 @@ func Info() modulecontract.ModuleInfo {
 		ID:          ModuleID,
 		Name:        ModuleName,
 		Description: "Generateur de maquettes V10",
+		Version:     toolboxversion.V10LabVersion,
+		Build:       toolboxversion.ModuleBuild(),
 		Actions: []modulecontract.ModuleAction{
 			{ID: "products", Name: "Produits", Description: "Liste les produits supportes"},
 			{ID: "actions", Name: "Actions", Description: "Liste les actions disponibles"},

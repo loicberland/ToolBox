@@ -1,6 +1,9 @@
 package modules
 
-import "toolBox/pkg/modulecontract"
+import (
+	"toolBox/pkg/modulecontract"
+	"toolBox/pkg/toolboxversion"
+)
 
 type Registry struct {
 	modules map[string]modulecontract.ModuleInfo
@@ -12,6 +15,8 @@ func NewRegistry() *Registry {
 			ID:          "test-sheet",
 			Name:        "Fiches de test",
 			Description: "Creation et traitement de fiches de test",
+			Version:     toolboxversion.TestSheetVersion,
+			Build:       toolboxversion.ModuleBuild(),
 			Actions: []modulecontract.ModuleAction{
 				{ID: "init-db", Name: "Initialiser la base", Description: "Prepare la base SQLite du module"},
 				{ID: "list", Name: "Lister", Description: "Retourne les fiches disponibles"},
@@ -21,6 +26,8 @@ func NewRegistry() *Registry {
 			ID:          "v10-lab",
 			Name:        "V10 Lab",
 			Description: "Generateur de maquettes V10",
+			Version:     toolboxversion.V10LabVersion,
+			Build:       toolboxversion.ModuleBuild(),
 			Actions: []modulecontract.ModuleAction{
 				{ID: "products", Name: "Produits", Description: "Liste les produits supportes"},
 				{ID: "actions", Name: "Actions", Description: "Liste les actions disponibles"},
