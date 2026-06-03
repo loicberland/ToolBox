@@ -99,6 +99,7 @@ type GedixConfig struct {
 	Services   map[string]ServiceDBConfig   `json:"services"`
 	Connectors map[string]ProductUnitConfig `json:"connectors"`
 	Agents     map[string]ProductUnitConfig `json:"agents,omitempty"`
+	Adaptors   map[string]ProductUnitConfig `json:"adaptors,omitempty"`
 	Units      map[string]ProductUnitConfig `json:"units,omitempty"`
 }
 
@@ -382,6 +383,9 @@ func ApplyDefaults(config *Config) {
 	if config.GedixConfig.Agents == nil {
 		config.GedixConfig.Agents = map[string]ProductUnitConfig{}
 	}
+	if config.GedixConfig.Adaptors == nil {
+		config.GedixConfig.Adaptors = map[string]ProductUnitConfig{}
+	}
 	if config.GedixConfig.Units == nil {
 		config.GedixConfig.Units = map[string]ProductUnitConfig{}
 	}
@@ -391,26 +395,71 @@ func ApplyDefaults(config *Config) {
 }
 
 func ProductUnits(config Config) map[string]ProductUnitConfig {
-	ApplyDefaults(&config)
-	product, _ := ProductDefinitionByID(config.Product)
 	units := map[string]ProductUnitConfig{}
-	if !product.HasUnits() {
-		return units
-	}
-	for name, unit := range config.GedixConfig.Units {
-		units[name] = unit
-	}
-	switch product.UnitKind {
-	case UnitKindAgent:
-		for name, unit := range config.GedixConfig.Agents {
-			units[name] = unit
-		}
-	default:
-		for name, unit := range config.GedixConfig.Connectors {
+	for _, family := range ProductUnitFamilies(config) {
+		for name, unit := range family.Units {
 			units[name] = unit
 		}
 	}
 	return units
+}
+
+type ProductUnitFamily struct {
+	Definition ProductUnitDefinition
+	Units      map[string]ProductUnitConfig
+}
+
+func ProductUnitFamilies(config Config) []ProductUnitFamily {
+	ApplyDefaults(&config)
+	product, _ := ProductDefinitionByID(config.Product)
+	if !product.HasUnits() {
+		return []ProductUnitFamily{}
+	}
+	families := []ProductUnitFamily{}
+	for _, definition := range product.UnitDefinitionsForProduct() {
+		units := UnitsByKind(config, definition.Kind)
+		families = append(families, ProductUnitFamily{Definition: definition, Units: units})
+	}
+	return families
+}
+
+func ProductUnitFamilyByName(config Config, unitName string) (ProductUnitFamily, ProductUnitConfig, bool) {
+	for _, family := range ProductUnitFamilies(config) {
+		for name, unit := range family.Units {
+			if strings.EqualFold(strings.TrimSpace(name), strings.TrimSpace(unitName)) {
+				return family, unit, true
+			}
+		}
+	}
+	return ProductUnitFamily{}, ProductUnitConfig{}, false
+}
+
+func UnitsByKind(config Config, kind UnitKind) map[string]ProductUnitConfig {
+	ApplyDefaults(&config)
+	units := map[string]ProductUnitConfig{}
+	if kind == configProductPrimaryKind(config) {
+		for name, unit := range config.GedixConfig.Units {
+			units[name] = unit
+		}
+	}
+	var typed map[string]ProductUnitConfig
+	switch kind {
+	case UnitKindAgent:
+		typed = config.GedixConfig.Agents
+	case UnitKindAdaptor:
+		typed = config.GedixConfig.Adaptors
+	default:
+		typed = config.GedixConfig.Connectors
+	}
+	for name, unit := range typed {
+		units[name] = unit
+	}
+	return units
+}
+
+func configProductPrimaryKind(config Config) UnitKind {
+	product, _ := ProductDefinitionByID(config.Product)
+	return product.PrimaryUnitDefinition().Kind
 }
 
 func MaquettesDir() string {

@@ -2,6 +2,18 @@ import { API_BASE_URL } from '../config/apiConfig';
 
 export const DEFAULT_V10_PRODUCT_ID = 'gedix-prod-v10';
 
+export type UnitKind = 'connector' | 'agent' | 'adaptor' | '';
+
+export type V10UnitDefinition = {
+  kind: UnitKind;
+  singularLabel: string;
+  pluralLabel: string;
+  cfgSectionName: string;
+  folderPrefix: string;
+  runtimeExecutablePattern?: string;
+  moduleExecutablePattern?: string;
+};
+
 export type V10Product = {
   id: string;
   name: string;
@@ -14,13 +26,15 @@ export type V10Product = {
     hasDatabase: boolean;
     supportsExtraKeys: boolean;
   }>;
-  unitKind?: 'connector' | 'agent' | '';
+  unitKind?: UnitKind;
   unitSingularLabel: string;
   unitPluralLabel: string;
   unitCfgSectionName: string;
   unitFolderPrefix: string;
-  unitExecutableName: string;
+  unitExecutableName?: string;
+  unitRuntimeExecutablePattern?: string;
   unitModuleExecutablePattern?: string;
+  unitDefinitions?: V10UnitDefinition[];
 };
 
 export type V10ActionField = {
@@ -93,6 +107,7 @@ export type V10Config = {
     services: Record<string, ServiceDBConfig>;
     connectors: Record<string, ConnectorConfig>;
     agents?: Record<string, ConnectorConfig>;
+    adaptors?: Record<string, ConnectorConfig>;
     units?: Record<string, ConnectorConfig>;
   };
   runtime: {
@@ -158,10 +173,12 @@ export type ImportExistingMaquettesResponse = {
 export type ScanCfgResponse = {
   envName: string;
   appName: string;
-  unitKind?: 'connector' | 'agent' | '';
+  unitKind?: UnitKind;
   unitPluralLabel?: string;
   units?: Array<{ name: string; module?: string; rawConfig: string }>;
-  connectors: Array<{ name: string; module?: string; rawConfig: string }>;
+  connectors?: Array<{ name: string; module?: string; rawConfig: string }>;
+  agents?: Array<{ name: string; module?: string; rawConfig: string }>;
+  adaptors?: Array<{ name: string; module?: string; rawConfig: string }>;
   warnings?: string[];
 };
 

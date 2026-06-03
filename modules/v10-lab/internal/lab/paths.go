@@ -26,6 +26,7 @@ const (
 	DebugTargetService   DebugTargetKind = "service"
 	DebugTargetConnector DebugTargetKind = "connector"
 	DebugTargetAgent     DebugTargetKind = "agent"
+	DebugTargetAdaptor   DebugTargetKind = "adaptor"
 )
 
 type DebugTarget struct {
@@ -145,20 +146,44 @@ func DetectDebugTargetForProduct(paths GedixPaths, target string, product Produc
 	if units != nil {
 		unit = units[target]
 	}
-	pattern := firstNonEmpty(product.UnitRuntimeExecutablePattern, "gx-connector.exe")
-	if patternRequiresModuleName(pattern) && NormalizeModuleType(unit.Module) == "" {
-		return DebugTarget{}, fmt.Errorf("module/type non renseigné pour %s %s", unitArticle(product), target)
+	return detectUnitDebugTarget(paths, target, product, product.PrimaryUnitDefinition(), unit)
+}
+
+func DetectDebugTargetForProductConfig(paths GedixPaths, target string, product ProductDefinition, config Config) (DebugTarget, error) {
+	serviceExe := filepath.Join(paths.AppPath, "gx-"+target+".exe")
+	if info, err := os.Stat(serviceExe); err == nil && !info.IsDir() {
+		return DebugTarget{Name: target, Kind: DebugTargetService, WorkDir: paths.AppPath, ExePath: serviceExe}, nil
 	}
-	unitExeName := product.UnitRuntimeExecutableName(target, unit.Module)
+	family, unit, ok := ProductUnitFamilyByName(config, target)
+	if ok {
+		return detectUnitDebugTarget(paths, target, product, family.Definition, unit)
+	}
+	for _, definition := range product.UnitDefinitionsForProduct() {
+		debugTarget, err := detectUnitDebugTarget(paths, target, product, definition, ProductUnitConfig{})
+		if err == nil {
+			return debugTarget, nil
+		}
+	}
+	return DebugTarget{}, fmt.Errorf("cible debug %q introuvable: ni service gx-%s.exe ni unite configuree", target, target)
+}
+
+func detectUnitDebugTarget(paths GedixPaths, target string, product ProductDefinition, definition ProductUnitDefinition, unit ProductUnitConfig) (DebugTarget, error) {
+	pattern := firstNonEmpty(definition.RuntimeExecutablePattern, "gx-connector.exe")
+	if patternRequiresModuleName(pattern) && NormalizeModuleType(unit.Module) == "" {
+		return DebugTarget{}, fmt.Errorf("module/type non renseigne pour %s %s", unitDefinitionArticle(definition), target)
+	}
+	unitExeName := ResolveUnitRuntimeExecutable(product, definition, target, unit)
 	unitExe := filepath.Join(paths.AppPath, target, unitExeName)
 	if info, err := os.Stat(unitExe); err == nil && !info.IsDir() {
 		kind := DebugTargetConnector
-		if product.UnitKind == UnitKindAgent {
+		if definition.Kind == UnitKindAgent {
 			kind = DebugTargetAgent
+		} else if definition.Kind == UnitKindAdaptor {
+			kind = DebugTargetAdaptor
 		}
 		return DebugTarget{Name: target, Kind: kind, WorkDir: filepath.Join(paths.AppPath, target), ExePath: unitExe}, nil
 	}
-	return DebugTarget{}, fmt.Errorf("cible debug %q introuvable: ni service gx-%s.exe ni %s %s/%s", target, target, product.UnitSingularLabel, target, unitExeName)
+	return DebugTarget{}, fmt.Errorf("cible debug %q introuvable: ni %s %s/%s", target, definition.SingularLabel, target, unitExeName)
 }
 
 func runCommand(dir string, exe string, args ...string) error {

@@ -170,7 +170,6 @@ func StartMaquette(config Config, writer io.Writer) error {
 		return err
 	}
 	debugTargets := RuntimeDebugLaunchTargets(config.Runtime)
-	units := ProductUnits(config)
 	if len(debugTargets) > 0 {
 		fmt.Fprintf(writer, "[INFO] Cibles debug : %s\n", strings.Join(debugTargets, ", "))
 	}
@@ -189,13 +188,13 @@ func StartMaquette(config Config, writer io.Writer) error {
 		return err
 	}
 	for _, target := range debugTargets {
-		debugTarget, err := DetectDebugTargetForProduct(paths, target, product, units)
+		debugTarget, err := DetectDebugTargetForProductConfig(paths, target, product, config)
 		if err != nil {
 			return err
 		}
 		debugArgs := debugArgsForTarget(config.Runtime, target)
-		if debugTarget.Kind == DebugTargetConnector || debugTarget.Kind == DebugTargetAgent {
-			fmt.Fprintf(writer, "[INFO] Lancement %s debug %s : %s %s\n", product.UnitSingularLabel, debugTarget.Name, filepath.Base(debugTarget.ExePath), strings.Join(debugArgs, " "))
+		if debugTarget.Kind == DebugTargetConnector || debugTarget.Kind == DebugTargetAgent || debugTarget.Kind == DebugTargetAdaptor {
+			fmt.Fprintf(writer, "[INFO] Lancement %s debug %s : %s %s\n", debugTarget.Kind, debugTarget.Name, filepath.Base(debugTarget.ExePath), strings.Join(debugArgs, " "))
 		} else {
 			fmt.Fprintf(writer, "[INFO] Lancement service debug %s : %s %s\n", debugTarget.Name, filepath.Base(debugTarget.ExePath), strings.Join(debugArgs, " "))
 		}
@@ -224,7 +223,7 @@ func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Wri
 	unitName := strings.TrimSpace(request.UnitName)
 	command := strings.TrimSpace(request.Command)
 	if unitName == "" {
-		return fmt.Errorf("%s requis", product.UnitSingularLabel)
+		return fmt.Errorf("%s requis", product.PrimaryUnitDefinition().SingularLabel)
 	}
 	if command == "" {
 		return fmt.Errorf("commande module requise")
@@ -232,9 +231,12 @@ func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Wri
 	if !isSafeModuleCommand(command) {
 		return fmt.Errorf("la commande contient des caracteres non autorises")
 	}
-	unit, ok := ProductUnits(config)[unitName]
+	family, unit, ok := ProductUnitFamilyByName(config, unitName)
 	if !ok {
-		return fmt.Errorf("%s %s introuvable dans la configuration", product.UnitSingularLabel, unitName)
+		return fmt.Errorf("unite %s introuvable dans la configuration", unitName)
+	}
+	if strings.TrimSpace(family.Definition.ModuleExecutablePattern) == "" {
+		return fmt.Errorf("%s %s ne supporte pas les commandes de module", family.Definition.SingularLabel, unitName)
 	}
 	moduleName := NormalizeModuleType(unit.Module)
 	if moduleName == "" {
@@ -244,12 +246,12 @@ func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Wri
 	if err != nil {
 		return err
 	}
-	module, err := DetectModuleCommandTarget(paths, product, unitName, moduleName)
+	module, err := DetectModuleCommandTarget(paths, product, family.Definition, unitName, moduleName)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(writer, "[INFO] Lancement commande module.")
-	fmt.Fprintf(writer, "[INFO] %s : %s\n", titleLabel(product.UnitSingularLabel), unitName)
+	fmt.Fprintf(writer, "[INFO] %s : %s\n", titleLabel(family.Definition.SingularLabel), unitName)
 	fmt.Fprintf(writer, "[INFO] Module : %s\n", moduleName)
 	fmt.Fprintf(writer, "[INFO] Exécutable : %s\n", module.ExePath)
 	fmt.Fprintf(writer, "[INFO] Commande : %s\n", command)
@@ -355,16 +357,18 @@ func NormalizeDebugFlag(value string) (string, error) {
 	return flag, nil
 }
 
-func DetectModuleCommandTarget(paths GedixPaths, product ProductDefinition, unitName string, moduleName string) (DebugTarget, error) {
+func DetectModuleCommandTarget(paths GedixPaths, product ProductDefinition, definition ProductUnitDefinition, unitName string, moduleName string) (DebugTarget, error) {
 	moduleName = NormalizeModuleType(moduleName)
 	if moduleName == "" {
 		return DebugTarget{}, fmt.Errorf("module requis pour %s", unitName)
 	}
-	moduleExe := filepath.Join(paths.AppPath, unitName, product.UnitModuleExecutableName(moduleName))
+	moduleExe := filepath.Join(paths.AppPath, unitName, ResolveUnitModuleExecutable(product, definition, unitName, ProductUnitConfig{Module: moduleName}))
 	if info, err := os.Stat(moduleExe); err == nil && !info.IsDir() {
 		kind := DebugTargetConnector
-		if product.UnitKind == UnitKindAgent {
+		if definition.Kind == UnitKindAgent {
 			kind = DebugTargetAgent
+		} else if definition.Kind == UnitKindAdaptor {
+			kind = DebugTargetAdaptor
 		}
 		return DebugTarget{Name: unitName, Kind: kind, WorkDir: filepath.Join(paths.AppPath, unitName), ExePath: moduleExe}, nil
 	}

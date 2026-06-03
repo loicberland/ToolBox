@@ -141,6 +141,8 @@ type ScanCfgResponse struct {
 	UnitPluralLabel string     `json:"unitPluralLabel"`
 	Units           []ScanUnit `json:"units"`
 	Connectors      []ScanUnit `json:"connectors,omitempty"`
+	Agents          []ScanUnit `json:"agents,omitempty"`
+	Adaptors        []ScanUnit `json:"adaptors,omitempty"`
 	Warnings        []string   `json:"warnings,omitempty"`
 }
 
@@ -797,32 +799,14 @@ func (r *currentRun) snapshot() ExecutionResponse {
 }
 
 func scanUnits(content string, envName string, appName string, product lab.ProductDefinition, importExistingKeys bool) (ScanCfgResponse, error) {
-	sectionPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.%s\.([^\]]+)\]\s*$`, regexp.QuoteMeta(product.UnitCfgSectionName)))
 	envs := map[string]bool{}
-	units := []ScanUnit{}
 	warnings := []string{}
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	for index, line := range lines {
-		matches := sectionPattern.FindStringSubmatch(line)
-		if len(matches) != 4 {
-			continue
-		}
-		envs[matches[1]] = true
-		if envName != "" && !strings.EqualFold(matches[1], envName) {
-			continue
-		}
-		if !strings.EqualFold(matches[2], appName) {
-			continue
-		}
-		module := scanUnitModule(lines, index+1)
-		if module == "" {
-			warnings = append(warnings, fmt.Sprintf("type absent pour %s %s", product.UnitSingularLabel, matches[3]))
-		}
-		rawConfig := ""
-		if importExistingKeys {
-			rawConfig = scanUnitRawConfig(lines, index+1)
-		}
-		units = append(units, ScanUnit{Name: matches[3], Module: module, RawConfig: rawConfig})
+	byKind := map[lab.UnitKind][]ScanUnit{}
+	for _, definition := range product.UnitDefinitionsForProduct() {
+		units, scanWarnings := scanUnitsForDefinition(lines, envName, appName, definition, envs, importExistingKeys)
+		byKind[definition.Kind] = units
+		warnings = append(warnings, scanWarnings...)
 	}
 	if envName == "" {
 		if len(envs) == 1 {
@@ -838,11 +822,42 @@ func scanUnits(content string, envName string, appName string, product lab.Produ
 		AppName:         appName,
 		UnitKind:        string(product.UnitKind),
 		UnitPluralLabel: product.UnitPluralLabel,
-		Units:           units,
-		Connectors:      units,
+		Units:           byKind[product.PrimaryUnitDefinition().Kind],
+		Connectors:      byKind[lab.UnitKindConnector],
+		Agents:          byKind[lab.UnitKindAgent],
+		Adaptors:        byKind[lab.UnitKindAdaptor],
 		Warnings:        warnings,
 	}
 	return response, nil
+}
+
+func scanUnitsForDefinition(lines []string, envName string, appName string, definition lab.ProductUnitDefinition, envs map[string]bool, importExistingKeys bool) ([]ScanUnit, []string) {
+	sectionPattern := regexp.MustCompile(fmt.Sprintf(`(?i)^\s*\[environments\.([^.]+)\.applications\.([^.]+)\.%s\.([^\]]+)\]\s*$`, regexp.QuoteMeta(definition.CfgSectionName)))
+	units := []ScanUnit{}
+	warnings := []string{}
+	for index, line := range lines {
+		matches := sectionPattern.FindStringSubmatch(line)
+		if len(matches) != 4 {
+			continue
+		}
+		envs[matches[1]] = true
+		if envName != "" && !strings.EqualFold(matches[1], envName) {
+			continue
+		}
+		if !strings.EqualFold(matches[2], appName) {
+			continue
+		}
+		module := scanUnitModule(lines, index+1)
+		if module == "" {
+			warnings = append(warnings, fmt.Sprintf("type absent pour %s %s", definition.SingularLabel, matches[3]))
+		}
+		rawConfig := ""
+		if importExistingKeys {
+			rawConfig = scanUnitRawConfig(lines, index+1)
+		}
+		units = append(units, ScanUnit{Name: matches[3], Module: module, RawConfig: rawConfig})
+	}
+	return units, warnings
 }
 
 func scanUnitRawConfig(lines []string, start int) string {
@@ -1035,6 +1050,7 @@ func importExistingMaquettes(rootPath string) (ImportExistingMaquettesResponse, 
 				Services:   map[string]lab.ServiceDBConfig{},
 				Connectors: map[string]lab.ProductUnitConfig{},
 				Agents:     map[string]lab.ProductUnitConfig{},
+				Adaptors:   map[string]lab.ProductUnitConfig{},
 			},
 			Runtime:  lab.RuntimeConfig{OpenConsole: true},
 			Pipeline: []lab.PipelineStep{},

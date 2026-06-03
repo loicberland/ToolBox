@@ -94,6 +94,7 @@
     "extraKeyValue": "Valeur",
     "addExtraKey": "Ajouter une clé",
     "connectorHelp": "Le nom du connecteur doit correspondre exactement à la section du gedix.cfg : [environments.<env>.applications.<app>.connectors.<nomConnecteur>]",
+    "unitHelp": "Le nom du {{unit}} doit correspondre exactement à la section du gedix.cfg : [environments.<env>.applications.<app>.{{section}}.<nom{{unitPlaceholder}}>]",
     "scanCfg": "Scanner un cfg",
     "scanCfgHelp": "Le scan lit les sections connecteurs existantes du gedix.cfg et ajoute les noms dans la maquette.",
     "chooseCfg": "Choisir un cfg",
@@ -152,8 +153,15 @@
       "agentName": "Nom de l’agent",
       "addAgent": "Ajouter un agent",
       "scanAgents": "Scanner les agents d'un cfg",
+      "adaptors": "Adaptors",
+      "adaptor": "Adaptor",
+      "adaptorName": "Nom de l'adaptor",
+      "addAdaptor": "Ajouter un adaptor",
+      "scanAdaptors": "Scanner les adaptors d'un cfg",
       "module": "Module",
       "rawConfig": "Configuration brute",
+      "importExistingKeys": "Importer les clés existantes",
+      "replaceExistingUnits": "Remplacer si existant",
       "moduleHelp": "Le module correspond à la valeur de la clé type dans le gedix.cfg, sans le préfixe module-. Exemple : type=\"module-filesystem\" donne gx-module-filesystem.exe."
     },
     "products": {
@@ -196,6 +204,8 @@
     "execution": {
       "actionsTitle": "Actions maquette",
       "debugTitle": "Services/connecteurs en debug",
+      "debugServicesTitle": "Services en debug",
+      "debugUnitsTitle": "Services/unités en debug",
       "apiPipelineTitle": "Plan d'actions",
       "maintenanceTitle": "Maintenance",
       "createMaquette": "Créer maquette",
@@ -248,6 +258,7 @@
       "gedix": "Configuration Gedix",
       "services": "Services",
       "connectors": "Connecteurs",
+      "adaptors": "Adaptors",
       "pipeline": "Plan d'actions",
       "execution": "Exécution / logs",
       "json": "JSON"

@@ -13,6 +13,8 @@ import {
   V10Config,
   V10Product,
   V10SavedActionPlan,
+  V10UnitDefinition,
+  UnitKind,
   v10LabApi,
 } from '../api/v10Lab';
 import { Button } from '../components/ui/Button';
@@ -21,7 +23,7 @@ import { Toast } from '../components/ui/Toast';
 import { messages } from '../i18n';
 
 const m = messages.v10Lab;
-const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.connectors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
+const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.connectors, m.tabs.adaptors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
 const systemPipelineActions = new Set(['create-env', 'configure-gedix-cfg', 'start-maquette', 'stop-maquette', 'start-services', 'stop-services', 'kill-gx-processes', 'update-env']);
 type Tab = typeof tabs[number];
 type RunState = 'idle' | 'running' | 'success' | 'failed';
@@ -167,13 +169,24 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
   const selectedSummary = maquettes.find((item) => item.name === selectedName);
   const currentProduct = productFor(config?.product ?? draft.product, products);
-  const visibleTabs = productHasUnits(currentProduct) ? tabs : tabs.filter((tab) => tab !== m.tabs.connectors);
+  const visibleTabs = tabs.filter((tab) => {
+    if (tab === m.tabs.services) {
+      return currentProduct.services.length > 0;
+    }
+    if (tab === m.tabs.connectors) {
+      return productHasUnitKind(currentProduct, 'connector') || productHasUnitKind(currentProduct, 'agent');
+    }
+    if (tab === m.tabs.adaptors) {
+      return productHasUnitKind(currentProduct, 'adaptor');
+    }
+    return true;
+  });
 
   useEffect(() => {
-    if (activeTab === m.tabs.connectors && !productHasUnits(currentProduct)) {
+    if (!visibleTabs.includes(activeTab)) {
       setActiveTab(m.tabs.general);
     }
-  }, [activeTab, currentProduct.id, currentProduct.unitKind, currentProduct.unitCfgSectionName]);
+  }, [activeTab, currentProduct.id, currentProduct.services.length, currentProduct.unitKind, currentProduct.unitCfgSectionName, currentProduct.unitDefinitions]);
 
   async function loadInitial() {
     await run(async () => {
@@ -710,7 +723,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
-  async function scanCfg(file: File, importExistingKeys: boolean, replaceExistingUnits: boolean) {
+  async function scanCfg(unitKind: UnitKind, file: File, importExistingKeys: boolean, replaceExistingUnits: boolean) {
     if (!config) {
       return;
     }
@@ -721,8 +734,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     await run(async () => {
       const product = productFor(config.product, products);
       const result = await v10LabApi.scanCfg(config.name, file, config.maquette.envName, config.maquette.appName || product.defaultAppName || 'prod', importExistingKeys);
-      const scannedUnits = result.units ?? result.connectors ?? [];
-      const unitKey = product.unitKind === 'agent' ? 'agents' : 'connectors';
+      const scannedUnits = scanUnitsForKind(result, unitKind);
+      const unitKey = unitConfigKey(unitKind);
+      const definition = unitDefinitionForKind(product, unitKind);
       const units = { ...(config.gedixConfig[unitKey] ?? {}) };
       for (const unit of scannedUnits) {
         const existing = units[unit.name];
@@ -745,7 +759,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       });
       const warnings = result.warnings?.length ? ` ${result.warnings.join(' ')}` : '';
       const replaced = replaceExistingUnits ? ' Les éléments existants ont été remplacés.' : '';
-      setMessage(`${scannedUnits.length} ${product.unitPluralLabel} détecté(s).${replaced}${warnings}`);
+      setMessage(`${scannedUnits.length} ${definition.pluralLabel} detecte(s).${replaced}${warnings}`);
     });
   }
 
@@ -911,7 +925,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <div className="v10-tabs">
             {visibleTabs.map((tab) => (
               <button type="button" key={tab} className={tab === activeTab ? 'active' : ''} onClick={() => void changeTab(tab)}>
-                {tab === m.tabs.connectors ? (currentProduct.unitKind === 'agent' ? m.units.agents : m.units.connectors) : tab}
+                {tab === m.tabs.connectors ? connectorTabLabel(currentProduct) : tab}
               </button>
             ))}
           </div>
@@ -919,7 +933,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
           {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
-          {activeTab === m.tabs.connectors && productHasUnits(currentProduct) && <ConnectorsForm config={config} product={currentProduct} onChange={updateConfig} onScanCfg={(file, importExistingKeys, replaceExistingUnits) => void scanCfg(file, importExistingKeys, replaceExistingUnits)} />}
+          {activeTab === m.tabs.connectors && (productHasUnitKind(currentProduct, 'connector') || productHasUnitKind(currentProduct, 'agent')) && (
+            <UnitsForm config={config} product={currentProduct} unitKind={currentProduct.unitKind === 'agent' ? 'agent' : 'connector'} onChange={updateConfig} onScanCfg={(kind, file, importExistingKeys, replaceExistingUnits) => void scanCfg(kind, file, importExistingKeys, replaceExistingUnits)} />
+          )}
+          {activeTab === m.tabs.adaptors && productHasUnitKind(currentProduct, 'adaptor') && (
+            <UnitsForm config={config} product={currentProduct} unitKind="adaptor" onChange={updateConfig} onScanCfg={(kind, file, importExistingKeys, replaceExistingUnits) => void scanCfg(kind, file, importExistingKeys, replaceExistingUnits)} />
+          )}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
               <ApiTokenEditor maquetteName={config.name} disabled={busy} />
@@ -1128,10 +1147,10 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
   const [customTarget, setCustomTarget] = useState('');
   const [customFlag, setCustomFlag] = useState('');
   const [customError, setCustomError] = useState('');
-  const options = [...product.services.map((service) => service.name), ...Object.keys(unitsForConfig(config, product))]
+  const options = [...product.services.map((service) => service.name), ...Object.keys(allUnitsForConfig(config, product))]
     .filter((item, index, items) => items.indexOf(item) === index)
     .filter((item) => !config.runtime.debugTargets.includes(item));
-  const allTargets = [...product.services.map((service) => service.name), ...Object.keys(unitsForConfig(config, product))]
+  const allTargets = [...product.services.map((service) => service.name), ...Object.keys(allUnitsForConfig(config, product))]
     .filter((item, index, items) => items.indexOf(item) === index);
   const debugTargetFlags: Record<string, string[]> = config.runtime.debugTargetFlags ?? {};
   const addCustomFlag = () => {
@@ -1320,26 +1339,27 @@ function ExtraKeysEditor({ serviceKey, service, onChange }: { serviceKey: string
   );
 }
 
-function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void; onScanCfg: (file: File, importExistingKeys: boolean, replaceExistingUnits: boolean) => void }) {
-  const [rows, setRows] = useState<ConnectorFormRow[]>(() => unitRowsFromConfig(config, product));
+function UnitsForm({ config, product, unitKind, onChange, onScanCfg }: { config: V10Config; product: V10Product; unitKind: UnitKind; onChange: (config: V10Config) => void; onScanCfg: (unitKind: UnitKind, file: File, importExistingKeys: boolean, replaceExistingUnits: boolean) => void }) {
+  const definition = unitDefinitionForKind(product, unitKind);
+  const [rows, setRows] = useState<ConnectorFormRow[]>(() => unitRowsFromConfig(config, product, unitKind));
   const [importExistingKeys, setImportExistingKeys] = useState(false);
   const [replaceExistingUnits, setReplaceExistingUnits] = useState(false);
 
   useEffect(() => {
-    setRows(unitRowsFromConfig(config, product));
-  }, [config.name, product.id]);
+    setRows(unitRowsFromConfig(config, product, unitKind));
+  }, [config.name, product.id, unitKind]);
 
   useEffect(() => {
     setRows((current) => {
       const ids = new Map(current.map((row) => [row.name, row.id]));
-      return Object.entries(unitsForConfig(config, product)).map(([name, connector]) => ({
+      return Object.entries(unitsForConfig(config, product, unitKind)).map(([name, connector]) => ({
         id: ids.get(name) ?? makeID(),
         name,
         module: connector.module ?? '',
         rawConfig: connector.rawConfig,
       }));
     });
-  }, [config.gedixConfig.connectors, config.gedixConfig.agents, config.gedixConfig.units, product.id]);
+  }, [config.gedixConfig.connectors, config.gedixConfig.agents, config.gedixConfig.adaptors, config.gedixConfig.units, product.id, unitKind]);
 
   const commitRows = (nextRows: ConnectorFormRow[]) => {
     setRows(nextRows);
@@ -1350,7 +1370,7 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
         units[name] = { module: normalizeModuleType(row.module), rawConfig: row.rawConfig };
       }
     }
-    const unitKey = product.unitKind === 'agent' ? 'agents' : 'connectors';
+    const unitKey = unitConfigKey(unitKind);
     onChange({ ...config, gedixConfig: { ...config.gedixConfig, [unitKey]: units } });
   };
 
@@ -1358,19 +1378,19 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
 
   return (
     <div className="v10-connector-list">
-      <p className="readonly-notice">{unitHelp(product)}</p>
+      <p className="readonly-notice">{unitHelp(definition)}</p>
       <p className="readonly-notice">{m.units.moduleHelp}</p>
       <p className="muted">{m.scanCfgHelp}</p>
       <div className="button-row">
         <label className="ui-button secondary sm v10-file-button">
-          {product.unitKind === 'agent' ? m.units.scanAgents : m.units.scanConnectors}
+          {unitScanLabel(unitKind)}
           <input
             type="file"
             accept=".cfg"
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               if (file) {
-                onScanCfg(file, importExistingKeys, replaceExistingUnits);
+                onScanCfg(unitKind, file, importExistingKeys, replaceExistingUnits);
               }
               event.currentTarget.value = '';
             }}
@@ -1378,18 +1398,18 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
         </label>
         <label className="checkbox-row v10-inline-checkbox">
           <input type="checkbox" checked={importExistingKeys} onChange={(event) => setImportExistingKeys(event.currentTarget.checked)} />
-          Importer clés existantes
+          {m.units.importExistingKeys}
         </label>
         <label className="checkbox-row v10-inline-checkbox">
           <input type="checkbox" checked={replaceExistingUnits} onChange={(event) => setReplaceExistingUnits(event.currentTarget.checked)} />
-          Remplacer si existant
+          {m.units.replaceExistingUnits}
         </label>
       </div>
       {duplicate && <p className="error">{m.duplicateConnector}</p>}
       {rows.map((row) => (
         <div className="v10-connector-row" key={row.id}>
           <div>
-            <label>{product.unitKind === 'agent' ? m.units.agentName : m.units.connectorName}
+            <label>{unitNameLabel(unitKind)}
               <input value={row.name} onChange={(event) => commitRows(rows.map((item) => item.id === row.id ? { ...item, name: event.currentTarget.value } : item))} />
             </label>
             <label>{m.units.module}
@@ -1402,7 +1422,7 @@ function ConnectorsForm({ config, product, onChange, onScanCfg }: { config: V10C
           <Button type="button" variant="danger" size="sm" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `${product.unitFolderPrefix || 'connector-'}${rows.length + 1}`, module: '', rawConfig: '' }])}>{product.unitKind === 'agent' ? m.units.addAgent : m.units.addConnector}</Button>
+      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `${definition.folderPrefix || 'connector-'}${rows.length + 1}`, module: '', rawConfig: '' }])}>{unitAddLabel(unitKind)}</Button>
     </div>
   );
 }
@@ -1870,7 +1890,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void; showTitle?: boolean }) {
-  const unitNames = Object.keys(unitsForConfig(config, product)).sort((left, right) => left.localeCompare(right));
+  const unitNames = Object.keys(moduleCommandUnitsForConfig(config, product)).sort((left, right) => left.localeCompare(right));
   const [unitName, setUnitName] = useState(unitNames[0] ?? '');
   const [command, setCommand] = useState('');
   const invalid = moduleCommandHasUnsafeCharacters(command);
@@ -1935,7 +1955,7 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
   return (
     <div className="v10-execution">
       <details className="v10-execution-section v10-collapsible-section">
-        <summary>{productHasUnits(product) ? m.execution.debugTitle.replace('connecteurs', product.unitPluralLabel) : 'Services en debug'}</summary>
+        <summary>{debugTitle(product)}</summary>
         <DebugTargetsEditor config={config} product={product} onChange={onConfigChange} />
       </details>
       {productSupportsModuleCommand(product) && (
@@ -1992,7 +2012,7 @@ function defaultConfig(product = DEFAULT_V10_PRODUCT_ID, productDefinition?: V10
     product,
     release: { zipPath: '', workDir: '', overwrite: false },
     maquette: { targetPath: '', envName: 'live', appName: productDefinition?.defaultAppName ?? 'prod' },
-    gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {}, agents: {} },
+    gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {}, agents: {}, adaptors: {} },
     runtime: { debugTargets: [], openConsole: true },
     groupName: '',
     pipeline: [],
@@ -2026,6 +2046,7 @@ function normalizeConfig(config: V10Config): V10Config {
       services: gedixConfig.services ?? {},
       connectors: gedixConfig.connectors ?? {},
       agents: gedixConfig.agents ?? {},
+      adaptors: gedixConfig.adaptors ?? {},
       units: gedixConfig.units ?? {},
     }),
     runtime: {
@@ -2062,7 +2083,7 @@ function validateConfig(config: V10Config): string {
   if (config.pipeline.some((step) => !step.action.trim())) {
     return m.errors.pipelineActionRequired;
   }
-  if (hasDuplicateConnector(Object.keys(unitsForConfig(config, productFor(config.product, []))).map((name) => ({ id: name, name, module: '', rawConfig: '' })))) {
+  if (hasDuplicateConnector(Object.keys(allUnitsForConfig(config, productFor(config.product, []))).map((name) => ({ id: name, name, module: '', rawConfig: '' })))) {
     return m.duplicateConnector;
   }
   return '';
@@ -2234,8 +2255,8 @@ function makeID() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function unitRowsFromConfig(config: V10Config, product: V10Product): ConnectorFormRow[] {
-  return Object.entries(unitsForConfig(config, product)).map(([name, connector]) => ({
+function unitRowsFromConfig(config: V10Config, product: V10Product, unitKind: UnitKind): ConnectorFormRow[] {
+  return Object.entries(unitsForConfig(config, product, unitKind)).map(([name, connector]) => ({
     id: makeID(),
     name,
     module: connector.module ?? '',
@@ -2243,21 +2264,124 @@ function unitRowsFromConfig(config: V10Config, product: V10Product): ConnectorFo
   }));
 }
 
-function unitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
-  if (!productHasUnits(product)) {
+function unitsForConfig(config: V10Config, product: V10Product, unitKind: UnitKind): Record<string, ConnectorConfig> {
+  if (!productHasUnitKind(product, unitKind)) {
     return {};
   }
   const genericUnits = config.gedixConfig.units ?? {};
-  const typedUnits = product.unitKind === 'agent' ? (config.gedixConfig.agents ?? {}) : (config.gedixConfig.connectors ?? {});
+  const typedUnits = config.gedixConfig[unitConfigKey(unitKind)] ?? {};
   return { ...genericUnits, ...typedUnits };
 }
 
+function allUnitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
+  return unitDefinitionsForProduct(product).reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
+}
+
+function moduleCommandUnitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
+  return unitDefinitionsForProduct(product)
+    .filter((definition) => Boolean(definition.moduleExecutablePattern?.trim()))
+    .reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
+}
+
 function productHasUnits(product: V10Product): boolean {
-  return (product.unitKind === 'connector' || product.unitKind === 'agent') && Boolean(product.unitCfgSectionName?.trim());
+  return unitDefinitionsForProduct(product).length > 0;
+}
+
+function productHasUnitKind(product: V10Product, unitKind: UnitKind): boolean {
+  return unitDefinitionsForProduct(product).some((definition) => definition.kind === unitKind && Boolean(definition.cfgSectionName?.trim()));
 }
 
 function productSupportsModuleCommand(product: V10Product): boolean {
-  return productHasUnits(product) && Boolean(product.unitModuleExecutablePattern?.trim());
+  return unitDefinitionsForProduct(product).some((definition) => Boolean(definition.moduleExecutablePattern?.trim()));
+}
+
+function unitDefinitionsForProduct(product: V10Product): V10UnitDefinition[] {
+  if (product.unitDefinitions?.length) {
+    return product.unitDefinitions;
+  }
+  if ((product.unitKind === 'connector' || product.unitKind === 'agent' || product.unitKind === 'adaptor') && product.unitCfgSectionName?.trim()) {
+    return [{
+      kind: product.unitKind,
+      singularLabel: product.unitSingularLabel,
+      pluralLabel: product.unitPluralLabel,
+      cfgSectionName: product.unitCfgSectionName,
+      folderPrefix: product.unitFolderPrefix,
+      runtimeExecutablePattern: product.unitRuntimeExecutablePattern ?? product.unitExecutableName,
+      moduleExecutablePattern: product.unitModuleExecutablePattern,
+    }];
+  }
+  return [];
+}
+
+function unitDefinitionForKind(product: V10Product, unitKind: UnitKind): V10UnitDefinition {
+  return unitDefinitionsForProduct(product).find((definition) => definition.kind === unitKind) ?? {
+    kind: unitKind,
+    singularLabel: unitKind === 'adaptor' ? m.units.adaptor : unitKind === 'agent' ? m.units.agent : m.units.connector,
+    pluralLabel: unitKind === 'adaptor' ? m.units.adaptors : unitKind === 'agent' ? m.units.agents : m.units.connectors,
+    cfgSectionName: unitKind === 'adaptor' ? 'adaptors' : unitKind === 'agent' ? 'agents' : 'connectors',
+    folderPrefix: unitKind === 'adaptor' ? 'adaptor-' : unitKind === 'agent' ? 'agent-' : 'connector-',
+  };
+}
+
+function unitConfigKey(unitKind: UnitKind): 'connectors' | 'agents' | 'adaptors' {
+  if (unitKind === 'agent') {
+    return 'agents';
+  }
+  if (unitKind === 'adaptor') {
+    return 'adaptors';
+  }
+  return 'connectors';
+}
+
+function scanUnitsForKind(result: { units?: Array<{ name: string; module?: string; rawConfig: string }>; connectors?: Array<{ name: string; module?: string; rawConfig: string }>; agents?: Array<{ name: string; module?: string; rawConfig: string }>; adaptors?: Array<{ name: string; module?: string; rawConfig: string }> }, unitKind: UnitKind) {
+  if (unitKind === 'agent') {
+    return result.agents ?? result.units ?? [];
+  }
+  if (unitKind === 'adaptor') {
+    return result.adaptors ?? [];
+  }
+  return result.connectors ?? result.units ?? [];
+}
+
+function connectorTabLabel(product: V10Product) {
+  return productHasUnitKind(product, 'agent') && !productHasUnitKind(product, 'connector') ? m.units.agents : m.units.connectors;
+}
+
+function unitNameLabel(unitKind: UnitKind) {
+  if (unitKind === 'agent') {
+    return m.units.agentName;
+  }
+  if (unitKind === 'adaptor') {
+    return m.units.adaptorName;
+  }
+  return m.units.connectorName;
+}
+
+function unitScanLabel(unitKind: UnitKind) {
+  if (unitKind === 'agent') {
+    return m.units.scanAgents;
+  }
+  if (unitKind === 'adaptor') {
+    return m.units.scanAdaptors;
+  }
+  return m.units.scanConnectors;
+}
+
+function unitAddLabel(unitKind: UnitKind) {
+  if (unitKind === 'agent') {
+    return m.units.addAgent;
+  }
+  if (unitKind === 'adaptor') {
+    return m.units.addAdaptor;
+  }
+  return m.units.addConnector;
+}
+
+function debugTitle(product: V10Product) {
+  if (!productHasUnits(product)) {
+    return m.execution.debugServicesTitle;
+  }
+  return m.execution.debugUnitsTitle;
 }
 
 function productFor(productId: string | undefined, products: V10Product[]): V10Product {
@@ -2287,8 +2411,11 @@ function productFor(productId: string | undefined, products: V10Product[]): V10P
   };
 }
 
-function unitHelp(product: V10Product) {
-  return `Le nom du ${product.unitSingularLabel} doit correspondre exactement à la section du gedix.cfg : [environments.<env>.applications.<app>.${product.unitCfgSectionName}.<nom${product.unitSingularLabel}>]`;
+function unitHelp(definition: V10UnitDefinition) {
+  return m.unitHelp
+    .replace('{{unit}}', definition.singularLabel)
+    .replace('{{section}}', definition.cfgSectionName)
+    .replace('{{unitPlaceholder}}', definition.singularLabel);
 }
 
 function moduleCommandHasUnsafeCharacters(command: string) {

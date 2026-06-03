@@ -336,6 +336,35 @@ host = "localhost"
 	}
 }
 
+func TestScanCfgReturnsLegacySecureConnectorsAndAdaptors(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	config.Name = "legacy"
+	config.Product = lab.GedixLegacySecure
+	config.Maquette.AppName = "legacy_secure"
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	cfg := `[environments.demo.applications.legacy_secure.connectors.connector-digi-legacy-01]
+type = "digi-legacy"
+
+[environments.demo.applications.legacy_secure.adaptors.adaptor-digi-01]
+type = "digi"
+custom = "value"
+`
+	var scan ScanCfgResponse
+	postMultipart(t, router, "/api/v10-lab/maquettes/legacy/scan-cfg", "gedix.cfg", []byte(cfg), map[string]string{"importExistingKeys": "true"}, &scan, http.StatusOK)
+	if scan.EnvName != "demo" || len(scan.Connectors) != 1 || scan.Connectors[0].Module != "digi-legacy" {
+		t.Fatalf("unexpected connector scan response: %#v", scan)
+	}
+	if len(scan.Adaptors) != 1 || scan.Adaptors[0].Name != "adaptor-digi-01" || scan.Adaptors[0].Module != "digi" || !strings.Contains(scan.Adaptors[0].RawConfig, `custom = "value"`) {
+		t.Fatalf("unexpected adaptor scan response: %#v", scan)
+	}
+}
+
 func TestScanCfgCanImportExistingRawKeys(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(toolboxruntime.EnvRoot, root)

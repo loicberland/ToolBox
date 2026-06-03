@@ -465,6 +465,22 @@ func TestProductExecutablePatterns(t *testing.T) {
 	if got := toolStock.UnitModuleExecutableName("connector-lista"); got != "connector-lista.exe" {
 		t.Fatalf("unexpected tool stock module executable: %s", got)
 	}
+
+	legacy, _ := ProductDefinitionByID(GedixLegacySecure)
+	connector, ok := legacy.UnitDefinition(UnitKindConnector)
+	if !ok {
+		t.Fatal("legacy-secure connector definition missing")
+	}
+	if got := ResolveUnitModuleExecutable(legacy, connector, "connector-digi-legacy-01", ProductUnitConfig{Module: "digi-legacy"}); got != "gx-connector.exe" {
+		t.Fatalf("unexpected legacy digi connector module executable: %s", got)
+	}
+	adaptor, ok := legacy.UnitDefinition(UnitKindAdaptor)
+	if !ok {
+		t.Fatal("legacy-secure adaptor definition missing")
+	}
+	if got := ResolveUnitRuntimeExecutable(legacy, adaptor, "adaptor-digi-01", ProductUnitConfig{Module: "digi"}); got != "gx-adaptor-digi.exe" {
+		t.Fatalf("unexpected adaptor runtime executable: %s", got)
+	}
 }
 
 func TestDetectEnvAndDebugTargets(t *testing.T) {
@@ -547,6 +563,38 @@ func TestDetectDebugTargetUsesUnitRuntimeModulePattern(t *testing.T) {
 	}
 }
 
+func TestDetectDebugTargetUsesLegacySecureAdaptorRuntime(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_legacy_secure", "adaptor-digi-01"))
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_legacy_secure", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_legacy_secure", "adaptor-digi-01", "gx-adaptor-digi.exe"), "")
+
+	config := Config{
+		Name:    "legacy",
+		Product: GedixLegacySecure,
+		Maquette: MaquetteConfig{
+			TargetPath: root,
+			AppName:    "legacy_secure",
+		},
+		GedixConfig: GedixConfig{
+			Adaptors: map[string]ProductUnitConfig{
+				"adaptor-digi-01": {Module: "digi"},
+			},
+		},
+	}
+	paths, err := DetectGedixPaths(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, _ := ProductDefinitionByID(GedixLegacySecure)
+	target, err := DetectDebugTargetForProductConfig(paths, "adaptor-digi-01", product, config)
+	if err != nil || target.Kind != DebugTargetAdaptor || !strings.HasSuffix(target.ExePath, filepath.Join("adaptor-digi-01", "gx-adaptor-digi.exe")) {
+		t.Fatalf("expected adaptor debug target, got %#v err=%v", target, err)
+	}
+}
+
 func TestDetectDebugTargetRequiresModuleForModuleRuntimePattern(t *testing.T) {
 	root := t.TempDir()
 	mustMkdir(t, filepath.Join(root, "env_demo", "app_tool_stock", "connector-lista-01"))
@@ -562,7 +610,7 @@ func TestDetectDebugTargetRequiresModuleForModuleRuntimePattern(t *testing.T) {
 	_, err = DetectDebugTargetForProduct(paths, "connector-lista-01", product, map[string]ProductUnitConfig{
 		"connector-lista-01": {Module: ""},
 	})
-	if err == nil || !strings.Contains(err.Error(), "module/type non renseigné pour le connecteur connector-lista-01") {
+	if err == nil || !strings.Contains(err.Error(), "module/type non renseigne pour le connecteur connector-lista-01") {
 		t.Fatalf("expected missing module/type error, got %v", err)
 	}
 
@@ -574,7 +622,7 @@ func TestDetectDebugTargetRequiresModuleForModuleRuntimePattern(t *testing.T) {
 	_, err = DetectDebugTargetForProduct(paths, "agent-watch-01", agentProduct, map[string]ProductUnitConfig{
 		"agent-watch-01": {Module: ""},
 	})
-	if err == nil || !strings.Contains(err.Error(), "module/type non renseigné pour l'agent agent-watch-01") {
+	if err == nil || !strings.Contains(err.Error(), "module/type non renseigne pour l'agent agent-watch-01") {
 		t.Fatalf("expected missing agent module/type error, got %v", err)
 	}
 }
@@ -591,7 +639,7 @@ func TestDetectModuleCommandTargetUsesProductUnitModuleExecutable(t *testing.T) 
 		t.Fatal(err)
 	}
 	product, _ := ProductDefinitionByID(GedixProdV10)
-	target, err := DetectModuleCommandTarget(paths, product, "connector-filesystem01", "module-filesystem")
+	target, err := DetectModuleCommandTarget(paths, product, product.PrimaryUnitDefinition(), "connector-filesystem01", "module-filesystem")
 	if err != nil || target.Kind != DebugTargetConnector || !strings.HasSuffix(target.ExePath, filepath.Join("connector-filesystem01", "gx-module-filesystem.exe")) {
 		t.Fatalf("expected connector module target, got %#v err=%v", target, err)
 	}
@@ -614,7 +662,7 @@ func TestToolStockModuleCommandTargetUsesModuleExecutable(t *testing.T) {
 		t.Fatal(err)
 	}
 	product, _ := ProductDefinitionByID(GedixToolStockV10)
-	target, err := DetectModuleCommandTarget(paths, product, "connector-lista-01", "connector-lista")
+	target, err := DetectModuleCommandTarget(paths, product, product.PrimaryUnitDefinition(), "connector-lista-01", "connector-lista")
 	if err != nil || target.Kind != DebugTargetConnector || !strings.HasSuffix(target.ExePath, filepath.Join("connector-lista-01", "connector-lista.exe")) {
 		t.Fatalf("expected tool stock module target, got %#v err=%v", target, err)
 	}
@@ -1099,6 +1147,44 @@ host="127.0.0.1"
 	content := string(data)
 	if !strings.Contains(content, `[environments.demo.applications.watch.agents.agent-watch-01]`) || !strings.Contains(content, `custom-key="value"`) {
 		t.Fatalf("expected agent section update, got:\n%s", content)
+	}
+}
+
+func TestConfigureGedixCfgUsesAdaptorSectionForLegacySecure(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_legacy_secure", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), `
+[environments.demo.applications.legacy_secure.connectors.connector-digi-legacy-01]
+type="digi-legacy"
+
+[environments.demo.applications.legacy_secure.adaptors.adaptor-digi-01]
+type="digi"
+`)
+	config := Config{
+		Name:    "legacy",
+		Product: GedixLegacySecure,
+		Maquette: MaquetteConfig{
+			TargetPath: root,
+			EnvName:    "demo",
+			AppName:    "legacy_secure",
+		},
+		GedixConfig: GedixConfig{
+			Connectors: map[string]ProductUnitConfig{"connector-digi-legacy-01": {RawConfig: `extra="connector"`}},
+			Adaptors:   map[string]ProductUnitConfig{"adaptor-digi-01": {RawConfig: `extra="adaptor"`}},
+		},
+	}
+	var output strings.Builder
+	if err := ConfigureGedixCfg(config, &output); err != nil {
+		t.Fatalf("configure legacy cfg failed: %v\n%s", err, output.String())
+	}
+	data, err := os.ReadFile(filepath.Join(root, "gedix.cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `[environments.demo.applications.legacy_secure.adaptors.adaptor-digi-01]`) || !strings.Contains(content, `extra="adaptor"`) {
+		t.Fatalf("adaptor section not updated:\n%s", content)
 	}
 }
 

@@ -72,16 +72,18 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 			}
 		}
 	}
-	units := ProductUnits(config)
-	for _, unitName := range sortedUnitNames(units) {
-		unit := units[unitName]
-		section := fmt.Sprintf("environments.%s.applications.%s.%s.%s", paths.EnvName, paths.AppName, product.UnitCfgSectionName, unitName)
-		if !sectionExists(content, section) {
-			fmt.Fprintf(writer, "[ERROR] Section %s introuvable dans gedix.cfg : [%s]\n", product.UnitSingularLabel, section)
-			return fmt.Errorf("section %s introuvable dans gedix.cfg: [%s]", product.UnitSingularLabel, section)
+	for _, family := range ProductUnitFamilies(config) {
+		definition := family.Definition
+		for _, unitName := range sortedUnitNames(family.Units) {
+			unit := family.Units[unitName]
+			section := fmt.Sprintf("environments.%s.applications.%s.%s.%s", paths.EnvName, paths.AppName, definition.CfgSectionName, unitName)
+			if !sectionExists(content, section) {
+				fmt.Fprintf(writer, "[ERROR] Section %s introuvable dans gedix.cfg : [%s]\n", definition.SingularLabel, section)
+				return fmt.Errorf("section %s introuvable dans gedix.cfg: [%s]", definition.SingularLabel, section)
+			}
+			fmt.Fprintf(writer, "[INFO] Section %s trouvee : [%s]\n", definition.SingularLabel, section)
+			content = applyConnectorRawConfig(content, section, unit.RawConfig)
 		}
-		fmt.Fprintf(writer, "[INFO] Section %s trouvée : [%s]\n", product.UnitSingularLabel, section)
-		content = applyConnectorRawConfig(content, section, unit.RawConfig)
 	}
 	if err := os.WriteFile(paths.CfgPath, []byte(content), 0644); err != nil {
 		return err

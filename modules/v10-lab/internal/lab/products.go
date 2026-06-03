@@ -14,6 +14,7 @@ const (
 	GedixViewerSamson826 = "gedix-viewer-samson826"
 	GedixAcspcV10        = "gedix-acspc-v10"
 	GedixAcassV10        = "gedix-acass-v10"
+	GedixLegacySecure    = "gedix-legacy-secure"
 )
 
 type UnitKind string
@@ -21,6 +22,7 @@ type UnitKind string
 const (
 	UnitKindConnector UnitKind = "connector"
 	UnitKindAgent     UnitKind = "agent"
+	UnitKindAdaptor   UnitKind = "adaptor"
 )
 
 type ProductServiceDefinition struct {
@@ -28,6 +30,16 @@ type ProductServiceDefinition struct {
 	Label             string `json:"label"`
 	HasDatabase       bool   `json:"hasDatabase"`
 	SupportsExtraKeys bool   `json:"supportsExtraKeys"`
+}
+
+type ProductUnitDefinition struct {
+	Kind                     UnitKind `json:"kind"`
+	SingularLabel            string   `json:"singularLabel"`
+	PluralLabel              string   `json:"pluralLabel"`
+	CfgSectionName           string   `json:"cfgSectionName"`
+	FolderPrefix             string   `json:"folderPrefix"`
+	RuntimeExecutablePattern string   `json:"runtimeExecutablePattern"`
+	ModuleExecutablePattern  string   `json:"moduleExecutablePattern"`
 }
 
 type ProductDefinition struct {
@@ -44,6 +56,7 @@ type ProductDefinition struct {
 	UnitFolderPrefix             string                     `json:"unitFolderPrefix"`
 	UnitRuntimeExecutablePattern string                     `json:"unitRuntimeExecutablePattern"`
 	UnitModuleExecutablePattern  string                     `json:"unitModuleExecutablePattern"`
+	UnitDefinitions              []ProductUnitDefinition    `json:"unitDefinitions,omitempty"`
 }
 
 type Product = ProductDefinition
@@ -115,6 +128,41 @@ var productRegistry = []ProductDefinition{
 		UnitFolderPrefix:             "connector-",
 		UnitRuntimeExecutablePattern: "gx-connector.exe",
 		UnitModuleExecutablePattern:  "gx-module-<moduleName>.exe",
+	},
+	{
+		ID:                           GedixLegacySecure,
+		Name:                         "Gedix Legacy Secure",
+		Label:                        "Gedix Legacy Secure",
+		Description:                  "Produit Gedix Legacy Secure",
+		DefaultAppName:               "legacy_secure",
+		Services:                     []ProductServiceDefinition{},
+		UnitKind:                     UnitKindConnector,
+		UnitSingularLabel:            "connecteur",
+		UnitPluralLabel:              "connecteurs",
+		UnitCfgSectionName:           "connectors",
+		UnitFolderPrefix:             "connector-",
+		UnitRuntimeExecutablePattern: "gx-connector.exe",
+		UnitModuleExecutablePattern:  "gx-module-<moduleName>.exe",
+		UnitDefinitions: []ProductUnitDefinition{
+			{
+				Kind:                     UnitKindConnector,
+				SingularLabel:            "connecteur",
+				PluralLabel:              "connecteurs",
+				CfgSectionName:           "connectors",
+				FolderPrefix:             "connector-",
+				RuntimeExecutablePattern: "gx-connector.exe",
+				ModuleExecutablePattern:  "gx-module-<moduleName>.exe",
+			},
+			{
+				Kind:                     UnitKindAdaptor,
+				SingularLabel:            "adaptor",
+				PluralLabel:              "adaptors",
+				CfgSectionName:           "adaptors",
+				FolderPrefix:             "adaptor-",
+				RuntimeExecutablePattern: "gx-adaptor-<moduleName>.exe",
+				ModuleExecutablePattern:  "",
+			},
+		},
 	},
 	{
 		ID:             GedixToolStockV10,
@@ -240,15 +288,20 @@ func (p ProductDefinition) Service(name string) (ProductServiceDefinition, bool)
 }
 
 func (p ProductDefinition) HasUnits() bool {
-	return (p.UnitKind == UnitKindConnector || p.UnitKind == UnitKindAgent) && strings.TrimSpace(p.UnitCfgSectionName) != ""
+	return len(p.UnitDefinitionsForProduct()) > 0
 }
 
 func (p ProductDefinition) SupportsModuleCommand() bool {
-	return p.HasUnits() && strings.TrimSpace(p.UnitModuleExecutablePattern) != ""
+	for _, definition := range p.UnitDefinitionsForProduct() {
+		if strings.TrimSpace(definition.ModuleExecutablePattern) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func unitArticle(product ProductDefinition) string {
-	label := strings.TrimSpace(product.UnitSingularLabel)
+	label := strings.TrimSpace(product.PrimaryUnitDefinition().SingularLabel)
 	if label == "" {
 		label = "connecteur"
 	}
@@ -259,20 +312,75 @@ func unitArticle(product ProductDefinition) string {
 	return "le " + label
 }
 
-func (p ProductDefinition) UnitModuleExecutableName(moduleName string) string {
-	pattern := strings.TrimSpace(p.UnitModuleExecutablePattern)
-	if pattern == "" {
-		pattern = "gx-module-<unitName>.exe"
+func unitDefinitionArticle(definition ProductUnitDefinition) string {
+	label := strings.TrimSpace(definition.SingularLabel)
+	if label == "" {
+		label = "unite"
 	}
-	return renderUnitExecutablePattern(pattern, NormalizeModuleType(moduleName), moduleName)
+	first := strings.ToLower(label[:1])
+	if strings.ContainsAny(first, "aeiouh") {
+		return "l'" + label
+	}
+	return "le " + label
+}
+
+func (p ProductDefinition) UnitDefinitionsForProduct() []ProductUnitDefinition {
+	if len(p.UnitDefinitions) > 0 {
+		return append([]ProductUnitDefinition{}, p.UnitDefinitions...)
+	}
+	if (p.UnitKind == UnitKindConnector || p.UnitKind == UnitKindAgent || p.UnitKind == UnitKindAdaptor) && strings.TrimSpace(p.UnitCfgSectionName) != "" {
+		return []ProductUnitDefinition{p.PrimaryUnitDefinition()}
+	}
+	return []ProductUnitDefinition{}
+}
+
+func (p ProductDefinition) PrimaryUnitDefinition() ProductUnitDefinition {
+	return ProductUnitDefinition{
+		Kind:                     p.UnitKind,
+		SingularLabel:            p.UnitSingularLabel,
+		PluralLabel:              p.UnitPluralLabel,
+		CfgSectionName:           p.UnitCfgSectionName,
+		FolderPrefix:             p.UnitFolderPrefix,
+		RuntimeExecutablePattern: p.UnitRuntimeExecutablePattern,
+		ModuleExecutablePattern:  p.UnitModuleExecutablePattern,
+	}
+}
+
+func (p ProductDefinition) UnitDefinition(kind UnitKind) (ProductUnitDefinition, bool) {
+	for _, definition := range p.UnitDefinitionsForProduct() {
+		if definition.Kind == kind {
+			return definition, true
+		}
+	}
+	return ProductUnitDefinition{}, false
+}
+
+func (p ProductDefinition) UnitModuleExecutableName(moduleName string) string {
+	return ResolveUnitModuleExecutable(p, p.PrimaryUnitDefinition(), "", ProductUnitConfig{Module: moduleName})
 }
 
 func (p ProductDefinition) UnitRuntimeExecutableName(unitName string, moduleName string) string {
-	pattern := strings.TrimSpace(p.UnitRuntimeExecutablePattern)
+	return ResolveUnitRuntimeExecutable(p, p.PrimaryUnitDefinition(), unitName, ProductUnitConfig{Module: moduleName})
+}
+
+func ResolveUnitRuntimeExecutable(_ ProductDefinition, definition ProductUnitDefinition, unitName string, unitConfig ProductUnitConfig) string {
+	pattern := strings.TrimSpace(definition.RuntimeExecutablePattern)
 	if pattern == "" {
 		pattern = "gx-connector.exe"
 	}
-	return renderUnitExecutablePattern(pattern, unitName, moduleName)
+	return renderUnitExecutablePattern(pattern, unitName, unitConfig.Module)
+}
+
+func ResolveUnitModuleExecutable(_ ProductDefinition, definition ProductUnitDefinition, unitName string, unitConfig ProductUnitConfig) string {
+	moduleName := NormalizeModuleType(unitConfig.Module)
+	if moduleName == "digi-legacy" && strings.TrimSpace(definition.ModuleExecutablePattern) == "gx-module-<moduleName>.exe" {
+		return "gx-connector.exe"
+	}
+	pattern := strings.TrimSpace(definition.ModuleExecutablePattern)
+	if pattern == "" {
+		pattern = "gx-module-<unitName>.exe"
+	}
+	return renderUnitExecutablePattern(pattern, unitName, unitConfig.Module)
 }
 
 func renderUnitExecutablePattern(pattern string, unitName string, moduleRaw string) string {
