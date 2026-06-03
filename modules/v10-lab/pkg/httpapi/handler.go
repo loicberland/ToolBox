@@ -876,19 +876,80 @@ func scanUnitsForDefinition(lines []string, envName string, appName string, defi
 
 func scanUnitRawConfig(lines []string, start int) string {
 	items := []string{}
+	current := []string{}
+	inMultilineValue := false
+	flushCurrent := func() {
+		if len(current) == 0 {
+			return
+		}
+		items = append(items, strings.Join(current, "\n"))
+		current = []string{}
+		inMultilineValue = false
+	}
 	for index := start; index < len(lines); index++ {
-		line := strings.TrimSpace(stripCfgComment(lines[index]))
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+		line := strings.TrimRight(lines[index], "\r")
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			flushCurrent()
 			break
 		}
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+		key, ok := cfgKeyFromRawLine(line)
+		if ok {
+			flushCurrent()
+			if !strings.EqualFold(key, "type") {
+				current = append(current, line)
+				inMultilineValue = hasOddTripleQuotes(line)
+			}
 			continue
 		}
-		if _, _, ok := cfgKeyValue(line); ok {
-			items = append(items, line)
+		if len(current) > 0 && (inMultilineValue || (trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, ";"))) {
+			current = append(current, line)
+			if hasOddTripleQuotes(line) {
+				inMultilineValue = !inMultilineValue
+			}
 		}
 	}
+	flushCurrent()
 	return strings.Join(items, "\n")
+}
+
+func hasOddTripleQuotes(line string) bool {
+	return strings.Count(line, `"""`)%2 == 1
+}
+
+func cfgKeyFromRawLine(line string) (string, bool) {
+	trimmed := strings.TrimSpace(stripCfgComment(line))
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") || strings.HasPrefix(trimmed, "[") {
+		return "", false
+	}
+	index := strings.Index(trimmed, "=")
+	if index <= 0 {
+		return "", false
+	}
+	key := strings.TrimSpace(trimmed[:index])
+	if key == "" || !isCfgRawKey(key) {
+		return "", false
+	}
+	return key, true
+}
+
+func isCfgRawKey(key string) bool {
+	for _, char := range key {
+		if char >= 'a' && char <= 'z' {
+			continue
+		}
+		if char >= 'A' && char <= 'Z' {
+			continue
+		}
+		if char >= '0' && char <= '9' {
+			continue
+		}
+		if char == '-' || char == '_' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func scanUnitModule(lines []string, start int) string {

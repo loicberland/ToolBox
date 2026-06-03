@@ -386,8 +386,59 @@ type = module-focas
 `
 	var scan ScanCfgResponse
 	postMultipart(t, router, "/api/v10-lab/maquettes/ticket-T5808/scan-cfg", "gedix.cfg", []byte(cfg), map[string]string{"importExistingKeys": "true"}, &scan, http.StatusOK)
-	if len(scan.Connectors) != 2 || scan.Connectors[0].RawConfig != "type=\"module-filesystem\"\nhost=\"localhost\"" {
+	if len(scan.Connectors) != 2 || scan.Connectors[0].RawConfig != "host=\"localhost\"" {
 		t.Fatalf("unexpected scan response: %#v", scan)
+	}
+}
+
+func TestScanCfgImportsMultilineRawKeys(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	config.Pipeline = nil
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+
+	cfg := `[environments.live.applications.prod.connectors.heidenhain]
+type="module-heidenhain"
+heidenhain-tnccmd-host="192.168.85.177"
+heidenhain-tnccmd-header-content="""
+2  ;REF PROGRAME=${job.name}
+3  ;INDICE      =${job.version}
+4  ;ETAT        =${state.name}
+5  ;DATE ETAT   =${program.created_at}
+6  ;PROGRAMMEUR =${program.created_by}
+7  ;TRANSFERE LE=${date.now_fr}
+"""
+heidenhain-tnccmd-header-first-line="1  ;********* ENTETE GEDIX *********"
+
+[environments.live.applications.prod.connectors.next]
+type="module-filesystem"
+host="localhost"
+`
+	var scan ScanCfgResponse
+	postMultipart(t, router, "/api/v10-lab/maquettes/ticket-T5808/scan-cfg", "gedix.cfg", []byte(cfg), map[string]string{"importExistingKeys": "true"}, &scan, http.StatusOK)
+	if len(scan.Connectors) != 2 {
+		t.Fatalf("unexpected connector count: %#v", scan)
+	}
+	raw := scan.Connectors[0].RawConfig
+	expected := `heidenhain-tnccmd-host="192.168.85.177"
+heidenhain-tnccmd-header-content="""
+2  ;REF PROGRAME=${job.name}
+3  ;INDICE      =${job.version}
+4  ;ETAT        =${state.name}
+5  ;DATE ETAT   =${program.created_at}
+6  ;PROGRAMMEUR =${program.created_by}
+7  ;TRANSFERE LE=${date.now_fr}
+"""
+heidenhain-tnccmd-header-first-line="1  ;********* ENTETE GEDIX *********"`
+	if raw != expected {
+		t.Fatalf("unexpected raw config:\n%s", raw)
+	}
+	if strings.Contains(raw, `type="module-heidenhain"`) {
+		t.Fatalf("type should not be imported in raw config: %s", raw)
 	}
 }
 
