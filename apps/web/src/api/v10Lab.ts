@@ -263,6 +263,7 @@ export const v10LabApi = {
   runAction: (name: string, actionId: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/actions/${encodeURIComponent(actionId)}/run`, { method: 'POST' }),
   runModuleCommand: (name: string, unitName: string, command: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/module-command/run`, jsonRequest('POST', { unitName, command })),
   getMaquetteOpenUrl: (name: string) => request<{ url: string }>(`/v10-lab/maquettes/${encodeURIComponent(name)}/open-url`),
+  openMaquetteFolder: (name: string) => request<{ status: string }>(`/v10-lab/maquettes/${encodeURIComponent(name)}/open-folder`, { method: 'POST' }),
   currentRun: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run/current`),
   logs: (name: string) => request<LogSummary[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/logs`),
   scanCfg: (name: string, file: File, envName: string, appName: string, importExistingKeys = false) => scanCfg(name, file, envName, appName, importExistingKeys),

@@ -71,6 +71,10 @@
     "reload": "Recharger",
     "save": "Sauvegarder",
     "delete": "Supprimer",
+    "openMaquetteFolder": "Ouvrir le répertoire",
+    "openMaquetteFolderSuccess": "Le répertoire de la maquette a été ouvert.",
+    "openMaquetteFolderMissingPath": "Le répertoire cible de la maquette n'est pas renseigné.",
+    "openMaquetteFolderError": "Impossible d'ouvrir le répertoire de la maquette.",
     "create": "Créer",
     "releaseZip": "ZIP de release",
     "selectZip": "Parcourir",
@@ -142,6 +146,13 @@
     "noStartActionNoDebug": "La sélection debug est disponible uniquement si le plan d'actions démarre la maquette.",
     "noServicesForProduct": "Aucun service défini pour ce produit.",
     "productChangeWarning": "Changer le produit peut modifier les services et actions disponibles. Continuer ?",
+    "search": {
+      "servicePlaceholder": "Rechercher un service...",
+      "connectorPlaceholder": "Rechercher un connecteur...",
+      "agentPlaceholder": "Rechercher un agent...",
+      "adaptorPlaceholder": "Rechercher un adaptor...",
+      "noResults": "Aucun élément ne correspond à la recherche."
+    },
     "units": {
       "connectors": "Connecteurs",
       "connector": "Connecteur",

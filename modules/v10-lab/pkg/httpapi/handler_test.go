@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -410,6 +411,23 @@ func TestMaquetteOpenURLReadsNonCommentedCfgKeys(t *testing.T) {
 	getJSON(t, router, "/api/v10-lab/maquettes/ticket-T5808/open-url", &response, http.StatusOK)
 	if response.URL != "https://example.test:8443" {
 		t.Fatalf("unexpected open URL: %#v", response)
+	}
+}
+
+func TestOpenMaquetteTargetFolderValidation(t *testing.T) {
+	if err := openMaquetteTargetFolder(lab.Config{}); err == nil || !strings.Contains(err.Error(), "repertoire cible") {
+		t.Fatalf("expected missing target error, got %v", err)
+	}
+	missing := filepath.Join(t.TempDir(), "missing")
+	err := openMaquetteTargetFolder(lab.Config{Maquette: lab.MaquetteConfig{TargetPath: missing}})
+	if err == nil || !strings.Contains(err.Error(), "introuvable") {
+		t.Fatalf("expected missing folder error, got %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		err = openMaquetteTargetFolder(lab.Config{Maquette: lab.MaquetteConfig{TargetPath: t.TempDir()}})
+		if err == nil || !strings.Contains(err.Error(), "uniquement disponible sous Windows") {
+			t.Fatalf("expected non-windows error, got %v", err)
+		}
 	}
 }
 

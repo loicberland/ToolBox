@@ -670,6 +670,26 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
+  async function openCurrentMaquetteFolder() {
+    if (!config) {
+      return;
+    }
+    if (!config.maquette.targetPath.trim()) {
+      showError(m.openMaquetteFolderMissingPath);
+      return;
+    }
+    if (isDirty) {
+      const saved = await saveCurrent();
+      if (!saved) {
+        return;
+      }
+    }
+    await run(async () => {
+      await v10LabApi.openMaquetteFolder(config.name);
+      setMessage(m.openMaquetteFolderSuccess);
+    }, () => showError(m.openMaquetteFolderError));
+  }
+
   async function closeMaquette() {
     if (isDirty) {
       const saved = await saveCurrent();
@@ -909,12 +929,13 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <div className="ui-card-header v10-current-maquette-header">
             <div className="button-row end">
               <Button type="button" variant="secondary" onClick={() => void closeMaquette()} disabled={busy}>{m.close}</Button>
-              <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
-              <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
-              <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
               <Button type="button" variant="secondary" onClick={toggleMaquetteSelector}>
                 {showMaquetteSelector ? m.maquetteSelector.hide : m.maquetteSelector.show}
               </Button>
+              <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
+              <Button type="button" variant="success" onClick={() => void openCurrentMaquetteFolder()} disabled={busy || !config.maquette.targetPath.trim()}>{m.openMaquetteFolder}</Button>
+              <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
+              <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
             </div>
             <div>
               <h3>{config.name}</h3>
@@ -1239,7 +1260,16 @@ function GedixForm({ config, onChange, compact = false }: { config: V10Config; o
   return compact ? content : <div className="form-grid v10-form-grid">{content}</div>;
 }
 
+function SearchInput({ value, placeholder, onChange }: { value: string; placeholder: string; onChange: (value: string) => void }) {
+  return (
+    <label className="v10-search-field">
+      <input value={value} placeholder={placeholder} onChange={(event) => onChange(event.currentTarget.value)} />
+    </label>
+  );
+}
+
 function ServicesForm({ config, product, templates, onChange }: { config: V10Config; product: V10Product; templates: DBTemplate[]; onChange: (config: V10Config) => void }) {
+  const [search, setSearch] = useState('');
   const updateService = (name: string, service: ServiceDBConfig | null) => {
     const services = { ...config.gedixConfig.services };
     if (service) {
@@ -1249,11 +1279,23 @@ function ServicesForm({ config, product, templates, onChange }: { config: V10Con
     }
     onChange({ ...config, gedixConfig: { ...config.gedixConfig, services } });
   };
+  const normalizedSearch = normalizeSearch(search);
+  const services = product.services.filter((serviceDefinition) => {
+    const service = config.gedixConfig.services[serviceDefinition.name];
+    return matchesSearch(normalizedSearch, [
+      serviceDefinition.name,
+      serviceDefinition.label,
+      service?.dbType,
+      service?.dbDsn,
+    ]);
+  });
 
   return (
     <div className="v10-service-list">
       {product.services.length === 0 && <p className="muted">{m.noServicesForProduct}</p>}
-      {product.services.map((serviceDefinition) => {
+      {product.services.length > 0 && <SearchInput value={search} placeholder={m.search.servicePlaceholder} onChange={setSearch} />}
+      {product.services.length > 0 && services.length === 0 && <p className="muted">{m.search.noResults}</p>}
+      {services.map((serviceDefinition) => {
         const name = serviceDefinition.name;
         const disabled = !serviceDefinition.hasDatabase;
         const existingService = config.gedixConfig.services[name];
@@ -1344,6 +1386,7 @@ function UnitsForm({ config, product, unitKind, onChange, onScanCfg }: { config:
   const [rows, setRows] = useState<ConnectorFormRow[]>(() => unitRowsFromConfig(config, product, unitKind));
   const [importExistingKeys, setImportExistingKeys] = useState(false);
   const [replaceExistingUnits, setReplaceExistingUnits] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     setRows(unitRowsFromConfig(config, product, unitKind));
@@ -1375,6 +1418,11 @@ function UnitsForm({ config, product, unitKind, onChange, onScanCfg }: { config:
   };
 
   const duplicate = hasDuplicateConnector(rows);
+  const filteredRows = rows.filter((row) => matchesSearch(normalizeSearch(search), [row.name, row.module, row.rawConfig]));
+  const addUnit = () => {
+    setSearch('');
+    commitRows([...rows, { id: makeID(), name: `${definition.folderPrefix || 'connector-'}${rows.length + 1}`, module: '', rawConfig: '' }]);
+  };
 
   return (
     <div className="v10-connector-list">
@@ -1406,7 +1454,9 @@ function UnitsForm({ config, product, unitKind, onChange, onScanCfg }: { config:
         </label>
       </div>
       {duplicate && <p className="error">{m.duplicateConnector}</p>}
-      {rows.map((row) => (
+      <SearchInput value={search} placeholder={unitSearchPlaceholder(unitKind)} onChange={setSearch} />
+      {rows.length > 0 && filteredRows.length === 0 && <p className="muted">{m.search.noResults}</p>}
+      {filteredRows.map((row) => (
         <div className="v10-connector-row" key={row.id}>
           <div>
             <label>{unitNameLabel(unitKind)}
@@ -1422,7 +1472,7 @@ function UnitsForm({ config, product, unitKind, onChange, onScanCfg }: { config:
           <Button type="button" variant="danger" size="sm" onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}>{m.delete}</Button>
         </div>
       ))}
-      <Button type="button" variant="secondary" onClick={() => commitRows([...rows, { id: makeID(), name: `${definition.folderPrefix || 'connector-'}${rows.length + 1}`, module: '', rawConfig: '' }])}>{unitAddLabel(unitKind)}</Button>
+      <Button type="button" variant="secondary" onClick={addUnit}>{unitAddLabel(unitKind)}</Button>
     </div>
   );
 }
@@ -2375,6 +2425,29 @@ function unitAddLabel(unitKind: UnitKind) {
     return m.units.addAdaptor;
   }
   return m.units.addConnector;
+}
+
+function unitSearchPlaceholder(unitKind: UnitKind) {
+  if (unitKind === 'agent') {
+    return m.search.agentPlaceholder;
+  }
+  if (unitKind === 'adaptor') {
+    return m.search.adaptorPlaceholder;
+  }
+  return m.search.connectorPlaceholder;
+}
+
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function matchesSearch(normalizedQuery: string, values: Array<string | undefined>) {
+  if (!normalizedQuery) {
+    return true;
+  }
+  return values
+    .filter((value): value is string => Boolean(value))
+    .some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
 function debugTitle(product: V10Product) {

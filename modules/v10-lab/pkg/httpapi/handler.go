@@ -59,6 +59,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/actions/{actionId}/run", h.runMaquetteAction).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/module-command/run", h.runModuleCommand).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/open-url", h.maquetteOpenURL).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/open-folder", h.openMaquetteFolder).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current/logs", h.currentRun).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/scan-cfg", h.scanCfg).Methods(http.MethodPost)
@@ -488,6 +489,19 @@ func (h *Handler) maquetteOpenURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, MaquetteOpenURLResponse{URL: url})
+}
+
+func (h *Handler) openMaquetteFolder(w http.ResponseWriter, r *http.Request) {
+	config, _, err := lab.LoadRegisteredConfig(mux.Vars(r)["name"])
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	if err := openMaquetteTargetFolder(config); err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "opened"})
 }
 
 func (h *Handler) currentRun(w http.ResponseWriter, r *http.Request) {
@@ -944,6 +958,27 @@ func maquetteOpenURL(config lab.Config) (string, error) {
 		scheme = "https"
 	}
 	return fmt.Sprintf("%s://%s:%s", scheme, fqdn, port), nil
+}
+
+func openMaquetteTargetFolder(config lab.Config) error {
+	targetDir := strings.TrimSpace(config.Maquette.TargetPath)
+	if targetDir == "" {
+		return fmt.Errorf("le repertoire cible de la maquette n'est pas renseigne")
+	}
+	info, err := os.Stat(targetDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("repertoire cible introuvable: %s", targetDir)
+		}
+		return fmt.Errorf("repertoire cible inaccessible: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("le repertoire cible n'est pas un dossier: %s", targetDir)
+	}
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("l'ouverture dans l'explorateur est uniquement disponible sous Windows")
+	}
+	return exec.Command("explorer.exe", targetDir).Start()
 }
 
 func existingCfgPath(config lab.Config) (string, error) {
