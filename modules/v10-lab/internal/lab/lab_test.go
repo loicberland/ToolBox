@@ -282,10 +282,9 @@ func TestAPITokenStorage(t *testing.T) {
 }
 
 func TestGedixAPIBaseURLDefaults(t *testing.T) {
-	config := Config{
-		GedixConfig: GedixConfig{FQDN: "localhost", Port: 80},
-		Maquette:    MaquetteConfig{EnvName: "live", AppName: "prod"},
-	}
+	config := testGedixAPIBaseURLConfig(t, `fqdn="localhost"
+port=80
+`)
 	baseURL, err := gedixAPIBaseURL(config)
 	if err != nil {
 		t.Fatal(err)
@@ -293,20 +292,20 @@ func TestGedixAPIBaseURLDefaults(t *testing.T) {
 	if baseURL != "http://localhost:80/env_live/app_prod" {
 		t.Fatalf("unexpected base URL %q", baseURL)
 	}
-	config.GedixConfig.Port = 0
-	config.GedixConfig.FQDN = "portlb"
+	config = testGedixAPIBaseURLConfig(t, `fqdn="portlb"
+`)
 	baseURL, err = gedixAPIBaseURL(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if baseURL != "http://portlb/env_live/app_prod" {
+	if baseURL != "http://portlb:80/env_live/app_prod" {
 		t.Fatalf("unexpected base URL without port %q", baseURL)
 	}
 	finalURL, err := gedixAPIRequestURL(baseURL, "/entreprise/api/v1/plants", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if finalURL != "http://portlb/env_live/app_prod/entreprise/api/v1/plants" {
+	if finalURL != "http://portlb:80/env_live/app_prod/entreprise/api/v1/plants" {
 		t.Fatalf("unexpected final URL %q", finalURL)
 	}
 	finalURL, err = gedixAPIRequestURL(baseURL, "https://gedix.example/api", nil)
@@ -315,6 +314,49 @@ func TestGedixAPIBaseURLDefaults(t *testing.T) {
 	}
 	if finalURL != "https://gedix.example/api" {
 		t.Fatalf("unexpected absolute final URL %q", finalURL)
+	}
+}
+
+func TestGedixAPIBaseURLUsesHTTPSWhenTLSEnabled(t *testing.T) {
+	config := testGedixAPIBaseURLConfig(t, `fqdn="localhost"
+port=443
+tls=true
+`)
+	baseURL, err := gedixAPIBaseURL(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseURL != "https://localhost:443/env_live/app_prod" {
+		t.Fatalf("unexpected HTTPS base URL %q", baseURL)
+	}
+}
+
+func TestGedixAPIBaseURLUsesConfiguredAPIBaseURLFirst(t *testing.T) {
+	config := Config{API: APIConfig{BaseURL: "https://api.example.test/custom/"}}
+	baseURL, err := gedixAPIBaseURL(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseURL != "https://api.example.test/custom" {
+		t.Fatalf("unexpected configured API base URL %q", baseURL)
+	}
+}
+
+func testGedixAPIBaseURLConfig(t *testing.T, cfg string) Config {
+	t.Helper()
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_live", "app_prod"))
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), cfg)
+	mustWrite(t, filepath.Join(root, "env_live", "app_prod", "gx-app.exe"), "")
+	return Config{
+		Name:    "ticket-T5808",
+		Product: GedixProdV10,
+		Maquette: MaquetteConfig{
+			TargetPath: root,
+			EnvName:    "live",
+			AppName:    "prod",
+		},
 	}
 }
 

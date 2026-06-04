@@ -986,39 +986,7 @@ func cfgKeyValue(line string) (string, string, bool) {
 }
 
 func maquetteOpenURL(config lab.Config) (string, error) {
-	lab.ApplyDefaults(&config)
-	cfgPath, err := existingCfgPath(config)
-	if err != nil {
-		return "", err
-	}
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return "", err
-	}
-	values := map[string]string{}
-	for _, rawLine := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
-		line := strings.TrimSpace(stripCfgComment(rawLine))
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-			continue
-		}
-		key, value, ok := cfgKeyValue(line)
-		if ok {
-			values[strings.ToLower(key)] = value
-		}
-	}
-	fqdn := strings.TrimSpace(values["fqdn"])
-	if fqdn == "" {
-		return "", fmt.Errorf("fqdn absent du fichier cfg")
-	}
-	port := strings.TrimSpace(values["port"])
-	if port == "" {
-		port = "80"
-	}
-	scheme := "http"
-	if strings.EqualFold(strings.TrimSpace(values["tls"]), "true") {
-		scheme = "https"
-	}
-	return fmt.Sprintf("%s://%s:%s", scheme, fqdn, port), nil
+	return lab.GedixWebBaseURL(config)
 }
 
 func openMaquetteTargetFolder(config lab.Config) error {
@@ -1040,57 +1008,6 @@ func openMaquetteTargetFolder(config lab.Config) error {
 		return fmt.Errorf("l'ouverture dans l'explorateur est uniquement disponible sous Windows")
 	}
 	return exec.Command("explorer.exe", targetDir).Start()
-}
-
-func existingCfgPath(config lab.Config) (string, error) {
-	root := lab.ResolveMaquetteTargetPath(config)
-	frontExe := filepath.Join(root, "gx-front.exe")
-	if _, err := os.Stat(frontExe); err != nil {
-		return "", fmt.Errorf("gx-front.exe introuvable dans %s: %w", root, err)
-	}
-	envName := strings.TrimSpace(config.Maquette.EnvName)
-	if envName == "" {
-		envName = "live"
-	}
-	envDir := envName
-	if !strings.HasPrefix(strings.ToLower(envDir), "env_") {
-		envDir = "env_" + envDir
-	}
-	envPath := filepath.Join(root, envDir)
-	if info, err := os.Stat(envPath); err != nil || !info.IsDir() {
-		if err == nil {
-			err = fmt.Errorf("not a directory")
-		}
-		return "", fmt.Errorf("env configuré %q introuvable: %w", envName, err)
-	}
-	appName := strings.TrimSpace(config.Maquette.AppName)
-	if appName == "" {
-		product, _ := lab.ProductDefinitionByID(config.Product)
-		appName = firstNonEmpty(product.DefaultAppName, "prod")
-	}
-	appPath := filepath.Join(envPath, "app_"+appName)
-	if info, err := os.Stat(appPath); err != nil || !info.IsDir() {
-		if err == nil {
-			err = fmt.Errorf("not a directory")
-		}
-		return "", fmt.Errorf("application app_%s introuvable dans %s: %w", appName, envPath, err)
-	}
-	cfgs, err := filepath.Glob(filepath.Join(root, "*.cfg"))
-	if err != nil {
-		return "", err
-	}
-	for _, cfg := range cfgs {
-		if strings.EqualFold(filepath.Base(cfg), "gedix.cfg") {
-			return cfg, nil
-		}
-	}
-	if len(cfgs) == 1 {
-		return cfgs[0], nil
-	}
-	if len(cfgs) > 1 {
-		return "", fmt.Errorf("plusieurs fichiers .cfg trouvés dans %s; conservez gedix.cfg ou corrigez la maquette", root)
-	}
-	return "", fmt.Errorf("aucun fichier .cfg trouvé dans %s", root)
 }
 
 func importExistingMaquettes(rootPath string) (ImportExistingMaquettesResponse, error) {

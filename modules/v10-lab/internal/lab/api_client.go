@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 )
@@ -171,23 +170,7 @@ func (r GedixAPIRequest) LogPath() string {
 }
 
 func gedixAPIBaseURL(config Config) (string, error) {
-	if strings.TrimSpace(config.API.BaseURL) != "" {
-		return strings.TrimRight(strings.TrimSpace(config.API.BaseURL), "/"), nil
-	}
-	fqdn := strings.TrimSpace(config.GedixConfig.FQDN)
-	if fqdn == "" {
-		return "", fmt.Errorf("FQDN Gedix requis pour construire l'URL API")
-	}
-	host := fqdn
-	if config.GedixConfig.Port > 0 {
-		host = fmt.Sprintf("%s:%d", fqdn, config.GedixConfig.Port)
-	}
-	base := url.URL{
-		Scheme: "http",
-		Host:   host,
-		Path:   path.Join("env_"+config.Maquette.EnvName, "app_"+config.Maquette.AppName),
-	}
-	return strings.TrimRight(base.String(), "/"), nil
+	return GedixAPIBaseURL(config)
 }
 
 func gedixAPIRequestURL(baseURL string, requestPath string, query map[string]string) (string, error) {
