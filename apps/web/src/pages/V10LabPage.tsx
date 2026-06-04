@@ -939,6 +939,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
             </div>
             <div>
               <h3>{config.name}</h3>
+              <h4>{currentProduct.label || currentProduct.name}</h4>
               <p className="muted">{selectedSummary?.targetPath ?? config.maquette.targetPath}</p>
             </div>
           </div>
