@@ -254,12 +254,15 @@ func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaq
 	newSafe := safeDirName(config.Name)
 	oldDir := filepath.Join(MaquettesDir(), oldSafe)
 	newDir := filepath.Join(MaquettesDir(), newSafe)
-	if oldSafe != newSafe {
-		if _, err := os.Stat(oldDir); err != nil {
+	if shouldRenameCleanPath(oldDir, newDir) {
+		oldInfo, err := os.Stat(oldDir)
+		if err != nil {
 			return RegisteredMaquette{}, err
 		}
-		if _, err := os.Stat(newDir); err == nil {
-			return RegisteredMaquette{}, fmt.Errorf("maquette deja enregistree: %s", config.Name)
+		if newInfo, err := os.Stat(newDir); err == nil {
+			if !os.SameFile(oldInfo, newInfo) {
+				return RegisteredMaquette{}, fmt.Errorf("maquette deja enregistree: %s", config.Name)
+			}
 		} else if !os.IsNotExist(err) {
 			return RegisteredMaquette{}, err
 		}
@@ -271,40 +274,43 @@ func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaq
 		newDefaultTarget := DefaultMaquetteTargetPath(config)
 		targetPath := strings.TrimSpace(config.Maquette.TargetPath)
 		shouldRenameTarget := targetPath == "" || sameCleanPath(targetPath, oldDefaultTarget)
+		oldTargetInfo, oldTargetExists, err := statIfExists(oldDefaultTarget)
+		if err != nil {
+			return RegisteredMaquette{}, err
+		}
 		if shouldRenameTarget {
 			config.Maquette.TargetPath = newDefaultTarget
-			if _, err := os.Stat(newDefaultTarget); err == nil {
-				return RegisteredMaquette{}, fmt.Errorf("dossier Gedix cible deja existant: %s", newDefaultTarget)
+			if newTargetInfo, err := os.Stat(newDefaultTarget); err == nil {
+				if !oldTargetExists || !os.SameFile(oldTargetInfo, newTargetInfo) {
+					return RegisteredMaquette{}, fmt.Errorf("dossier Gedix cible deja existant: %s", newDefaultTarget)
+				}
 			} else if !os.IsNotExist(err) {
 				return RegisteredMaquette{}, err
 			}
 		}
-		if err := os.Rename(oldDir, newDir); err != nil {
+		if err := renamePathHandlingCaseOnly(oldDir, newDir); err != nil {
 			return RegisteredMaquette{}, err
 		}
 		targetRenamed := false
 		if shouldRenameTarget {
-			if _, err := os.Stat(oldDefaultTarget); err == nil {
+			if oldTargetExists {
 				if err := os.MkdirAll(filepath.Dir(newDefaultTarget), 0755); err != nil {
-					_ = os.Rename(newDir, oldDir)
+					_ = renamePathHandlingCaseOnly(newDir, oldDir)
 					return RegisteredMaquette{}, err
 				}
-				if err := os.Rename(oldDefaultTarget, newDefaultTarget); err != nil {
-					_ = os.Rename(newDir, oldDir)
+				if err := renamePathHandlingCaseOnly(oldDefaultTarget, newDefaultTarget); err != nil {
+					_ = renamePathHandlingCaseOnly(newDir, oldDir)
 					return RegisteredMaquette{}, err
 				}
 				targetRenamed = true
-			} else if !os.IsNotExist(err) {
-				_ = os.Rename(newDir, oldDir)
-				return RegisteredMaquette{}, err
 			}
 		}
 		item, err := saveRegisteredConfigIntoDir(config, newDir)
 		if err != nil {
 			if targetRenamed {
-				_ = os.Rename(newDefaultTarget, oldDefaultTarget)
+				_ = renamePathHandlingCaseOnly(newDefaultTarget, oldDefaultTarget)
 			}
-			_ = os.Rename(newDir, oldDir)
+			_ = renamePathHandlingCaseOnly(newDir, oldDir)
 			return RegisteredMaquette{}, err
 		}
 		return item, nil
@@ -718,6 +724,70 @@ func sameCleanPath(left string, right string) bool {
 		right = rightAbs
 	}
 	return strings.EqualFold(left, right)
+}
+
+func shouldRenameCleanPath(left string, right string) bool {
+	leftAbs, leftErr := filepath.Abs(filepath.Clean(left))
+	rightAbs, rightErr := filepath.Abs(filepath.Clean(right))
+	if leftErr == nil {
+		left = leftAbs
+	}
+	if rightErr == nil {
+		right = rightAbs
+	}
+	return left != right
+}
+
+func statIfExists(path string) (os.FileInfo, bool, error) {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info, true, nil
+	}
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	return nil, false, err
+}
+
+func renamePathHandlingCaseOnly(oldPath string, newPath string) error {
+	if !shouldRenameCleanPath(oldPath, newPath) {
+		return nil
+	}
+	oldInfo, err := os.Stat(oldPath)
+	if err != nil {
+		return err
+	}
+	if newInfo, err := os.Stat(newPath); err == nil && os.SameFile(oldInfo, newInfo) {
+		tempPath, err := renameTempPath(oldPath)
+		if err != nil {
+			return err
+		}
+		if err := os.Rename(oldPath, tempPath); err != nil {
+			return err
+		}
+		if err := os.Rename(tempPath, newPath); err != nil {
+			_ = os.Rename(tempPath, oldPath)
+			return err
+		}
+		return nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(oldPath, newPath)
+}
+
+func renameTempPath(path string) (string, error) {
+	parent := filepath.Dir(path)
+	base := filepath.Base(path)
+	for index := 0; index < 100; index++ {
+		candidate := filepath.Join(parent, fmt.Sprintf(".%s.rename-%d-%d", base, os.Getpid(), index))
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("impossible de preparer le renommage temporaire: %s", path)
 }
 
 func stringParam(params map[string]any, key string) string {

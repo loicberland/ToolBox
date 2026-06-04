@@ -281,6 +281,79 @@ func TestAPITokenStorage(t *testing.T) {
 	}
 }
 
+func TestSaveRegisteredConfigReplacingAllowsCaseOnlyRename(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	oldConfig := testRegisteredMaquetteConfig("Demo Prod")
+	if _, err := SaveRegisteredConfig(oldConfig); err != nil {
+		t.Fatal(err)
+	}
+	mustMkdir(t, DefaultMaquetteTargetPath(oldConfig))
+
+	newConfig := testRegisteredMaquetteConfig("Demo prod")
+	if _, err := SaveRegisteredConfigReplacing("Demo Prod", newConfig); err != nil {
+		t.Fatal(err)
+	}
+	items, err := ListMaquettes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one registered maquette, got %#v", items)
+	}
+	if items[0].Name != "Demo prod" {
+		t.Fatalf("unexpected registered name %q", items[0].Name)
+	}
+	loaded, _, err := LoadRegisteredConfig("Demo prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Name != "Demo prod" {
+		t.Fatalf("maquette.json kept old name %q", loaded.Name)
+	}
+	if loaded.Maquette.TargetPath != DefaultMaquetteTargetPath(newConfig) {
+		t.Fatalf("unexpected target path %q", loaded.Maquette.TargetPath)
+	}
+	if _, err := os.Stat(DefaultMaquetteTargetPath(newConfig)); err != nil {
+		t.Fatalf("expected renamed default target dir: %v", err)
+	}
+}
+
+func TestSaveRegisteredConfigReplacingRejectsRenameToExistingMaquette(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	if _, err := SaveRegisteredConfig(testRegisteredMaquetteConfig("Demo Prod")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveRegisteredConfig(testRegisteredMaquetteConfig("Autre Maquette")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := SaveRegisteredConfigReplacing("Demo Prod", testRegisteredMaquetteConfig("Autre Maquette"))
+	if err == nil || !strings.Contains(err.Error(), "maquette deja enregistree") {
+		t.Fatalf("expected registered maquette conflict, got %v", err)
+	}
+}
+
+func TestSaveRegisteredConfigReplacingAllowsSaveWithoutRename(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	config := testRegisteredMaquetteConfig("Demo Prod")
+	config.Maquette.EnvName = "live"
+	if _, err := SaveRegisteredConfig(config); err != nil {
+		t.Fatal(err)
+	}
+
+	config.Maquette.EnvName = "demo"
+	if _, err := SaveRegisteredConfigReplacing("Demo Prod", config); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := LoadRegisteredConfig("Demo Prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Name != "Demo Prod" || loaded.Maquette.EnvName != "demo" {
+		t.Fatalf("unexpected saved config: %#v", loaded)
+	}
+}
+
 func TestGedixAPIBaseURLDefaults(t *testing.T) {
 	config := testGedixAPIBaseURLConfig(t, `fqdn="localhost"
 port=80
@@ -356,6 +429,17 @@ func testGedixAPIBaseURLConfig(t *testing.T, cfg string) Config {
 			TargetPath: root,
 			EnvName:    "live",
 			AppName:    "prod",
+		},
+	}
+}
+
+func testRegisteredMaquetteConfig(name string) Config {
+	return Config{
+		Name:    name,
+		Product: GedixProdV10,
+		Maquette: MaquetteConfig{
+			EnvName: "live",
+			AppName: "prod",
 		},
 	}
 }
