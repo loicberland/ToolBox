@@ -932,7 +932,6 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               <Button type="button" variant="secondary" onClick={toggleMaquetteSelector}>
                 {showMaquetteSelector ? m.maquetteSelector.hide : m.maquetteSelector.show}
               </Button>
-              <Button type="button" variant="secondary" onClick={() => void openMaquette(config.name)} disabled={busy}>{m.reload}</Button>
               <Button type="button" variant="success" onClick={() => void openCurrentMaquetteFolder()} disabled={busy || !config.maquette.targetPath.trim()}>{m.openMaquetteFolder}</Button>
               <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
               <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
