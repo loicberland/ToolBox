@@ -76,8 +76,8 @@ var productRegistry = []ProductDefinition{
 			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
 		},
 		UnitKind:                     UnitKindConnector,
-		UnitSingularLabel:            "connecteur",
-		UnitPluralLabel:              "connecteurs",
+		UnitSingularLabel:            "connector",
+		UnitPluralLabel:              "connectors",
 		UnitCfgSectionName:           "connectors",
 		UnitFolderPrefix:             "connector-",
 		UnitRuntimeExecutablePattern: "gx-connector.exe",
@@ -98,8 +98,8 @@ var productRegistry = []ProductDefinition{
 			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true},
 		},
 		UnitKind:                     UnitKindConnector,
-		UnitSingularLabel:            "connecteur",
-		UnitPluralLabel:              "connecteurs",
+		UnitSingularLabel:            "connector",
+		UnitPluralLabel:              "connectors",
 		UnitCfgSectionName:           "connectors",
 		UnitFolderPrefix:             "connector-",
 		UnitRuntimeExecutablePattern: "gx-connector.exe",
@@ -122,8 +122,8 @@ var productRegistry = []ProductDefinition{
 			{Name: "config", Label: "config", HasDatabase: true, SupportsExtraKeys: true},
 		},
 		UnitKind:                     UnitKindConnector,
-		UnitSingularLabel:            "connecteur",
-		UnitPluralLabel:              "connecteurs",
+		UnitSingularLabel:            "connector",
+		UnitPluralLabel:              "connectors",
 		UnitCfgSectionName:           "connectors",
 		UnitFolderPrefix:             "connector-",
 		UnitRuntimeExecutablePattern: "gx-connector.exe",
@@ -137,8 +137,8 @@ var productRegistry = []ProductDefinition{
 		DefaultAppName:               "legacy_secure",
 		Services:                     []ProductServiceDefinition{},
 		UnitKind:                     UnitKindConnector,
-		UnitSingularLabel:            "connecteur",
-		UnitPluralLabel:              "connecteurs",
+		UnitSingularLabel:            "connector",
+		UnitPluralLabel:              "connectors",
 		UnitCfgSectionName:           "connectors",
 		UnitFolderPrefix:             "connector-",
 		UnitRuntimeExecutablePattern: "gx-connector.exe",
@@ -146,8 +146,8 @@ var productRegistry = []ProductDefinition{
 		UnitDefinitions: []ProductUnitDefinition{
 			{
 				Kind:                     UnitKindConnector,
-				SingularLabel:            "connecteur",
-				PluralLabel:              "connecteurs",
+				SingularLabel:            "connector",
+				PluralLabel:              "connectors",
 				CfgSectionName:           "connectors",
 				FolderPrefix:             "connector-",
 				RuntimeExecutablePattern: "gx-connector.exe",
@@ -179,8 +179,8 @@ var productRegistry = []ProductDefinition{
 			{Name: "config", Label: "config", HasDatabase: true, SupportsExtraKeys: true},
 		},
 		UnitKind:                     UnitKindConnector,
-		UnitSingularLabel:            "connecteur",
-		UnitPluralLabel:              "connecteurs",
+		UnitSingularLabel:            "connector",
+		UnitPluralLabel:              "connectors",
 		UnitCfgSectionName:           "connectors",
 		UnitFolderPrefix:             "connector-",
 		UnitRuntimeExecutablePattern: "<moduleName>.exe",
@@ -303,7 +303,7 @@ func (p ProductDefinition) SupportsModuleCommand() bool {
 func unitArticle(product ProductDefinition) string {
 	label := strings.TrimSpace(product.PrimaryUnitDefinition().SingularLabel)
 	if label == "" {
-		label = "connecteur"
+		label = "connector"
 	}
 	first := strings.ToLower(label[:1])
 	if strings.ContainsAny(first, "aeiouh") {

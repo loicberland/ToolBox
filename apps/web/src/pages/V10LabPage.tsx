@@ -23,7 +23,7 @@ import { Toast } from '../components/ui/Toast';
 import { messages } from '../i18n';
 
 const m = messages.v10Lab;
-const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.connectors, m.tabs.adaptors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
+const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.adaptors, m.tabs.connectors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
 const systemPipelineActions = new Set(['create-env', 'configure-gedix-cfg', 'start-maquette', 'stop-maquette', 'start-services', 'stop-services', 'kill-gx-processes', 'update-env']);
 type Tab = typeof tabs[number];
 type RunState = 'idle' | 'running' | 'success' | 'failed';
@@ -954,11 +954,11 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
           {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
-          {activeTab === m.tabs.connectors && (productHasUnitKind(currentProduct, 'connector') || productHasUnitKind(currentProduct, 'agent')) && (
-            <UnitsForm config={config} product={currentProduct} unitKind={currentProduct.unitKind === 'agent' ? 'agent' : 'connector'} onChange={updateConfig} onScanCfg={(kind, file, importExistingKeys, replaceExistingUnits) => void scanCfg(kind, file, importExistingKeys, replaceExistingUnits)} />
-          )}
           {activeTab === m.tabs.adaptors && productHasUnitKind(currentProduct, 'adaptor') && (
             <UnitsForm config={config} product={currentProduct} unitKind="adaptor" onChange={updateConfig} onScanCfg={(kind, file, importExistingKeys, replaceExistingUnits) => void scanCfg(kind, file, importExistingKeys, replaceExistingUnits)} />
+          )}
+          {activeTab === m.tabs.connectors && (productHasUnitKind(currentProduct, 'connector') || productHasUnitKind(currentProduct, 'agent')) && (
+            <UnitsForm config={config} product={currentProduct} unitKind={currentProduct.unitKind === 'agent' ? 'agent' : 'connector'} onChange={updateConfig} onScanCfg={(kind, file, importExistingKeys, replaceExistingUnits) => void scanCfg(kind, file, importExistingKeys, replaceExistingUnits)} />
           )}
           {activeTab === m.tabs.pipeline && (
             <LocalErrorBoundary>
@@ -2475,8 +2475,8 @@ function productFor(productId: string | undefined, products: V10Product[]): V10P
       { name: 'config', label: 'config', hasDatabase: true, supportsExtraKeys: true },
     ],
     unitKind: 'connector',
-    unitSingularLabel: 'connecteur',
-    unitPluralLabel: 'connecteurs',
+    unitSingularLabel: 'connector',
+    unitPluralLabel: 'connectors',
     unitCfgSectionName: 'connectors',
     unitFolderPrefix: 'connector-',
     unitExecutableName: 'gx-connector.exe',

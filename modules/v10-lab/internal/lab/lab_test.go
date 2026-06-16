@@ -736,7 +736,7 @@ func TestDetectDebugTargetRequiresModuleForModuleRuntimePattern(t *testing.T) {
 	_, err = DetectDebugTargetForProduct(paths, "connector-lista-01", product, map[string]ProductUnitConfig{
 		"connector-lista-01": {Module: ""},
 	})
-	if err == nil || !strings.Contains(err.Error(), "module/type non renseigne pour le connecteur connector-lista-01") {
+	if err == nil || !strings.Contains(err.Error(), "module/type non renseigne pour le connector connector-lista-01") {
 		t.Fatalf("expected missing module/type error, got %v", err)
 	}
 
@@ -832,7 +832,7 @@ func TestRunModuleCommandRequiresConfiguredModule(t *testing.T) {
 			},
 		},
 	}, ModuleCommandRequest{UnitName: "connector-filesystem01", Command: "status"}, &output)
-	if err == nil || !strings.Contains(err.Error(), "Le module du connecteur connector-filesystem01") {
+	if err == nil || !strings.Contains(err.Error(), "Le module du connector connector-filesystem01") {
 		t.Fatalf("expected missing module error, got %v", err)
 	}
 }
@@ -848,7 +848,7 @@ func TestRunModuleCommandRejectsProductWithoutModulePattern(t *testing.T) {
 			},
 		},
 	}, ModuleCommandRequest{UnitName: "connector-filesystem01", Command: "status"}, &output)
-	if err == nil || !strings.Contains(err.Error(), "Ce produit ne supporte pas les commandes de module connecteur/agent.") {
+	if err == nil || !strings.Contains(err.Error(), "Ce produit ne supporte pas les commandes de module connector/agent.") {
 		t.Fatalf("expected unsupported module command error, got %v", err)
 	}
 }

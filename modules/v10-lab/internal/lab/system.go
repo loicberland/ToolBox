@@ -218,7 +218,7 @@ func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Wri
 		return err
 	}
 	if !product.SupportsModuleCommand() {
-		return fmt.Errorf("Ce produit ne supporte pas les commandes de module connecteur/agent.")
+		return fmt.Errorf("Ce produit ne supporte pas les commandes de module connector/agent.")
 	}
 	unitName := strings.TrimSpace(request.UnitName)
 	command := strings.TrimSpace(request.Command)
@@ -269,7 +269,7 @@ func productUnitArticle(product ProductDefinition) string {
 	if product.UnitKind == UnitKindAgent {
 		return "de l’agent"
 	}
-	return "du connecteur"
+	return "du connector"
 }
 
 func RuntimeDebugLaunchTargets(runtime RuntimeConfig) []string {

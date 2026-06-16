@@ -132,7 +132,7 @@ func detectOrCreateCfg(root string, frontExePath string) (string, error) {
 func DetectDebugTarget(paths GedixPaths, target string) (DebugTarget, error) {
 	return DetectDebugTargetForProduct(paths, target, ProductDefinition{
 		UnitKind:                     UnitKindConnector,
-		UnitSingularLabel:            "connecteur",
+		UnitSingularLabel:            "connector",
 		UnitRuntimeExecutablePattern: "gx-connector.exe",
 	}, nil)
 }

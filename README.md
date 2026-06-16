@@ -306,7 +306,7 @@ Chaque produit definit :
 
 - son `appName` par defaut
 - ses services
-- le terme utilise pour les connecteurs ou agents
+- le terme utilise pour les connectors ou agents
 - le nom de section cfg a scanner/modifier
 - les futures actions compatibles dans le Plan d'actions
 
@@ -339,7 +339,7 @@ Phase 2 - Actions systeme Gedix :
 - generation si besoin puis modification controlee du `gedix.cfg`
 - demarrage standard de la maquette
 - demarrage avec exclusions pour debug
-- lancement de services/connecteurs en debug
+- lancement de services/connectors en debug
 - action manuelle "Couper les services GX"
 
 Phase 3 - Interface V10 Lab :
@@ -348,7 +348,7 @@ Phase 3 - Interface V10 Lab :
 - liste des maquettes
 - creation / edition d'une maquette
 - edition de la configuration Gedix
-- edition services/connecteurs
+- edition services/connectors
 - builder graphique de plan d'actions
 - validation et lancement depuis le front
 - consultation des logs
@@ -360,15 +360,15 @@ Notes phase 3 :
 - la suppression d'une maquette supprime seulement l'enregistrement V10 Lab, pas le dossier Gedix physique
 - "Couper les services GX" reste une action manuelle avec confirmation
 
-## Commande module connecteur/agent
+## Commande module connector/agent
 
 V10 Lab permet de lancer une commande sur un module Gedix sans demarrer toute la maquette.
 
 La commande :
 
-- utilise le connecteur ou l'agent selectionne
+- utilise le connector ou l'agent selectionne
 - lance automatiquement `gx-front.exe listen` si necessaire
-- execute `gx-module-<nom>.exe` dans le dossier du connecteur/agent
+- execute `gx-module-<nom>.exe` dans le dossier du connector/agent
 - ouvre une console Windows dediee
 
 Exemple :

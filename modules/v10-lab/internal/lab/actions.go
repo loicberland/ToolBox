@@ -146,7 +146,7 @@ func Actions() []Action {
 			Fields: []ActionField{
 				{Name: "entity_name", Label: "Nom de la cible", Type: "string", Required: true, Default: "cible2"},
 				{Name: "description", Label: "Description", Type: "string", Default: ""},
-				{Name: "connector_name", Label: "Connecteur", Type: "string", Required: true, OptionsSource: "connectors"},
+				{Name: "connector_name", Label: "Connector", Type: "string", Required: true, OptionsSource: "connectors"},
 				{Name: "tunnel_steps", Label: "Etapes réseau", Type: "object[]", Default: []any{}, ItemFields: []ActionField{
 					{Name: "entity_name", Label: "Nom relais", Type: "string"},
 					{Name: "rank", Label: "Ordre", Type: "number"},
