@@ -227,7 +227,9 @@
       "refreshLogs": "Rafraîchir les logs",
       "updateMaquetteConfirm": "La maquette existante va être mise à jour avec la release sélectionnée. Le fichier gedix.cfg et les logs seront conservés. Continuer ?",
       "updateRunning": "Mise à jour en cours...",
-      "updateFinished": "Mise à jour terminée."
+      "updateFinished": "Mise à jour terminée.",
+      "specificCommand": "Commande spécifique",
+      "executable": "Exécutable"
     },
     "pipeline": {
       "help": "Les plans d'actions servent à préparer des données Gedix : création de machines, groupes, dossiers CN, imports/exports de données, etc. Les actions système de maquette sont disponibles dans l’onglet Exécution / logs.",

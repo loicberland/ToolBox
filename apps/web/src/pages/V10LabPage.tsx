@@ -1940,39 +1940,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void; showTitle?: boolean }) {
-  const unitNames = Object.keys(moduleCommandUnitsForConfig(config, product)).sort((left, right) => left.localeCompare(right));
-  const [unitName, setUnitName] = useState(unitNames[0] ?? '');
+  // const unitNames = Object.keys(moduleCommandUnitsForConfig(config, product)).sort((left, right) => left.localeCompare(right));
+  // const [unitName, setUnitName] = useState(unitNames[0] ?? '');
   const [command, setCommand] = useState('');
   const invalid = moduleCommandHasUnsafeCharacters(command);
-  const isAgent = product.unitKind === 'agent';
+  // const isAgent = product.unitKind === 'agent';
+  const [selected, setSelected] = useState('');
+  const options = [...product.services.map((service) => service.name), ...Object.keys(allUnitsForConfig(config, product))]
+    .filter((item, index, items) => items.indexOf(item) === index)
+    .filter((item) => !config.runtime.debugTargets.includes(item));
 
-  useEffect(() => {
-    if (!unitName || !unitNames.includes(unitName)) {
-      setUnitName(unitNames[0] ?? '');
-    }
-  }, [unitNames.join('|'), unitName]);
+  // useEffect(() => {
+  //   if (!unitName || !unitNames.includes(unitName)) {
+  //     setUnitName(unitNames[0] ?? '');
+  //   }
+  // }, [unitNames.join('|'), unitName]);
 
   return (
     <div className="v10-module-command">
-      {showTitle && <h4>{isAgent ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</h4>}
-      <p className="muted">{m.moduleCommand.help}</p>
-      {unitNames.length === 0 ? (
-        <p className="muted">{isAgent ? m.moduleCommand.noAgent : m.moduleCommand.noConnector}</p>
-      ) : (
-        <div className="form-grid v10-form-grid">
-          <label>{isAgent ? m.moduleCommand.agent : m.moduleCommand.connector}
-            <select value={unitName} onChange={(event) => setUnitName(event.currentTarget.value)}>
-              {unitNames.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </label>
-          <label>{m.moduleCommand.command}
-            <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.currentTarget.value)} />
-          </label>
-        </div>
-      )}
+      {/* {showTitle && <h4>{isAgent ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</h4>} */}
+      {showTitle && <h4>{m.execution.specificCommand}</h4>}
+      <p className="muted">{m.moduleCommand.help}</p>      
+      <div className="form-grid v10-form-grid">
+        <label>{m.execution.executable}
+        <select value={selected} onChange={(event) => setSelected(event.currentTarget.value)}>
+          <option value="">{m.chooseDebugTarget}</option>
+          {options.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+          {/* <select value={unitName} onChange={(event) => setUnitName(event.currentTarget.value)}>
+            {unitNames.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select> */}
+        </label>
+        <label>{m.moduleCommand.command}
+          <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.currentTarget.value)} />
+        </label>
+      </div>
       {invalid && <p className="error">{m.moduleCommand.invalidCommand}</p>}
       <div className="button-row">
-        <Button type="button" variant="secondary" disabled={disabled || !unitName || !command.trim() || invalid} onClick={() => onRun(unitName, command)}>
+        <Button type="button" variant="secondary" disabled={disabled || !selected || !command.trim() || invalid} onClick={() => onRun(selected, command)}>
           {m.moduleCommand.run}
         </Button>
       </div>
@@ -2010,7 +2015,8 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
       </details>
       {productSupportsModuleCommand(product) && (
         <details className="v10-execution-section v10-collapsible-section">
-          <summary>{product.unitKind === 'agent' ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</summary>
+          {/* <summary>{product.unitKind === 'agent' ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</summary> */}
+          <summary>{m.execution.specificCommand}</summary>
           <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunModuleCommand} showTitle={false} />
         </details>
       )}
@@ -2327,11 +2333,11 @@ function allUnitsForConfig(config: V10Config, product: V10Product): Record<strin
   return unitDefinitionsForProduct(product).reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
 }
 
-function moduleCommandUnitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
-  return unitDefinitionsForProduct(product)
-    .filter((definition) => Boolean(definition.moduleExecutablePattern?.trim()))
-    .reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
-}
+// function moduleCommandUnitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
+//   return unitDefinitionsForProduct(product)
+//     .filter((definition) => Boolean(definition.moduleExecutablePattern?.trim()))
+//     .reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
+// }
 
 function productHasUnits(product: V10Product): boolean {
   return unitDefinitionsForProduct(product).length > 0;
