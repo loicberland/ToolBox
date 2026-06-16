@@ -88,6 +88,7 @@ func Actions() []Action {
 			Products:    []string{GedixProdV10},
 			Fields: []ActionField{
 				{Name: "entity_name", Label: "Nom de l'usine", Type: "string", Required: true, Default: "Usine"},
+				{Name: "licensed_plant_id", Label: "Usine déclarée dans la licence", Type: "string", Required: true, Default: "Usine1"},
 				{Name: "description", Label: "Description", Type: "string", Default: ""},
 				{Name: "address_name", Label: "Nom adresse", Type: "string", Default: ""},
 				{Name: "address_street", Label: "Rue", Type: "string", Default: ""},

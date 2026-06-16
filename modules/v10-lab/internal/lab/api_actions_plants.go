@@ -9,6 +9,7 @@ const createPlantPath = "/entreprise/api/v1/plants"
 
 type CreatePlantPayload struct {
 	EntityName        string `json:"entity_name"`
+	LicensedPlantID   string `json:"licensed_plant_id"`
 	Description       string `json:"description"`
 	AddressName       string `json:"address_name"`
 	AddressStreet     string `json:"address_street"`
@@ -46,6 +47,7 @@ func (c *GedixAPIClient) CreatePlant(payload CreatePlantPayload) error {
 func createPlantPayload(params map[string]any) CreatePlantPayload {
 	return CreatePlantPayload{
 		EntityName:        stringParam(params, "entity_name"),
+		LicensedPlantID:   stringParam(params, "licensed_plant_id"),
 		Description:       stringParam(params, "description"),
 		AddressName:       stringParam(params, "address_name"),
 		AddressStreet:     stringParam(params, "address_street"),
