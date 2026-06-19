@@ -1962,6 +1962,13 @@ select.field-invalid {
   align-items: center;
 }
 
+.v10-startup-argument-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .v10-file-button {
   position: relative;
   overflow: hidden;
@@ -2173,6 +2180,7 @@ select.field-invalid {
   .v10-api-token,
   .v10-log-layout,
   .v10-file-row,
+  .v10-startup-argument-row,
   .v10-saved-plan-header,
   .v10-saved-plan-load,
   .v10-saved-plan-save,

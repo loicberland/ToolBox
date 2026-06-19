@@ -42,22 +42,17 @@ func ValidateConfig(config Config) error {
 		}
 		seenDebugTargets[target] = true
 	}
-	for target, flags := range config.Runtime.DebugTargetFlags {
+	for target, arguments := range config.Runtime.DebugTargetFlags {
 		if strings.TrimSpace(target) == "" {
 			errors = append(errors, "runtime.debugTargetFlags: cible vide")
 			continue
 		}
-		seenFlags := map[string]bool{}
-		for _, flag := range flags {
-			normalized, err := NormalizeDebugFlag(flag)
-			if err != nil {
-				errors = append(errors, fmt.Sprintf("runtime.debugTargetFlags.%s: %v", target, err))
-				continue
-			}
-			if seenFlags[normalized] {
-				errors = append(errors, fmt.Sprintf("runtime.debugTargetFlags.%s: doublon %q", target, normalized))
-			}
-			seenFlags[normalized] = true
+		if customArgumentsForTarget(arguments) == "" {
+			errors = append(errors, fmt.Sprintf("runtime.debugTargetFlags.%s: arguments requis", target))
+			continue
+		}
+		if _, err := splitCommandLine(customArgumentsForTarget(arguments)); err != nil {
+			errors = append(errors, fmt.Sprintf("runtime.debugTargetFlags.%s: %v", target, err))
 		}
 	}
 	for serviceName, service := range config.GedixConfig.Services {

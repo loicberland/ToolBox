@@ -191,7 +191,10 @@ func StartMaquette(config Config, writer io.Writer) error {
 		if err != nil {
 			return err
 		}
-		debugArgs := debugArgsForTarget(config.Runtime, target)
+		debugArgs, err := debugArgsForTarget(config.Runtime, target)
+		if err != nil {
+			return err
+		}
 		if debugTarget.Kind == DebugTargetConnector || debugTarget.Kind == DebugTargetAgent || debugTarget.Kind == DebugTargetAdaptor {
 			fmt.Fprintf(writer, "[INFO] Lancement %s debug %s : %s %s\n", debugTarget.Kind, debugTarget.Name, filepath.Base(debugTarget.ExePath), strings.Join(debugArgs, " "))
 		} else {
@@ -459,10 +462,10 @@ func RuntimeDebugLaunchTargets(runtime RuntimeConfig) []string {
 		seen[key] = true
 		targets = append(targets, target)
 	}
-	for target, flags := range runtime.DebugTargetFlags {
+	for target, arguments := range runtime.DebugTargetFlags {
 		target = strings.TrimSpace(target)
 		key := strings.ToLower(target)
-		if target == "" || len(flags) == 0 || seen[key] {
+		if target == "" || customArgumentsForTarget(arguments) == "" || seen[key] {
 			continue
 		}
 		seen[key] = true
@@ -474,18 +477,26 @@ func RuntimeDebugLaunchTargets(runtime RuntimeConfig) []string {
 	return targets
 }
 
-func debugArgsForTarget(runtime RuntimeConfig, target string) []string {
+func debugArgsForTarget(runtime RuntimeConfig, target string) ([]string, error) {
+	return buildListenArguments(customArgumentsForTarget(debugTargetFlagsForTarget(runtime, target)), runtimeHasDebugTarget(runtime, target))
+}
+
+// buildListenArguments preserves custom arguments while placing the automatic
+// debug flags after them. Command-line parsing is only used for process launch.
+func buildListenArguments(customArguments string, debug bool) ([]string, error) {
 	args := []string{"listen"}
-	if runtimeHasDebugTarget(runtime, target) {
+	customArguments = strings.TrimSpace(customArguments)
+	if customArguments != "" {
+		customArgs, err := splitCommandLine(customArguments)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, customArgs...)
+	}
+	if debug {
 		args = append(args, "--debug", "-v2")
 	}
-	for _, flag := range debugTargetFlagsForTarget(runtime, target) {
-		normalized, err := NormalizeDebugFlag(flag)
-		if err == nil {
-			args = append(args, normalized)
-		}
-	}
-	return args
+	return args, nil
 }
 
 func runtimeHasDebugTarget(runtime RuntimeConfig, target string) bool {
@@ -506,30 +517,15 @@ func debugTargetFlagsForTarget(runtime RuntimeConfig, target string) []string {
 	return nil
 }
 
-func NormalizeDebugFlag(value string) (string, error) {
-	flag := strings.TrimSpace(value)
-	if flag == "" {
-		return "", fmt.Errorf("flag vide")
-	}
-	if strings.ContainsAny(flag, " \t\r\n\"'&|;<>") {
-		return "", fmt.Errorf("flag debug invalide %q", value)
-	}
-	if !strings.HasPrefix(flag, "--") {
-		flag = "--" + flag
-	}
-	if flag == "--" {
-		return "", fmt.Errorf("flag debug invalide %q", value)
-	}
-	if strings.TrimPrefix(flag, "--") == "-" {
-		return "", fmt.Errorf("flag debug invalide %q", value)
-	}
-	for _, char := range strings.TrimPrefix(flag, "--") {
-		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '-' || char == '_' || char == '.' || char == '=' {
-			continue
+func customArgumentsForTarget(arguments []string) string {
+	parts := make([]string, 0, len(arguments))
+	for _, arguments := range arguments {
+		arguments = strings.TrimSpace(arguments)
+		if arguments != "" {
+			parts = append(parts, arguments)
 		}
-		return "", fmt.Errorf("flag debug invalide %q", value)
 	}
-	return flag, nil
+	return strings.Join(parts, " ")
 }
 
 func DetectModuleCommandTarget(paths GedixPaths, product ProductDefinition, definition ProductUnitDefinition, unitName string, moduleName string) (DebugTarget, error) {

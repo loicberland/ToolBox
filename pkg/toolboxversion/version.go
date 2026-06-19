@@ -10,7 +10,7 @@ const (
 	APIVersion       = "1.0.0"
 	WebServerVersion = "1.1.1"
 	TestSheetVersion = "1.0.0"
-	V10LabVersion    = "1.2.0"
+	V10LabVersion    = "1.1.1"
 )
 
 var (

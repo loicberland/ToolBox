@@ -1393,72 +1393,58 @@ func TestSafeDirNameKeepsUnicodeAndRemovesWindowsForbiddenCharacters(t *testing.
 	}
 }
 
-func TestNormalizeDebugFlagAndLaunchTargets(t *testing.T) {
-	cases := map[string]string{
-		"trace":        "--trace",
-		"--trace":      "--trace",
-		"clef-test":    "--clef-test",
-		"clef_test":    "--clef_test",
-		"clef.test":    "--clef.test",
-		"--clef=value": "--clef=value",
+func TestBuildListenArguments(t *testing.T) {
+	tests := map[string]struct {
+		custom string
+		debug  bool
+		want   string
+	}{
+		"debug only":                {debug: true, want: "listen --debug -v2"},
+		"custom only":               {custom: "version", want: "listen version"},
+		"custom and debug":          {custom: "version", debug: true, want: "listen version --debug -v2"},
+		"multiple custom arguments": {custom: "version --trace --port 8080", debug: true, want: "listen version --trace --port 8080 --debug -v2"},
+		"prefixed flag":             {custom: `--remote-filepath C:\Temp\fichier.txt`, want: `listen --remote-filepath C:\Temp\fichier.txt`},
+		"unc path":                  {custom: `set_file --remote-filepath \\PORTLB\transit\SMB\Leifeld`, want: `listen set_file --remote-filepath \\PORTLB\transit\SMB\Leifeld`},
+		"quoted path":               {custom: `send --file "C:\Mon dossier\fichier test.txt"`, want: `listen send --file C:\Mon dossier\fichier test.txt`},
 	}
-	for input, expected := range cases {
-		flag, err := NormalizeDebugFlag(input)
-		if err != nil || flag != expected {
-			t.Fatalf("NormalizeDebugFlag(%q)=%q err=%v, want %q", input, flag, err, expected)
-		}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			args, err := buildListenArguments(test.custom, test.debug)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(args, " "); got != test.want {
+				t.Fatalf("buildListenArguments() = %q, want %q", got, test.want)
+			}
+		})
 	}
-	for _, input := range []string{"bad flag", `"quoted"`, "&", "|", ";", "<", ">", "--", "-", ""} {
-		if _, err := NormalizeDebugFlag(input); err == nil {
-			t.Fatalf("expected %q to be rejected", input)
-		}
-	}
+}
+
+func TestRuntimeDebugLaunchTargetsCombinesCustomArgumentsAndDebug(t *testing.T) {
 	runtimeConfig := RuntimeConfig{
-		DebugTargets: []string{"auth"},
-		DebugTargetFlags: map[string][]string{
-			"auth":                   {"--trace"},
-			"connector-filesystem01": {"v2"},
-		},
+		DebugTargets:     []string{"auth"},
+		DebugTargetFlags: map[string][]string{"auth": {"version"}, "connector-filesystem01": {"--trace"}},
 	}
 	targets := RuntimeDebugLaunchTargets(runtimeConfig)
 	if strings.Join(targets, ",") != "auth,connector-filesystem01" {
 		t.Fatalf("unexpected debug launch targets: %#v", targets)
 	}
-	args := debugArgsForTarget(runtimeConfig, "auth")
-	if strings.Join(args, " ") != "listen --debug -v2 --trace" {
-		t.Fatalf("unexpected debug args: %#v", args)
+	authArgs, err := debugArgsForTarget(runtimeConfig, "auth")
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestRuntimeDebugLaunchTargetsIncludesCustomOnlyTargets(t *testing.T) {
-	runtimeConfig := RuntimeConfig{
-		DebugTargets:     []string{},
-		DebugTargetFlags: map[string][]string{"auth": {"--trace"}},
+	if got := strings.Join(authArgs, " "); got != "listen version --debug -v2" {
+		t.Fatalf("unexpected combined arguments: %s", got)
 	}
-	targets := RuntimeDebugLaunchTargets(runtimeConfig)
-	if strings.Join(targets, ",") != "auth" {
-		t.Fatalf("unexpected debug launch targets: %#v", targets)
+	connectorArgs, err := debugArgsForTarget(runtimeConfig, "connector-filesystem01")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := debugExclusionArg(targets); got != "auth" {
+	if got := strings.Join(connectorArgs, " "); got != "listen --trace" {
+		t.Fatalf("unexpected custom-only arguments: %s", got)
+	}
+	if got := debugExclusionArg(targets); got != "auth,connector-filesystem01" {
 		t.Fatalf("gx-app exclusion should include custom-only target, got %q", got)
-	}
-}
-
-func TestDebugArgsForTargetSeparatesStandardDebugFromCustomOnly(t *testing.T) {
-	standard := RuntimeConfig{
-		DebugTargets:     []string{"auth"},
-		DebugTargetFlags: map[string][]string{"auth": {"trace", "--verbose"}},
-	}
-	if got := strings.Join(debugArgsForTarget(standard, "auth"), " "); got != "listen --debug -v2 --trace --verbose" {
-		t.Fatalf("unexpected standard debug args: %s", got)
-	}
-
-	customOnly := RuntimeConfig{
-		DebugTargets:     []string{},
-		DebugTargetFlags: map[string][]string{"auth": {"trace", "--verbose"}},
-	}
-	if got := strings.Join(debugArgsForTarget(customOnly, "auth"), " "); got != "listen --trace --verbose" {
-		t.Fatalf("unexpected custom-only debug args: %s", got)
 	}
 }
 

@@ -1185,49 +1185,47 @@ function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onCh
 
 function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; product: V10Product; onChange: (config: V10Config) => void }) {
   const [selected, setSelected] = useState('');
-  const [customTarget, setCustomTarget] = useState('');
-  const [customFlag, setCustomFlag] = useState('');
-  const [customError, setCustomError] = useState('');
-  const options = [...product.services.map((service) => service.name), ...Object.keys(allUnitsForConfig(config, product))]
-    .filter((item, index, items) => items.indexOf(item) === index)
-    .filter((item) => !config.runtime.debugTargets.includes(item));
-  const allTargets = [...product.services.map((service) => service.name), ...Object.keys(allUnitsForConfig(config, product))]
-    .filter((item, index, items) => items.indexOf(item) === index);
-  const debugTargetFlags: Record<string, string[]> = config.runtime.debugTargetFlags ?? {};
-  const addCustomFlag = () => {
-    const target = customTarget.trim();
-    const flag = normalizeDebugFlag(customFlag);
-    if (!target || !flag) {
-      setCustomError('Cible et flag requis.');
-      return;
+  const [selectedCustomTarget, setSelectedCustomTarget] = useState('');
+  const [newCustomArguments, setNewCustomArguments] = useState('');
+  const groups = executableCommandGroups(config, product, false);
+  const options = groups.flatMap((group) => group.options);
+  const customArguments = config.runtime.debugTargetFlags ?? {};
+  const customEntries = Object.entries(customArguments).sort(([left], [right]) => left.localeCompare(right));
+  const customTargets = new Set(customEntries.map(([target]) => target));
+  const addableCustomOptions = options.filter((option) => !customTargets.has(option.name));
+
+  useEffect(() => {
+    if (selectedCustomTarget && !addableCustomOptions.some((option) => option.name === selectedCustomTarget)) {
+      setSelectedCustomTarget('');
     }
-    if (debugFlagHasUnsafeCharacters(customFlag)) {
-      setCustomError('Flag invalide.');
-      return;
-    }
-    const current = debugTargetFlags[target] ?? [];
-    if (!current.includes(flag)) {
-      onChange({ ...config, runtime: { ...config.runtime, debugTargetFlags: { ...debugTargetFlags, [target]: [...current, flag] } } });
-    }
-    setCustomFlag('');
-    setCustomError('');
+  }, [addableCustomOptions.map((option) => option.name).join('|'), selectedCustomTarget]);
+
+  const updateCustomArguments = (target: string, value: string) => {
+    onChange({ ...config, runtime: { ...config.runtime, debugTargetFlags: { ...customArguments, [target]: [value.trim()] } } });
   };
-  const removeCustomFlag = (target: string, flag: string) => {
-    const next = { ...debugTargetFlags };
-    const flags = (next[target] ?? []).filter((item) => item !== flag);
-    if (flags.length > 0) {
-      next[target] = flags;
-    } else {
-      delete next[target];
+  const changeCustomTarget = (currentTarget: string, nextTarget: string) => {
+    if (!nextTarget || (nextTarget !== currentTarget && customTargets.has(nextTarget))) {
+      return;
     }
+    const next = { ...customArguments };
+    const currentArguments = next[currentTarget];
+    delete next[currentTarget];
+    next[nextTarget] = currentArguments;
+    onChange({ ...config, runtime: { ...config.runtime, debugTargetFlags: next } });
+  };
+  const removeCustomArguments = (target: string) => {
+    const next = { ...customArguments };
+    delete next[target];
     onChange({ ...config, runtime: { ...config.runtime, debugTargetFlags: next } });
   };
   return (
     <div className="v10-debug-targets">
+      <h4>{m.execution.debugModeTitle}</h4>
+      <p className="muted">{m.execution.debugModeHelp}</p>
       <div className="v10-file-row">
         <select value={selected} onChange={(event) => setSelected(event.currentTarget.value)}>
           <option value="">{m.chooseDebugTarget}</option>
-          {options.map((item) => <option key={item} value={item}>{item}</option>)}
+          <ExecutableCommandOptions groups={groups} excludedNames={config.runtime.debugTargets} />
         </select>
         <Button
           type="button"
@@ -1249,18 +1247,36 @@ function DebugTargetsEditor({ config, product, onChange }: { config: V10Config; 
           </Button>
         ))}
       </div>
-      <div className="v10-file-row">
-        <select value={customTarget} onChange={(event) => setCustomTarget(event.currentTarget.value)}>
-          <option value="">Cible debug sur mesure</option>
-          {allTargets.map((item) => <option key={item} value={item}>{item}</option>)}
+      <h4>{m.execution.customArgumentsTitle}</h4>
+      <p className="muted">{m.execution.customArgumentsHelp}</p>
+      {customEntries.map(([target, targetArguments]) => {
+        const value = customArgumentsForTarget(targetArguments);
+        const excludedNames = customEntries.map(([item]) => item).filter((item) => item !== target);
+        return (
+          <React.Fragment key={target}>
+            <div className="v10-startup-argument-row">
+              <select value={target} onChange={(event) => changeCustomTarget(target, event.currentTarget.value)}>
+                {!options.some((option) => option.name === target) && <option value={target}>{target}</option>}
+                <ExecutableCommandOptions groups={groups} excludedNames={excludedNames} />
+              </select>
+              <input value={value} onChange={(event) => updateCustomArguments(target, event.currentTarget.value)} />
+              <Button type="button" variant="secondary" size="sm" onClick={() => removeCustomArguments(target)}>{m.removeDebugTarget}</Button>
+            </div>
+            {!value && <p className="error">{m.execution.argumentsRequired}</p>}
+          </React.Fragment>
+        );
+      })}
+      <div className="v10-startup-argument-row">
+        <select value={selectedCustomTarget} onChange={(event) => setSelectedCustomTarget(event.currentTarget.value)}>
+          <option value="">{m.execution.executable}</option>
+          <ExecutableCommandOptions groups={groups} excludedNames={customEntries.map(([target]) => target)} />
         </select>
-        <input value={customFlag} placeholder="clef ou --clef" onChange={(event) => setCustomFlag(event.currentTarget.value)} />
-        <Button type="button" variant="secondary" size="sm" disabled={!customTarget || !customFlag.trim()} onClick={addCustomFlag}>Ajouter</Button>
-      </div>
-      <p className="muted">Ces clés lancent la cible séparément. Le mode debug --debug -v2 est ajouté uniquement si la cible est aussi sélectionnée en debug.</p>
-      {customError && <p className="error">{customError}</p>}
-      <div className="button-row">
-        {debugFlagButtons(debugTargetFlags, removeCustomFlag)}
+        <input value={newCustomArguments} onChange={(event) => setNewCustomArguments(event.currentTarget.value)} />
+        <Button type="button" variant="secondary" size="sm" disabled={!selectedCustomTarget || !newCustomArguments.trim() || !addableCustomOptions.length} onClick={() => {
+          onChange({ ...config, runtime: { ...config.runtime, debugTargetFlags: { ...customArguments, [selectedCustomTarget]: [newCustomArguments.trim()] } } });
+          setSelectedCustomTarget('');
+          setNewCustomArguments('');
+        }}>{m.execution.addCustomArguments}</Button>
       </div>
     </div>
   );
@@ -1989,13 +2005,7 @@ function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true
       <div className="form-grid v10-form-grid">
         <label>{m.moduleCommand.target}
           <select value={selectedValue} onChange={(event) => setSelectedValue(event.currentTarget.value)}>
-            {groups.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((option) => (
-                  <option key={executableCommandOptionValue(option)} value={executableCommandOptionValue(option)}>{option.label}</option>
-                ))}
-              </optgroup>
-            ))}
+            <ExecutableCommandOptions groups={groups} valueFor={executableCommandOptionValue} />
           </select>
         </label>
         <label>{m.moduleCommand.command}
@@ -2010,6 +2020,23 @@ function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true
       </div>
     </div>
   );
+}
+
+function ExecutableCommandOptions({ groups, excludedNames = [], valueFor = (option: ExecutableCommandOption) => option.name }: { groups: ExecutableCommandGroup[]; excludedNames?: string[]; valueFor?: (option: ExecutableCommandOption) => string }) {
+  const excluded = new Set(excludedNames);
+  return <>
+    {groups.map((group) => {
+      const options = group.options.filter((option) => !excluded.has(option.name));
+      if (!options.length) {
+        return null;
+      }
+      return (
+        <optgroup key={group.label} label={group.label}>
+          {options.map((option) => <option key={valueFor(option)} value={valueFor(option)}>{option.label}</option>)}
+        </optgroup>
+      );
+    })}
+  </>;
 }
 
 function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onOpenMaquette, onRunPipeline, onRunExecutableCommand, onKill, onRefreshLogs, onReadLog }: {
@@ -2037,7 +2064,7 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
   return (
     <div className="v10-execution">
       <details className="v10-execution-section v10-collapsible-section">
-        <summary>{debugTitle(product)}</summary>
+        <summary>{m.execution.startupOptionsTitle}</summary>
         <DebugTargetsEditor config={config} product={product} onChange={onConfigChange} />
       </details>
       <details className="v10-execution-section v10-collapsible-section">
@@ -2363,14 +2390,17 @@ function allUnitsForConfig(config: V10Config, product: V10Product): Record<strin
   return unitDefinitionsForProduct(product).reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
 }
 
-function executableCommandGroups(config: V10Config, product: V10Product): ExecutableCommandGroup[] {
-  const groups: ExecutableCommandGroup[] = [{
-    label: m.moduleCommand.groups.general,
-    options: [
-      { kind: 'root', name: 'gx.exe', label: 'gx.exe' },
-      { kind: 'root', name: 'gx-front.exe', label: 'gx-front.exe' },
-    ],
-  }];
+export function executableCommandGroups(config: V10Config, product: V10Product, includeRoot = true): ExecutableCommandGroup[] {
+  const groups: ExecutableCommandGroup[] = [];
+  if (includeRoot) {
+    groups.push({
+      label: m.moduleCommand.groups.general,
+      options: [
+        { kind: 'root', name: 'gx.exe', label: 'gx.exe' },
+        { kind: 'root', name: 'gx-front.exe', label: 'gx-front.exe' },
+      ],
+    });
+  }
   const configuredServices = config.gedixConfig.services ?? {};
   const serviceOptions = product.services
     .filter((service) => Boolean(configuredServices[service.name]))
@@ -2405,8 +2435,8 @@ function executableCommandOptionValue(option: ExecutableCommandOption) {
   return `${option.kind}:${option.name}`;
 }
 
-function productHasUnits(product: V10Product): boolean {
-  return unitDefinitionsForProduct(product).length > 0;
+function customArgumentsForTarget(targetArguments: string[]) {
+  return targetArguments.map((argument) => argument.trim()).filter(Boolean).join(' ');
 }
 
 function productHasUnitKind(product: V10Product, unitKind: UnitKind): boolean {
@@ -2518,13 +2548,6 @@ function matchesSearch(normalizedQuery: string, values: Array<string | undefined
     .some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
-function debugTitle(product: V10Product) {
-  if (!productHasUnits(product)) {
-    return m.execution.debugServicesTitle;
-  }
-  return m.execution.debugUnitsTitle;
-}
-
 function productFor(productId: string | undefined, products: V10Product[]): V10Product {
   return products.find((product) => product.id === productId) ?? products.find((product) => product.id === DEFAULT_V10_PRODUCT_ID) ?? {
     id: DEFAULT_V10_PRODUCT_ID,
@@ -2561,19 +2584,6 @@ function unitHelp(definition: V10UnitDefinition) {
 
 function executableCommandHasUnclosedQuote(command: string) {
   return [...command].filter((char) => char === '"').length % 2 === 1;
-}
-
-function normalizeDebugFlag(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-  return trimmed.startsWith('--') ? trimmed : `--${trimmed}`;
-}
-
-function debugFlagHasUnsafeCharacters(value: string) {
-  const normalized = normalizeDebugFlag(value);
-  return !normalized || normalized === '--' || normalized === '---' || /[\s"'&|;<>]/.test(normalized) || !/^--[A-Za-z0-9._=-]+$/.test(normalized);
 }
 
 function normalizeModuleType(value: string) {
@@ -2646,20 +2656,6 @@ function defaultActionPlanName(maquetteName: string): string {
 
 function formatMessage(template: string, values: Record<string, string>): string {
   return Object.entries(values).reduce((message, [key, value]) => message.split(`{{${key}}}`).join(value), template);
-}
-
-function debugFlagButtons(debugTargetFlags: Record<string, string[]>, removeCustomFlag: (target: string, flag: string) => void) {
-  const buttons: React.ReactNode[] = [];
-  for (const [target, flags] of Object.entries(debugTargetFlags)) {
-    for (const flag of flags) {
-      buttons.push(
-        <Button key={`${target}:${flag}`} type="button" size="sm" variant="secondary" onClick={() => removeCustomFlag(target, flag)}>
-          {target} {flag} - {m.removeDebugTarget}
-        </Button>,
-      );
-    }
-  }
-  return buttons;
 }
 
 function delay(ms: number) {
