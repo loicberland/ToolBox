@@ -1114,6 +1114,7 @@ function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onCh
         ...config.maquette,
         appName: shouldSetDefaultApp ? product.defaultAppName : config.maquette.appName,
       },
+      gedixConfig: materializeProductServices(config.gedixConfig, product),
     });
   };
   return (
@@ -2062,11 +2063,23 @@ function defaultConfig(product = DEFAULT_V10_PRODUCT_ID, productDefinition?: V10
     product,
     release: { zipPath: '', workDir: '', overwrite: false },
     maquette: { targetPath: '', envName: 'live', appName: productDefinition?.defaultAppName ?? 'prod' },
-    gedixConfig: { fqdn: '', port: 80, services: {}, connectors: {}, agents: {}, adaptors: {} },
+    gedixConfig: materializeProductServices({ fqdn: '', port: 80, services: {}, connectors: {}, agents: {}, adaptors: {} }, productDefinition),
     runtime: { debugTargets: [], openConsole: true },
     groupName: '',
     pipeline: [],
   } as V10Config);
+}
+
+function materializeProductServices(gedixConfig: V10Config['gedixConfig'], product?: V10Product): V10Config['gedixConfig'] {
+  const services = { ...(gedixConfig.services ?? {}) };
+  for (const service of product?.services ?? []) {
+    services[service.name] = {
+      dbType: services[service.name]?.dbType || 'sqlite',
+      dbDsn: services[service.name]?.dbDsn ?? '',
+      extraKeys: services[service.name]?.extraKeys ?? {},
+    };
+  }
+  return { ...gedixConfig, services };
 }
 
 function normalizeConfig(config: V10Config): V10Config {
@@ -2089,7 +2102,7 @@ function normalizeConfig(config: V10Config): V10Config {
       envName: maquette.envName ?? 'demo',
       appName: maquette.appName ?? 'prod',
     },
-    gedixConfig: normalizeGedixConfig({
+    gedixConfig: {
       ...gedixConfig,
       fqdn: gedixConfig.fqdn ?? '',
       port: gedixConfig.port ?? 80,
@@ -2098,7 +2111,7 @@ function normalizeConfig(config: V10Config): V10Config {
       agents: gedixConfig.agents ?? {},
       adaptors: gedixConfig.adaptors ?? {},
       units: gedixConfig.units ?? {},
-    }),
+    },
     runtime: {
       ...runtime,
       debugTargets: runtime.debugTargets ?? [],
@@ -2108,16 +2121,6 @@ function normalizeConfig(config: V10Config): V10Config {
     groupName: config.groupName ?? '',
     pipeline: config.pipeline ?? [],
   };
-}
-
-function normalizeGedixConfig(gedixConfig: V10Config['gedixConfig']): V10Config['gedixConfig'] {
-  const services = { ...(gedixConfig.services ?? {}) };
-  for (const [name, service] of Object.entries(services)) {
-    if (service.dbType === 'sqlite' && !service.dbDsn?.trim() && Object.keys(service.extraKeys ?? {}).length === 0) {
-      delete services[name];
-    }
-  }
-  return { ...gedixConfig, services };
 }
 
 function validateConfig(config: V10Config): string {
