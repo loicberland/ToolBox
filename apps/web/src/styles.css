@@ -1885,6 +1885,33 @@ textarea {
   flex: 0 0 auto;
 }
 
+.v10-required-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 20px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+input.field-invalid,
+textarea.field-invalid,
+select.field-invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.field-error-text {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .readonly-notice.warning {
   display: grid;
   gap: 8px;

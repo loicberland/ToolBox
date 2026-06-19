@@ -5,8 +5,10 @@ import pluginReact from 'eslint-plugin-react';
 
 export default [
   {
+    ignores: ['node_modules/', 'dist/', 'src/**/*.test.ts', 'src/**/*.test.tsx'],
+  },
+  {
     files: ['**/*.{js,mjs,cjs,ts,jsx,tsx}'],
-    ignores: ['node_modules/', 'dist/'],
   },
   {
     files: ['**/*.js'],

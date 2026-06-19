@@ -21,6 +21,7 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Toast } from '../components/ui/Toast';
 import { messages } from '../i18n';
+import { isServiceDsnRequired, validateServiceDsns } from './v10LabValidation';
 
 const m = messages.v10Lab;
 const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.adaptors, m.tabs.connectors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
@@ -74,6 +75,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [busy, setBusy] = useState(false);
   const [runState, setRunState] = useState<RunState>('idle');
   const [isDirty, setIsDirty] = useState(false);
+  const [saveAttempted, setSaveAttempted] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [toastInfo, setToastInfo] = useState('');
@@ -250,6 +252,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setConfig(loaded);
       setShowMaquetteSelector(false);
       setIsDirty(false);
+      setSaveAttempted(false);
       setActiveTab(m.tabs.general);
       setExecution(null);
       setSelectedLog('');
@@ -259,8 +262,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   }
 
   async function createMaquette(groupName = draft.groupName ?? '') {
-    const validation = validateConfig(draft);
+    setSaveAttempted(true);
+    const validation = validateConfig(draft, products);
     if (validation) {
+      if (validateServiceDsns(draft, productFor(draft.product, products))) {
+        setActiveTab(m.tabs.services);
+      }
       showError(validation);
       return;
     }
@@ -283,9 +290,13 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     if (!config) {
       return true;
     }
-    const validation = validateConfig(config);
+    setSaveAttempted(true);
+    const validation = validateConfig(config, products);
     if (validation) {
       setMessage('');
+      if (validateServiceDsns(config, productFor(config.product, products))) {
+        setActiveTab(m.tabs.services);
+      }
       showError(validation);
       return false;
     }
@@ -302,6 +313,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setConfig(next);
       setSelectedName(next.name);
       setIsDirty(false);
+      setSaveAttempted(false);
       await reloadList();
       setMessage(m.saved);
       saved = true;
@@ -614,9 +626,13 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }
     try {
       const parsed = normalizeConfig(JSON.parse(jsonText) as V10Config);
-      const validation = validateConfig(parsed) || validatePipelineRequiredFields(parsed, actions);
+      setSaveAttempted(true);
+      const validation = validateConfig(parsed, products) || validatePipelineRequiredFields(parsed, actions);
       if (validation) {
         setMessage('');
+        if (validateServiceDsns(parsed, productFor(parsed.product, products))) {
+          setActiveTab(m.tabs.services);
+        }
         showError(validation);
         return;
       }
@@ -624,6 +640,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setConfig(saved);
       setSelectedName(saved.name);
       setIsDirty(false);
+      setSaveAttempted(false);
       await reloadList();
       setMessage(m.jsonSaved);
       setError('');
@@ -953,7 +970,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
           {activeTab === m.tabs.general && <MaquetteGeneralForm config={config} products={products} groups={groups} defaultTargetPath={defaultTargetPath} onChange={updateConfig} onSelectZip={selectReleaseZip} />}
           {activeTab === m.tabs.gedix && <GedixForm config={config} onChange={updateConfig} />}
-          {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} onChange={updateConfig} />}
+          {activeTab === m.tabs.services && <ServicesForm config={config} product={currentProduct} templates={templates} saveAttempted={saveAttempted} onChange={updateConfig} />}
           {activeTab === m.tabs.adaptors && productHasUnitKind(currentProduct, 'adaptor') && (
             <UnitsForm config={config} product={currentProduct} unitKind="adaptor" onChange={updateConfig} onScanCfg={(kind, file, importExistingKeys, replaceExistingUnits) => void scanCfg(kind, file, importExistingKeys, replaceExistingUnits)} />
           )}
@@ -1269,15 +1286,11 @@ function SearchInput({ value, placeholder, onChange }: { value: string; placehol
   );
 }
 
-function ServicesForm({ config, product, templates, onChange }: { config: V10Config; product: V10Product; templates: DBTemplate[]; onChange: (config: V10Config) => void }) {
+function ServicesForm({ config, product, templates, saveAttempted, onChange }: { config: V10Config; product: V10Product; templates: DBTemplate[]; saveAttempted: boolean; onChange: (config: V10Config) => void }) {
   const [search, setSearch] = useState('');
-  const updateService = (name: string, service: ServiceDBConfig | null) => {
+  const updateService = (name: string, service: ServiceDBConfig) => {
     const services = { ...config.gedixConfig.services };
-    if (service) {
-      services[name] = service;
-    } else {
-      delete services[name];
-    }
+    services[name] = service;
     onChange({ ...config, gedixConfig: { ...config.gedixConfig, services } });
   };
   const normalizedSearch = normalizeSearch(search);
@@ -1298,45 +1311,47 @@ function ServicesForm({ config, product, templates, onChange }: { config: V10Con
       {product.services.length > 0 && services.length === 0 && <p className="muted">{m.search.noResults}</p>}
       {services.map((serviceDefinition) => {
         const name = serviceDefinition.name;
-        const disabled = !serviceDefinition.hasDatabase;
         const existingService = config.gedixConfig.services[name];
-        const service = existingService ?? { dbType: '', dbDsn: '', extraKeys: {} };
-        const enabled = Boolean(existingService?.dbType);
+        const service = existingService ?? { dbType: 'sqlite', dbDsn: '', extraKeys: {} };
+        const dbType = service.dbType || 'sqlite';
+        const dsnRequired = isServiceDsnRequired(dbType);
+        const dsnInvalid = saveAttempted && dsnRequired && !service.dbDsn.trim();
         return (
           <div className="v10-service-row" key={name}>
             <div>
               <strong>{serviceDefinition.label || name}</strong>
-              {disabled && <p className="muted">{m.noDatabase}</p>}
+              {!serviceDefinition.hasDatabase && <p className="muted">{m.noDatabase}</p>}
             </div>
-            {!disabled && (
-              <>
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={enabled}
-                    onChange={(event) => updateService(name, event.currentTarget.checked ? { dbType: 'sqlite', dbDsn: '', extraKeys: {} } : null)}
-                  />
-                  {m.configureDb}
+            {serviceDefinition.hasDatabase && (
+              <div className="v10-service-config">
+                <label>{m.dbType}
+                  <select value={dbType} onChange={(event) => updateService(name, { ...service, dbType: event.currentTarget.value })}>
+                    {['sqlite', 'mysql', 'postgres', 'mssql', 'oracle'].map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
                 </label>
-                {enabled && (
-                  <div className="v10-service-config">
-                    <label>{m.dbType}
-                      <select value={service?.dbType ?? ''} onChange={(event) => updateService(name, { ...service!, dbType: event.currentTarget.value, dbDsn: event.currentTarget.value === 'sqlite' ? '' : service?.dbDsn ?? '' })}>
-                        {['sqlite', 'mysql', 'postgres', 'mssql', 'oracle'].map((type) => <option key={type} value={type}>{type}</option>)}
-                      </select>
-                    </label>
-                    <label>{service?.dbType === 'sqlite' ? m.sqliteDsn : m.dbDsn}
-                      <input placeholder={service?.dbType === 'sqlite' ? m.sqliteDsnPlaceholder : ''} value={service?.dbDsn ?? ''} onChange={(event) => updateService(name, { ...service!, dbDsn: event.currentTarget.value })} />
-                    </label>
-                    <label>{m.dsnTemplate}
-                      <select value="" onChange={(event) => updateService(name, { ...service!, dbDsn: event.currentTarget.value })}>
-                        <option value="">{m.insertTemplate}</option>
-                        {templates.filter((template) => template.template).map((template) => <option key={template.type} value={template.template}>{template.type}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                )}
-              </>
+                <label>
+                  <span className="v10-field-label">
+                    {dbType === 'sqlite' ? m.sqliteDsn : m.dbDsn}
+                    {dsnRequired && <span className="v10-required-badge">{m.required}</span>}
+                  </span>
+                  <input
+                    className={dsnInvalid ? 'field-invalid' : ''}
+                    placeholder={dbType === 'sqlite' ? m.sqliteDsnPlaceholder : ''}
+                    value={service.dbDsn ?? ''}
+                    required={dsnRequired}
+                    aria-required={dsnRequired}
+                    aria-invalid={dsnInvalid || undefined}
+                    onChange={(event) => updateService(name, { ...service, dbDsn: event.currentTarget.value })}
+                  />
+                  {dsnInvalid && <span className="field-error-text">{m.dsnRequired}</span>}
+                </label>
+                <label>{m.dsnTemplate}
+                  <select value="" onChange={(event) => updateService(name, { ...service, dbDsn: event.currentTarget.value })}>
+                    <option value="">{m.insertTemplate}</option>
+                    {templates.filter((template) => template.template).map((template) => <option key={template.type} value={template.template}>{template.type}</option>)}
+                  </select>
+                </label>
+              </div>
             )}
             {serviceDefinition.supportsExtraKeys && <ExtraKeysEditor serviceKey={`${config.name}:${name}`} service={service} onChange={(next) => updateService(name, next)} />}
           </div>
@@ -2123,7 +2138,7 @@ function normalizeConfig(config: V10Config): V10Config {
   };
 }
 
-function validateConfig(config: V10Config): string {
+function validateConfig(config: V10Config, products: V10Product[]): string {
   if (!config.name.trim()) {
     return m.errors.nameRequired;
   }
@@ -2138,6 +2153,10 @@ function validateConfig(config: V10Config): string {
   }
   if (hasDuplicateConnector(Object.keys(allUnitsForConfig(config, productFor(config.product, []))).map((name) => ({ id: name, name, module: '', rawConfig: '' })))) {
     return m.duplicateConnector;
+  }
+  const serviceDsnValidation = validateServiceDsns(config, productFor(config.product, products));
+  if (serviceDsnValidation) {
+    return serviceDsnValidation;
   }
   return '';
 }

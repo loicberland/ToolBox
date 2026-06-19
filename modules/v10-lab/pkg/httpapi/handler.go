@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -691,6 +692,11 @@ func respond(w http.ResponseWriter, value any, err error) {
 }
 
 func respondError(w http.ResponseWriter, err error) {
+	var validationErr lab.ValidationError
+	if errors.As(err, &validationErr) {
+		writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "invalid", Errors: validationErr.Items})
+		return
+	}
 	status := http.StatusBadRequest
 	if os.IsNotExist(err) {
 		status = http.StatusNotFound

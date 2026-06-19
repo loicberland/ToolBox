@@ -218,6 +218,64 @@ func TestValidateConfigReportsInvalidDBTypeAndDuplicateDebugTarget(t *testing.T)
 	}
 }
 
+func TestValidateConfigServiceDsnRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		service ServiceDBConfig
+		wantErr bool
+		want    []string
+	}{
+		{
+			name:    "sqlite without dsn",
+			service: ServiceDBConfig{DBType: "sqlite", DBDSN: "", ExtraKeys: map[string]string{}},
+		},
+		{
+			name:    "postgres without dsn",
+			service: ServiceDBConfig{DBType: "postgres", DBDSN: "", ExtraKeys: map[string]string{}},
+			wantErr: true,
+			want:    []string{"Service \"auth\"", "DSN", "postgres"},
+		},
+		{
+			name:    "postgres with dsn",
+			service: ServiceDBConfig{DBType: "postgres", DBDSN: "host=localhost port=5432 dbname=test", ExtraKeys: map[string]string{}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := Config{
+				Name:    "ticket-T5808",
+				Product: GedixProdV10,
+				GedixConfig: GedixConfig{
+					Services: map[string]ServiceDBConfig{
+						"auth": tc.service,
+					},
+				},
+			}
+			err := ValidateConfig(config)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("expected valid config, got %v", err)
+				}
+				return
+			}
+			validationErr, ok := err.(ValidationError)
+			if !ok {
+				t.Fatalf("expected ValidationError, got %T %v", err, err)
+			}
+			message := strings.Join(validationErr.Items, "\n")
+			for _, want := range tc.want {
+				if !strings.Contains(message, want) {
+					t.Fatalf("expected %q in validation message: %#v", want, validationErr.Items)
+				}
+			}
+			if strings.TrimSpace(err.Error()) == "validation failed" && message == "" {
+				t.Fatalf("expected detailed validation items, got %v", err)
+			}
+		})
+	}
+}
+
 func TestActionsForProductIncludesSystemAndGedixActions(t *testing.T) {
 	actions := ActionsForProduct(GedixProdV10)
 	byID := map[string]bool{}

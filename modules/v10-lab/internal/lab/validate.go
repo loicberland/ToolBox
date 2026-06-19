@@ -78,7 +78,7 @@ func ValidateConfig(config Config) error {
 			continue
 		}
 		if dbType != "" && dbType != "sqlite" && strings.TrimSpace(service.DBDSN) == "" {
-			errors = append(errors, fmt.Sprintf("gedixConfig.services.%s.dbDsn: champ requis pour dbType %q", serviceName, service.DBType))
+			errors = append(errors, fmt.Sprintf("Service %q : le champ DSN est obligatoire pour le type de base %q.", serviceName, dbType))
 		}
 	}
 	for index, step := range config.Pipeline {

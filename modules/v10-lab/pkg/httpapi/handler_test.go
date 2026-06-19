@@ -82,6 +82,39 @@ func TestMaquetteCRUDAndValidate(t *testing.T) {
 	}
 }
 
+func TestMaquetteCreateValidationErrorReturnsDetails(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	config.GedixConfig.Services = map[string]lab.ServiceDBConfig{
+		"auth": {DBType: "postgres", DBDSN: "", ExtraKeys: map[string]string{}},
+	}
+
+	var response ExecutionResponse
+	postJSONInto(t, router, "/api/v10-lab/maquettes", config, &response, http.StatusBadRequest)
+	assertValidationDsnResponse(t, response)
+}
+
+func TestMaquetteUpdateValidationErrorReturnsDetails(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+	config.GedixConfig.Services = map[string]lab.ServiceDBConfig{
+		"auth": {DBType: "postgres", DBDSN: "", ExtraKeys: map[string]string{}},
+	}
+
+	var response ExecutionResponse
+	postJSONInto(t, router, "/api/v10-lab/maquettes/ticket-T5808", config, &response, http.StatusBadRequest, http.MethodPut)
+	assertValidationDsnResponse(t, response)
+}
+
 func TestMaquetteRenameAndUnicodeName(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(toolboxruntime.EnvRoot, root)
@@ -614,6 +647,25 @@ func postMultipart(t *testing.T, router http.Handler, path string, filename stri
 	if target != nil {
 		if err := json.NewDecoder(response.Body).Decode(target); err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+func assertValidationDsnResponse(t *testing.T, response ExecutionResponse) {
+	t.Helper()
+	if response.Status != "invalid" {
+		t.Fatalf("expected invalid status, got %#v", response)
+	}
+	if len(response.Errors) == 0 {
+		t.Fatalf("expected validation errors, got %#v", response)
+	}
+	message := strings.Join(response.Errors, "\n")
+	if strings.TrimSpace(message) == "validation failed" {
+		t.Fatalf("expected detailed validation error, got %#v", response.Errors)
+	}
+	for _, want := range []string{"Service \"auth\"", "DSN", "postgres"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("expected %q in validation response: %#v", want, response.Errors)
 		}
 	}
 }
