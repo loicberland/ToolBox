@@ -7,14 +7,15 @@ import (
 )
 
 const (
+	GedixAcassV10        = "gedix-acass-v10"
+	GedixAcspcV10        = "gedix-acspc-v10"
+	GedixAutocontrolV10  = "gedix-autocontrol-v10"
+	GedixLegacySecure    = "gedix-legacy-secure"
 	GedixProdV10         = "gedix-prod-v10"
 	GedixToolStockV10    = "gedix-tool-stock-v10"
-	GedixWatchV10        = "gedix-watch-v10"
 	GedixViewer          = "gedix-viewer"
 	GedixViewerSamson826 = "gedix-viewer-samson826"
-	GedixAcspcV10        = "gedix-acspc-v10"
-	GedixAcassV10        = "gedix-acass-v10"
-	GedixLegacySecure    = "gedix-legacy-secure"
+	GedixWatchV10        = "gedix-watch-v10"
 )
 
 type UnitKind string
@@ -106,28 +107,27 @@ var productRegistry = []ProductDefinition{
 		UnitModuleExecutablePattern:  "",
 	},
 	{
-		ID:             GedixProdV10,
-		Name:           "Gedix Prod V10",
-		Label:          "Gedix Prod V10",
-		Description:    "Produit Gedix Prod V10",
-		DefaultAppName: "prod",
+		ID:             GedixAutocontrolV10,
+		Name:           "Gedix Autocontrol V10",
+		Label:          "Gedix Autocontrol V10",
+		Description:    "Produit Gedix Autocontrol V10",
+		DefaultAppName: "autocontrol",
 		Services: []ProductServiceDefinition{
 			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
 			{Name: "auth", Label: "auth", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "filestore", Label: "filestore", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "printer", Label: "printer", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true},
-			{Name: "dnc", Label: "dnc", HasDatabase: true, SupportsExtraKeys: true},
-			{Name: "reactor", Label: "reactor", HasDatabase: false, SupportsExtraKeys: true},
 			{Name: "config", Label: "config", HasDatabase: true, SupportsExtraKeys: true},
 		},
-		UnitKind:                     UnitKindConnector,
-		UnitSingularLabel:            "connector",
-		UnitPluralLabel:              "connectors",
-		UnitCfgSectionName:           "connectors",
-		UnitFolderPrefix:             "connector-",
-		UnitRuntimeExecutablePattern: "gx-connector.exe",
-		UnitModuleExecutablePattern:  "gx-module-<moduleName>.exe",
+		UnitKind:                     "",
+		UnitSingularLabel:            "",
+		UnitPluralLabel:              "",
+		UnitCfgSectionName:           "",
+		UnitFolderPrefix:             "",
+		UnitRuntimeExecutablePattern: "",
+		UnitModuleExecutablePattern:  "",
 	},
 	{
 		ID:                           GedixLegacySecure,
@@ -163,6 +163,30 @@ var productRegistry = []ProductDefinition{
 				ModuleExecutablePattern:  "",
 			},
 		},
+	},
+	{
+		ID:             GedixProdV10,
+		Name:           "Gedix Prod V10",
+		Label:          "Gedix Prod V10",
+		Description:    "Produit Gedix Prod V10",
+		DefaultAppName: "prod",
+		Services: []ProductServiceDefinition{
+			{Name: "webserver", Label: "webserver", HasDatabase: false, SupportsExtraKeys: true},
+			{Name: "auth", Label: "auth", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "filestore", Label: "filestore", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "dnc", Label: "dnc", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "reactor", Label: "reactor", HasDatabase: false, SupportsExtraKeys: true},
+			{Name: "config", Label: "config", HasDatabase: true, SupportsExtraKeys: true},
+		},
+		UnitKind:                     UnitKindConnector,
+		UnitSingularLabel:            "connector",
+		UnitPluralLabel:              "connectors",
+		UnitCfgSectionName:           "connectors",
+		UnitFolderPrefix:             "connector-",
+		UnitRuntimeExecutablePattern: "gx-connector.exe",
+		UnitModuleExecutablePattern:  "gx-module-<moduleName>.exe",
 	},
 	{
 		ID:             GedixToolStockV10,
