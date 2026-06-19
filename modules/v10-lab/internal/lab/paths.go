@@ -16,6 +16,7 @@ type GedixPaths struct {
 	EnvPath      string
 	AppName      string
 	AppPath      string
+	GxExePath    string
 	FrontExePath string
 	AppExePath   string
 }
@@ -41,6 +42,7 @@ func DetectGedixPaths(config Config) (GedixPaths, error) {
 	root := ResolveMaquetteTargetPath(config)
 	paths := GedixPaths{
 		GedixRoot:    root,
+		GxExePath:    filepath.Join(root, "gx.exe"),
 		FrontExePath: filepath.Join(root, "gx-front.exe"),
 		AppName:      config.Maquette.AppName,
 	}

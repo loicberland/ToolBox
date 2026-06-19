@@ -15,6 +15,7 @@ import {
   V10SavedActionPlan,
   V10UnitDefinition,
   UnitKind,
+  ExecutableCommandTargetKind,
   v10LabApi,
 } from '../api/v10Lab';
 import { Button } from '../components/ui/Button';
@@ -540,12 +541,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     }, () => setRunState('failed'));
   }
 
-  async function runModuleCommand(unitName: string, command: string, name = selectedName) {
+  async function runExecutableCommand(targetKind: ExecutableCommandTargetKind, targetName: string, command: string, name = selectedName) {
     if (!name || runState === 'running') {
       return;
     }
-    if (moduleCommandHasUnsafeCharacters(command)) {
-      showError(m.moduleCommand.invalidCommand);
+    if (executableCommandHasUnclosedQuote(command)) {
+      showError(m.moduleCommand.unclosedQuote);
       return;
     }
     if (config && isDirty) {
@@ -557,7 +558,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     setRunState('running');
     setExecution({ status: 'running', running: true, output: m.executionRunning });
     await run(async () => {
-      const started = await v10LabApi.runModuleCommand(name, unitName, command);
+      const started = await v10LabApi.runExecutableCommand(name, targetKind, targetName, command);
       setExecution(started);
       const result = await pollCurrentRun(name);
       await reloadList();
@@ -1018,7 +1019,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               onStart={() => void runSystemAction('start-maquette')}
               onOpenMaquette={() => void openCurrentMaquetteURL()}
               onRunPipeline={() => void runCurrent()}
-              onRunModuleCommand={(unitName, command) => void runModuleCommand(unitName, command)}
+              onRunExecutableCommand={(targetKind, targetName, command) => void runExecutableCommand(targetKind, targetName, command)}
               onKill={() => setConfirmKill(true)}
               onRefreshLogs={() => void refreshLogs()}
               onReadLog={(logFile) => void readLog(logFile)}
@@ -1956,40 +1957,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (unitName: string, command: string) => void; showTitle?: boolean }) {
-  const unitNames = Object.keys(moduleCommandUnitsForConfig(config, product)).sort((left, right) => left.localeCompare(right));
-  const [unitName, setUnitName] = useState(unitNames[0] ?? '');
+type ExecutableCommandOption = {
+  kind: ExecutableCommandTargetKind;
+  name: string;
+  label: string;
+};
+
+type ExecutableCommandGroup = {
+  label: string;
+  options: ExecutableCommandOption[];
+};
+
+function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (targetKind: ExecutableCommandTargetKind, targetName: string, command: string) => void; showTitle?: boolean }) {
+  const groups = executableCommandGroups(config, product);
+  const options = groups.flatMap((group) => group.options);
+  const [selectedValue, setSelectedValue] = useState(options[0] ? executableCommandOptionValue(options[0]) : '');
   const [command, setCommand] = useState('');
-  const invalid = moduleCommandHasUnsafeCharacters(command);
-  const isAgent = product.unitKind === 'agent';
+  const invalid = executableCommandHasUnclosedQuote(command);
+  const selectedOption = options.find((option) => executableCommandOptionValue(option) === selectedValue);
 
   useEffect(() => {
-    if (!unitName || !unitNames.includes(unitName)) {
-      setUnitName(unitNames[0] ?? '');
+    if (!selectedValue || !options.some((option) => executableCommandOptionValue(option) === selectedValue)) {
+      setSelectedValue(options[0] ? executableCommandOptionValue(options[0]) : '');
     }
-  }, [unitNames.join('|'), unitName]);
+  }, [options.map(executableCommandOptionValue).join('|'), selectedValue]);
 
   return (
     <div className="v10-module-command">
-      {showTitle && <h4>{isAgent ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</h4>}
+      {showTitle && <h4>{m.moduleCommand.title}</h4>}
       <p className="muted">{m.moduleCommand.help}</p>
-      {unitNames.length === 0 ? (
-        <p className="muted">{isAgent ? m.moduleCommand.noAgent : m.moduleCommand.noConnector}</p>
-      ) : (
-        <div className="form-grid v10-form-grid">
-          <label>{isAgent ? m.moduleCommand.agent : m.moduleCommand.connector}
-            <select value={unitName} onChange={(event) => setUnitName(event.currentTarget.value)}>
-              {unitNames.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </label>
-          <label>{m.moduleCommand.command}
-            <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.currentTarget.value)} />
-          </label>
-        </div>
-      )}
-      {invalid && <p className="error">{m.moduleCommand.invalidCommand}</p>}
+      <div className="form-grid v10-form-grid">
+        <label>{m.moduleCommand.target}
+          <select value={selectedValue} onChange={(event) => setSelectedValue(event.currentTarget.value)}>
+            {groups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={executableCommandOptionValue(option)} value={executableCommandOptionValue(option)}>{option.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <label>{m.moduleCommand.command}
+          <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.currentTarget.value)} />
+        </label>
+      </div>
+      {invalid && <p className="error">{m.moduleCommand.unclosedQuote}</p>}
       <div className="button-row">
-        <Button type="button" variant="secondary" disabled={disabled || !unitName || !command.trim() || invalid} onClick={() => onRun(unitName, command)}>
+        <Button type="button" variant="secondary" disabled={disabled || !selectedOption || !command.trim() || invalid} onClick={() => selectedOption && onRun(selectedOption.kind, selectedOption.name, command)}>
           {m.moduleCommand.run}
         </Button>
       </div>
@@ -1997,7 +2012,7 @@ function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true
   );
 }
 
-function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onOpenMaquette, onRunPipeline, onRunModuleCommand, onKill, onRefreshLogs, onReadLog }: {
+function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onOpenMaquette, onRunPipeline, onRunExecutableCommand, onKill, onRefreshLogs, onReadLog }: {
   config: V10Config;
   product: V10Product;
   busy: boolean;
@@ -2012,7 +2027,7 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
   onStart: () => void;
   onOpenMaquette: () => void;
   onRunPipeline: () => void;
-  onRunModuleCommand: (unitName: string, command: string) => void;
+  onRunExecutableCommand: (targetKind: ExecutableCommandTargetKind, targetName: string, command: string) => void;
   onKill: () => void;
   onRefreshLogs: () => void;
   onReadLog: (logFile: string) => void;
@@ -2025,12 +2040,10 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
         <summary>{debugTitle(product)}</summary>
         <DebugTargetsEditor config={config} product={product} onChange={onConfigChange} />
       </details>
-      {productSupportsModuleCommand(product) && (
-        <details className="v10-execution-section v10-collapsible-section">
-          <summary>{product.unitKind === 'agent' ? m.moduleCommand.titleAgent : m.moduleCommand.titleConnector}</summary>
-          <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunModuleCommand} showTitle={false} />
-        </details>
-      )}
+      <details className="v10-execution-section v10-collapsible-section">
+        <summary>{m.moduleCommand.title}</summary>
+        <ModuleCommandPanel config={config} product={product} disabled={disabled} onRun={onRunExecutableCommand} showTitle={false} />
+      </details>
       <section className="v10-execution-section">
         <h4>{m.execution.actionsTitle}</h4>
         <div className="button-row">
@@ -2350,10 +2363,46 @@ function allUnitsForConfig(config: V10Config, product: V10Product): Record<strin
   return unitDefinitionsForProduct(product).reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
 }
 
-function moduleCommandUnitsForConfig(config: V10Config, product: V10Product): Record<string, ConnectorConfig> {
-  return unitDefinitionsForProduct(product)
-    .filter((definition) => Boolean(definition.moduleExecutablePattern?.trim()))
-    .reduce<Record<string, ConnectorConfig>>((items, definition) => ({ ...items, ...unitsForConfig(config, product, definition.kind) }), {});
+function executableCommandGroups(config: V10Config, product: V10Product): ExecutableCommandGroup[] {
+  const groups: ExecutableCommandGroup[] = [{
+    label: m.moduleCommand.groups.general,
+    options: [
+      { kind: 'root', name: 'gx.exe', label: 'gx.exe' },
+      { kind: 'root', name: 'gx-front.exe', label: 'gx-front.exe' },
+    ],
+  }];
+  const configuredServices = config.gedixConfig.services ?? {};
+  const serviceOptions = product.services
+    .filter((service) => Boolean(configuredServices[service.name]))
+    .map((service) => ({ kind: 'service' as ExecutableCommandTargetKind, name: service.name, label: service.label || service.name }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+  if (serviceOptions.length) {
+    groups.push({ label: m.moduleCommand.groups.services, options: serviceOptions });
+  }
+  for (const definition of unitDefinitionsForProduct(product)) {
+    const units = unitsForConfig(config, product, definition.kind);
+    const options = Object.keys(units)
+      .sort((left, right) => left.localeCompare(right))
+      .map((name) => ({ kind: definition.kind as ExecutableCommandTargetKind, name, label: name }));
+    if (options.length) {
+      groups.push({ label: executableCommandUnitGroupLabel(definition.kind), options });
+    }
+  }
+  return groups;
+}
+
+function executableCommandUnitGroupLabel(kind: UnitKind) {
+  if (kind === 'agent') {
+    return m.moduleCommand.groups.agents;
+  }
+  if (kind === 'adaptor') {
+    return m.moduleCommand.groups.adaptors;
+  }
+  return m.moduleCommand.groups.connectors;
+}
+
+function executableCommandOptionValue(option: ExecutableCommandOption) {
+  return `${option.kind}:${option.name}`;
 }
 
 function productHasUnits(product: V10Product): boolean {
@@ -2362,10 +2411,6 @@ function productHasUnits(product: V10Product): boolean {
 
 function productHasUnitKind(product: V10Product, unitKind: UnitKind): boolean {
   return unitDefinitionsForProduct(product).some((definition) => definition.kind === unitKind && Boolean(definition.cfgSectionName?.trim()));
-}
-
-function productSupportsModuleCommand(product: V10Product): boolean {
-  return unitDefinitionsForProduct(product).some((definition) => Boolean(definition.moduleExecutablePattern?.trim()));
 }
 
 function unitDefinitionsForProduct(product: V10Product): V10UnitDefinition[] {
@@ -2514,8 +2559,8 @@ function unitHelp(definition: V10UnitDefinition) {
     .replace('{{unitPlaceholder}}', definition.singularLabel);
 }
 
-function moduleCommandHasUnsafeCharacters(command: string) {
-  return /[&|><]/.test(command);
+function executableCommandHasUnclosedQuote(command: string) {
+  return [...command].filter((char) => char === '"').length % 2 === 1;
 }
 
 function normalizeDebugFlag(value: string) {

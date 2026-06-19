@@ -194,23 +194,29 @@
       "required": "Token API obligatoire."
     },
     "moduleCommand": {
-      "titleConnector": "Commande module connector",
-      "titleAgent": "Commande module agent",
-      "connector": "Connector",
-      "agent": "Agent",
+      "title": "Commande exécutable",
+      "target": "Exécutable",
+      "groups": {
+        "general": "Général",
+        "services": "Services",
+        "connectors": "Connecteurs",
+        "agents": "Agents",
+        "adaptors": "Adaptors"
+      },
       "command": "Commande",
       "commandPlaceholder": "Exemple : set_file --remote-filepath ...",
       "run": "Lancer la commande",
+      "unclosedQuote": "La commande contient un guillemet non fermé.",
       "noConnector": "Aucun connector configuré.",
       "noAgent": "Aucun agent configuré.",
-      "help": "La commande est exécutée localement dans le dossier du module sélectionné.",
+      "help": "La commande est exécutée localement par l'exécutable sélectionné.",
       "invalidCommand": "La commande contient des caractères non autorisés.",
       "missingConnectorModule": "Le module du connector {{name}} n’est pas renseigné. Scannez le cfg ou renseignez le module manuellement.",
       "missingAgentModule": "Le module de l’agent {{name}} n’est pas renseigné. Scannez le cfg ou renseignez le module manuellement.",
       "module": "Module",
       "frontAlreadyRunning": "gx-front est déjà lancé.",
       "frontStarted": "gx-front n’était pas lancé, démarrage automatique.",
-      "consoleOpened": "Console de commande module ouverte."
+      "consoleOpened": "Console de commande exécutable ouverte."
     },
     "execution": {
       "actionsTitle": "Actions maquette",

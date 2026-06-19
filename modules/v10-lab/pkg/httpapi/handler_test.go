@@ -267,7 +267,7 @@ func TestRunMaquetteActionStartsSingleSystemAction(t *testing.T) {
 	}
 }
 
-func TestRunModuleCommandRejectsInvalidCommand(t *testing.T) {
+func TestRunModuleCommandRejectsUnclosedQuote(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(toolboxruntime.EnvRoot, root)
 	router := mux.NewRouter()
@@ -277,9 +277,10 @@ func TestRunModuleCommandRejectsInvalidCommand(t *testing.T) {
 	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
 
 	var started ExecutionResponse
-	postJSONInto(t, router, "/api/v10-lab/maquettes/ticket-T5808/module-command/run", ModuleCommandRunRequest{
-		UnitName: "connector-focas-01",
-		Command:  "status && other",
+	postJSONInto(t, router, "/api/v10-lab/maquettes/ticket-T5808/executable-command/run", ModuleCommandRunRequest{
+		TargetKind: lab.ExecutableCommandTargetRoot,
+		TargetName: "gx.exe",
+		Command:    `status "unterminated`,
 	}, &started, http.StatusAccepted)
 
 	var current ExecutionResponse
@@ -290,8 +291,8 @@ func TestRunModuleCommandRejectsInvalidCommand(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if current.Status != "failed" || len(current.Errors) == 0 || !strings.Contains(current.Errors[0], "caracteres non autorises") {
-		t.Fatalf("expected invalid command failure, got %#v", current)
+	if current.Status != "failed" || len(current.Errors) == 0 || !strings.Contains(current.Errors[0], "guillemet non") {
+		t.Fatalf("expected unclosed quote failure, got %#v", current)
 	}
 }
 

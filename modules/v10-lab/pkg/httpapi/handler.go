@@ -58,6 +58,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/api-token", h.deleteAPIToken).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run", h.runMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/actions/{actionId}/run", h.runMaquetteAction).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/executable-command/run", h.runModuleCommand).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/module-command/run", h.runModuleCommand).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/open-url", h.maquetteOpenURL).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/open-folder", h.openMaquetteFolder).Methods(http.MethodPost)
@@ -149,8 +150,10 @@ type ScanCfgResponse struct {
 }
 
 type ModuleCommandRunRequest struct {
-	UnitName string `json:"unitName"`
-	Command  string `json:"command"`
+	TargetKind lab.ExecutableCommandTargetKind `json:"targetKind"`
+	TargetName string                          `json:"targetName"`
+	Command    string                          `json:"command"`
+	UnitName   string                          `json:"unitName,omitempty"`
 }
 
 type MaquetteGroupRequest struct {
@@ -765,9 +768,16 @@ func (h *Handler) executeActionRun(run *currentRun, config lab.Config, actionID 
 
 func (h *Handler) executeModuleCommandRun(run *currentRun, config lab.Config, request ModuleCommandRunRequest) {
 	startedAt := time.Now()
-	err := lab.RunModuleCommand(config, lab.ModuleCommandRequest{
-		UnitName: request.UnitName,
-		Command:  request.Command,
+	targetKind := request.TargetKind
+	targetName := request.TargetName
+	if targetKind == "" && targetName == "" && request.UnitName != "" {
+		targetKind = lab.ExecutableCommandTargetConnector
+		targetName = request.UnitName
+	}
+	err := lab.RunExecutableCommand(config, lab.ExecutableCommandRequest{
+		TargetKind: targetKind,
+		TargetName: targetName,
+		Command:    request.Command,
 	}, io.MultiWriter(os.Stdout, currentRunWriter{run: run}))
 	duration := time.Since(startedAt).Milliseconds()
 	if err != nil {

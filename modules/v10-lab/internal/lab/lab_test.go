@@ -1093,46 +1093,101 @@ func TestNormalizeModuleType(t *testing.T) {
 	}
 }
 
-func TestModuleCommandRejectsUnsafeCharacters(t *testing.T) {
-	for _, command := range []string{"import & del file", "status | more", "status > out.txt", "status < in.txt", "a && b", "a || b"} {
-		if isSafeModuleCommand(command) {
-			t.Fatalf("expected command %q to be rejected", command)
-		}
+func TestResolveExecutableCommandTargets(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_prod", "connector-filesystem01"))
+	mustWrite(t, filepath.Join(root, "gx.exe"), "")
+	mustWrite(t, filepath.Join(root, "gx-front.exe"), "")
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "gx-app.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "gx-auth.exe"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "connector-filesystem01", "gx-module-filesystem.exe"), "")
+
+	config := Config{
+		Name:    "prod",
+		Product: GedixProdV10,
+		Maquette: MaquetteConfig{
+			TargetPath: root,
+			AppName:    "prod",
+		},
+		GedixConfig: GedixConfig{
+			Services: map[string]ServiceDBConfig{
+				"auth": {DBType: "sqlite", ExtraKeys: map[string]string{}},
+			},
+			Connectors: map[string]ProductUnitConfig{
+				"connector-filesystem01": {Module: "module-filesystem"},
+			},
+		},
 	}
-	if !isSafeModuleCommand(`import --file "test file.json"`) {
-		t.Fatal("expected simple quoted arguments to be accepted")
+	paths, err := DetectGedixPaths(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	product, _ := ProductDefinitionByID(GedixProdV10)
+
+	rootTarget, err := ResolveExecutableCommandTarget(paths, product, config, ExecutableCommandTargetRoot, "gx.exe")
+	if err != nil || rootTarget.Kind != ExecutableCommandTargetRoot || rootTarget.ExePath != filepath.Join(root, "gx.exe") || rootTarget.WorkDir != root {
+		t.Fatalf("unexpected root target %#v err=%v", rootTarget, err)
+	}
+	frontTarget, err := ResolveExecutableCommandTarget(paths, product, config, ExecutableCommandTargetRoot, "gx-front.exe")
+	if err != nil || frontTarget.ExePath != filepath.Join(root, "gx-front.exe") || frontTarget.WorkDir != root {
+		t.Fatalf("unexpected gx-front target %#v err=%v", frontTarget, err)
+	}
+	serviceTarget, err := ResolveExecutableCommandTarget(paths, product, config, ExecutableCommandTargetService, "auth")
+	if err != nil || serviceTarget.Kind != ExecutableCommandTargetService || !strings.HasSuffix(serviceTarget.ExePath, filepath.Join("app_prod", "gx-auth.exe")) {
+		t.Fatalf("unexpected service target %#v err=%v", serviceTarget, err)
+	}
+	connectorTarget, err := ResolveExecutableCommandTarget(paths, product, config, ExecutableCommandTargetConnector, "connector-filesystem01")
+	if err != nil || connectorTarget.Kind != ExecutableCommandTargetConnector || !strings.HasSuffix(connectorTarget.ExePath, filepath.Join("connector-filesystem01", "gx-module-filesystem.exe")) {
+		t.Fatalf("unexpected connector target %#v err=%v", connectorTarget, err)
+	}
+}
+
+func TestResolveExecutableCommandTargetRejectsMissingExecutable(t *testing.T) {
+	root := t.TempDir()
+	paths := GedixPaths{
+		GedixRoot:    root,
+		GxExePath:    filepath.Join(root, "gx.exe"),
+		FrontExePath: filepath.Join(root, "gx-front.exe"),
+	}
+	product, _ := ProductDefinitionByID(GedixProdV10)
+	_, err := ResolveExecutableCommandTarget(paths, product, Config{Product: GedixProdV10}, ExecutableCommandTargetRoot, "gx.exe")
+	if err == nil || !strings.Contains(err.Error(), "exécutable introuvable") {
+		t.Fatalf("expected missing executable error, got %v", err)
+	}
+	_, err = ResolveExecutableCommandTarget(paths, product, Config{Product: GedixProdV10}, ExecutableCommandTargetKind("unknown"), "gx.exe")
+	if err == nil || !strings.Contains(err.Error(), "type de cible inconnu") {
+		t.Fatalf("expected invalid kind error, got %v", err)
+	}
+	_, err = ResolveExecutableCommandTarget(paths, product, Config{Product: GedixProdV10}, ExecutableCommandTargetService, "missing")
+	if err == nil || !strings.Contains(err.Error(), "service missing introuvable") {
+		t.Fatalf("expected missing service error, got %v", err)
 	}
 }
 
 func TestRunModuleCommandRequiresConfiguredModule(t *testing.T) {
+	root := t.TempDir()
+	makeValidMaquetteTarget(t, root)
+	mustMkdir(t, filepath.Join(root, "env_demo", "app_prod", "connector-filesystem01"))
+	mustWrite(t, filepath.Join(root, "gedix.cfg"), "")
+	mustWrite(t, filepath.Join(root, "env_demo", "app_prod", "gx-app.exe"), "")
+
 	var output bytes.Buffer
 	err := RunModuleCommand(Config{
 		Name:    "prod",
 		Product: GedixProdV10,
+		Maquette: MaquetteConfig{
+			TargetPath: root,
+			AppName:    "prod",
+		},
 		GedixConfig: GedixConfig{
 			Connectors: map[string]ProductUnitConfig{
 				"connector-filesystem01": {RawConfig: ""},
 			},
 		},
 	}, ModuleCommandRequest{UnitName: "connector-filesystem01", Command: "status"}, &output)
-	if err == nil || !strings.Contains(err.Error(), "Le module du connector connector-filesystem01") {
+	if err == nil || !strings.Contains(err.Error(), "module requis pour connector-filesystem01") {
 		t.Fatalf("expected missing module error, got %v", err)
-	}
-}
-
-func TestRunModuleCommandRejectsProductWithoutModulePattern(t *testing.T) {
-	var output bytes.Buffer
-	err := RunModuleCommand(Config{
-		Name:    "acass",
-		Product: GedixAcassV10,
-		GedixConfig: GedixConfig{
-			Connectors: map[string]ProductUnitConfig{
-				"connector-filesystem01": {Module: "filesystem"},
-			},
-		},
-	}, ModuleCommandRequest{UnitName: "connector-filesystem01", Command: "status"}, &output)
-	if err == nil || !strings.Contains(err.Error(), "Ce produit ne supporte pas les commandes de module connector/agent.") {
-		t.Fatalf("expected unsupported module command error, got %v", err)
 	}
 }
 
@@ -1151,13 +1206,26 @@ func TestGXFrontDetectionPowerShellTargetsExactExecutable(t *testing.T) {
 	}
 }
 
-func TestSplitCommandLineKeepsQuotedUserCommandArgument(t *testing.T) {
-	args, err := splitCommandLine(`import --file "test file.json"`)
-	if err != nil {
-		t.Fatal(err)
+func TestSplitCommandLineKeepsWindowsAndQuotedArguments(t *testing.T) {
+	tests := map[string]string{
+		`version`:                        "version",
+		`listen --debug -v2`:             "listen|--debug|-v2",
+		`import --file "test file.json"`: "import|--file|test file.json",
+		`send --file "C:\Mon dossier\fichier test.txt"`: `send|--file|C:\Mon dossier\fichier test.txt`,
+		`et_dir_zip --remote-filepath \\PORTLB\transit\SMB\Leifeld --local-filepath C:\Users\LB\AppData\Local\Temp\gx.tmp.dnc.getfile.23288377.gdx --debug`: `et_dir_zip|--remote-filepath|\\PORTLB\transit\SMB\Leifeld|--local-filepath|C:\Users\LB\AppData\Local\Temp\gx.tmp.dnc.getfile.23288377.gdx|--debug`,
+		`send --remote-filepath "\\SERVEUR\Dossier avec espaces\fichier.txt"`:                                                                               `send|--remote-filepath|\\SERVEUR\Dossier avec espaces\fichier.txt`,
 	}
-	if strings.Join(args, "|") != "import|--file|test file.json" {
-		t.Fatalf("unexpected split args: %#v", args)
+	for command, expected := range tests {
+		args, err := splitCommandLine(command)
+		if err != nil {
+			t.Fatalf("splitCommandLine(%q): %v", command, err)
+		}
+		if strings.Join(args, "|") != expected {
+			t.Fatalf("splitCommandLine(%q)=%#v, want %s", command, args, expected)
+		}
+	}
+	if _, err := splitCommandLine(`send --file "unterminated`); err == nil || !strings.Contains(err.Error(), "guillemet non") {
+		t.Fatalf("expected unclosed quote error, got %v", err)
 	}
 }
 

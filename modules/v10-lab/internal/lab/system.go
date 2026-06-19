@@ -210,7 +210,183 @@ type ModuleCommandRequest struct {
 	Command  string
 }
 
+type ExecutableCommandTargetKind string
+
+const (
+	ExecutableCommandTargetRoot      ExecutableCommandTargetKind = "root"
+	ExecutableCommandTargetService   ExecutableCommandTargetKind = "service"
+	ExecutableCommandTargetConnector ExecutableCommandTargetKind = "connector"
+	ExecutableCommandTargetAgent     ExecutableCommandTargetKind = "agent"
+	ExecutableCommandTargetAdaptor   ExecutableCommandTargetKind = "adaptor"
+)
+
+type ExecutableCommandRequest struct {
+	TargetKind ExecutableCommandTargetKind
+	TargetName string
+	Command    string
+}
+
+type ExecutableCommandTarget struct {
+	Kind    ExecutableCommandTargetKind
+	Name    string
+	ExePath string
+	WorkDir string
+}
+
 func RunModuleCommand(config Config, request ModuleCommandRequest, writer io.Writer) error {
+	return RunExecutableCommand(config, ExecutableCommandRequest{
+		TargetKind: ExecutableCommandTargetConnector,
+		TargetName: request.UnitName,
+		Command:    request.Command,
+	}, writer)
+}
+
+func RunExecutableCommand(config Config, request ExecutableCommandRequest, writer io.Writer) error {
+	ApplyDefaults(&config)
+	product, err := ProductDefinitionByID(config.Product)
+	if err != nil {
+		return err
+	}
+	targetKind := ExecutableCommandTargetKind(strings.TrimSpace(string(request.TargetKind)))
+	targetName := strings.TrimSpace(request.TargetName)
+	command := strings.TrimSpace(request.Command)
+	if targetKind == "" {
+		return fmt.Errorf("type de cible requis")
+	}
+	if targetName == "" {
+		return fmt.Errorf("cible requise")
+	}
+	if command == "" {
+		return fmt.Errorf("commande exécutable requise")
+	}
+	if _, err := splitCommandLine(command); err != nil {
+		return err
+	}
+	paths, err := DetectGedixPaths(config)
+	if err != nil {
+		return err
+	}
+	target, err := ResolveExecutableCommandTarget(paths, product, config, targetKind, targetName)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(writer, "[INFO] Lancement commande exécutable.")
+	fmt.Fprintf(writer, "[INFO] Type : %s\n", target.Kind)
+	fmt.Fprintf(writer, "[INFO] Cible : %s\n", target.Name)
+	fmt.Fprintf(writer, "[INFO] Exécutable : %s\n", target.ExePath)
+	fmt.Fprintf(writer, "[INFO] Répertoire de travail : %s\n", target.WorkDir)
+	fmt.Fprintf(writer, "[INFO] Commande : %s\n", command)
+	if target.Kind == ExecutableCommandTargetConnector || target.Kind == ExecutableCommandTargetAgent || target.Kind == ExecutableCommandTargetAdaptor {
+		if err := ensureGXFrontListening(paths, writer); err != nil {
+			return err
+		}
+	}
+	if err := openConsoleRaw(target.WorkDir, "V10 Lab - "+string(target.Kind)+" "+target.Name, target.ExePath, command); err != nil {
+		return err
+	}
+	fmt.Fprintln(writer, "[INFO] Console de commande exécutable ouverte.")
+	return nil
+}
+
+func ResolveExecutableCommandTarget(paths GedixPaths, product ProductDefinition, config Config, kind ExecutableCommandTargetKind, name string) (ExecutableCommandTarget, error) {
+	name = strings.TrimSpace(name)
+	switch kind {
+	case ExecutableCommandTargetRoot:
+		return resolveRootExecutableCommandTarget(paths, name)
+	case ExecutableCommandTargetService:
+		return resolveServiceExecutableCommandTarget(paths, product, config, name)
+	case ExecutableCommandTargetConnector, ExecutableCommandTargetAgent, ExecutableCommandTargetAdaptor:
+		return resolveUnitExecutableCommandTarget(paths, product, config, kind, name)
+	default:
+		return ExecutableCommandTarget{}, fmt.Errorf("type de cible inconnu: %s", kind)
+	}
+}
+
+func resolveRootExecutableCommandTarget(paths GedixPaths, name string) (ExecutableCommandTarget, error) {
+	var exePath string
+	switch {
+	case strings.EqualFold(name, "gx.exe"):
+		name = "gx.exe"
+		exePath = paths.GxExePath
+	case strings.EqualFold(name, "gx-front.exe"):
+		name = "gx-front.exe"
+		exePath = paths.FrontExePath
+	default:
+		return ExecutableCommandTarget{}, fmt.Errorf("exécutable général inconnu: %s", name)
+	}
+	if err := ensureExecutableFile(exePath); err != nil {
+		return ExecutableCommandTarget{}, err
+	}
+	return ExecutableCommandTarget{Kind: ExecutableCommandTargetRoot, Name: name, ExePath: exePath, WorkDir: paths.GedixRoot}, nil
+}
+
+func resolveServiceExecutableCommandTarget(paths GedixPaths, product ProductDefinition, config Config, name string) (ExecutableCommandTarget, error) {
+	if _, ok := product.Service(name); !ok {
+		return ExecutableCommandTarget{}, fmt.Errorf("service %s introuvable pour le produit %s", name, product.ID)
+	}
+	if _, ok := config.GedixConfig.Services[name]; !ok {
+		return ExecutableCommandTarget{}, fmt.Errorf("service %s absent de la configuration", name)
+	}
+	debugTarget, err := DetectDebugTargetForProductConfig(paths, name, product, config)
+	if err != nil {
+		return ExecutableCommandTarget{}, err
+	}
+	if debugTarget.Kind != DebugTargetService {
+		return ExecutableCommandTarget{}, fmt.Errorf("cible %s n'est pas un service", name)
+	}
+	if err := ensureExecutableFile(debugTarget.ExePath); err != nil {
+		return ExecutableCommandTarget{}, err
+	}
+	return ExecutableCommandTarget{Kind: ExecutableCommandTargetService, Name: debugTarget.Name, ExePath: debugTarget.ExePath, WorkDir: debugTarget.WorkDir}, nil
+}
+
+func resolveUnitExecutableCommandTarget(paths GedixPaths, product ProductDefinition, config Config, kind ExecutableCommandTargetKind, name string) (ExecutableCommandTarget, error) {
+	family, unit, ok := ProductUnitFamilyByName(config, name)
+	if !ok {
+		return ExecutableCommandTarget{}, fmt.Errorf("unite %s introuvable dans la configuration", name)
+	}
+	if executableKindForUnitKind(family.Definition.Kind) != kind {
+		return ExecutableCommandTarget{}, fmt.Errorf("%s n'est pas une cible %s", name, kind)
+	}
+	moduleName := NormalizeModuleType(unit.Module)
+	if moduleName == "" {
+		return ExecutableCommandTarget{}, fmt.Errorf("module requis pour %s", name)
+	}
+	module, err := DetectModuleCommandTarget(paths, product, family.Definition, name, moduleName)
+	if err != nil {
+		return ExecutableCommandTarget{}, err
+	}
+	if err := ensureExecutableFile(module.ExePath); err != nil {
+		return ExecutableCommandTarget{}, err
+	}
+	return ExecutableCommandTarget{Kind: kind, Name: module.Name, ExePath: module.ExePath, WorkDir: module.WorkDir}, nil
+}
+
+func executableKindForUnitKind(kind UnitKind) ExecutableCommandTargetKind {
+	switch kind {
+	case UnitKindConnector:
+		return ExecutableCommandTargetConnector
+	case UnitKindAgent:
+		return ExecutableCommandTargetAgent
+	case UnitKindAdaptor:
+		return ExecutableCommandTargetAdaptor
+	default:
+		return ""
+	}
+}
+
+func ensureExecutableFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("exécutable introuvable: %s", path)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("le chemin de l'exécutable désigne un dossier: %s", path)
+	}
+	return nil
+}
+
+func runModuleCommandLegacy(config Config, request ModuleCommandRequest, writer io.Writer) error {
 	ApplyDefaults(&config)
 	product, err := ProductDefinitionByID(config.Product)
 	if err != nil {
@@ -558,14 +734,8 @@ func splitCommandLine(value string) ([]string, error) {
 	args := []string{}
 	var builder strings.Builder
 	inQuotes := false
-	escaped := false
 	for _, char := range value {
 		switch {
-		case escaped:
-			builder.WriteRune(char)
-			escaped = false
-		case char == '\\' && inQuotes:
-			escaped = true
 		case char == '"':
 			inQuotes = !inQuotes
 		case (char == ' ' || char == '\t') && !inQuotes:
@@ -577,11 +747,8 @@ func splitCommandLine(value string) ([]string, error) {
 			builder.WriteRune(char)
 		}
 	}
-	if escaped {
-		builder.WriteRune('\\')
-	}
 	if inQuotes {
-		return nil, fmt.Errorf("commande module invalide: guillemet non ferme")
+		return nil, fmt.Errorf("commande exécutable invalide: guillemet non fermé")
 	}
 	if builder.Len() > 0 {
 		args = append(args, builder.String())
