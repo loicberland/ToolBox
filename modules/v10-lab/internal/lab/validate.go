@@ -3,8 +3,6 @@ package lab
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -29,15 +27,6 @@ func ValidateConfig(config Config) error {
 		errors = append(errors, "product: champ requis manquant")
 	} else if !ProductExists(config.Product) {
 		errors = append(errors, fmt.Sprintf("product: produit inconnu %q", config.Product))
-	}
-	if strings.TrimSpace(config.Release.ZipPath) != "" {
-		if !strings.EqualFold(filepath.Ext(config.Release.ZipPath), ".zip") {
-			errors = append(errors, "release.zipPath: le fichier doit etre un ZIP .zip")
-		} else if info, err := os.Stat(config.Release.ZipPath); err != nil {
-			errors = append(errors, fmt.Sprintf("release.zipPath: fichier introuvable %q", config.Release.ZipPath))
-		} else if info.IsDir() {
-			errors = append(errors, fmt.Sprintf("release.zipPath: chemin vers un dossier %q", config.Release.ZipPath))
-		}
 	}
 	if config.GedixConfig.Port < 0 || config.GedixConfig.Port > 65535 {
 		errors = append(errors, "gedixConfig.port: port invalide")
@@ -78,7 +67,7 @@ func ValidateConfig(config Config) error {
 			continue
 		}
 		if dbType != "" && dbType != "sqlite" && strings.TrimSpace(service.DBDSN) == "" {
-			errors = append(errors, fmt.Sprintf("gedixConfig.services.%s.dbDsn: champ requis pour dbType %q", serviceName, service.DBType))
+			errors = append(errors, fmt.Sprintf("Service %q : le champ DSN est obligatoire pour le type de base %q.", serviceName, dbType))
 		}
 	}
 	for index, step := range config.Pipeline {
@@ -89,9 +78,6 @@ func ValidateConfig(config Config) error {
 		}
 		if !action.SupportsProduct(config.Product) {
 			errors = append(errors, fmt.Sprintf("pipeline[%d].action: action %q incompatible avec le produit %q", index, step.Action, config.Product))
-		}
-		if step.Action == "create-env" && strings.TrimSpace(config.Release.ZipPath) == "" && strings.TrimSpace(stringParam(step.Params, "zipPath")) == "" {
-			errors = append(errors, fmt.Sprintf("pipeline[%d].release.zipPath: champ requis pour create-env", index))
 		}
 		params := paramsWithDefaults(action, step.Params)
 		for _, field := range action.Fields {

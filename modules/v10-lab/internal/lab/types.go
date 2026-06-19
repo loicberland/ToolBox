@@ -220,7 +220,6 @@ func DBTemplates() []DBTemplate {
 }
 
 func SaveRegisteredConfig(config Config) (RegisteredMaquette, error) {
-	ApplyDefaults(&config)
 	NormalizeConfigForSave(&config)
 	if err := ValidateConfig(config); err != nil {
 		return RegisteredMaquette{}, err
@@ -245,7 +244,7 @@ func SaveRegisteredConfig(config Config) (RegisteredMaquette, error) {
 }
 
 func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaquette, error) {
-	ApplyDefaults(&config)
+	inputTargetPath := strings.TrimSpace(config.Maquette.TargetPath)
 	NormalizeConfigForSave(&config)
 	if err := ValidateConfig(config); err != nil {
 		return RegisteredMaquette{}, err
@@ -273,7 +272,7 @@ func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaq
 		oldDefaultTarget := DefaultMaquetteTargetPath(oldConfig)
 		newDefaultTarget := DefaultMaquetteTargetPath(config)
 		targetPath := strings.TrimSpace(config.Maquette.TargetPath)
-		shouldRenameTarget := targetPath == "" || sameCleanPath(targetPath, oldDefaultTarget)
+		shouldRenameTarget := inputTargetPath == "" || sameCleanPath(targetPath, oldDefaultTarget)
 		oldTargetInfo, oldTargetExists, err := statIfExists(oldDefaultTarget)
 		if err != nil {
 			return RegisteredMaquette{}, err
@@ -330,6 +329,10 @@ func DeleteRegisteredConfig(name string) error {
 }
 
 func saveRegisteredConfigIntoDir(config Config, targetDir string) (RegisteredMaquette, error) {
+	NormalizeConfigForSave(&config)
+	if err := ValidateConfig(config); err != nil {
+		return RegisteredMaquette{}, err
+	}
 	if err := os.MkdirAll(filepath.Join(targetDir, "data"), 0755); err != nil {
 		return RegisteredMaquette{}, err
 	}
@@ -352,13 +355,7 @@ func RegisteredLogsDir(name string) string {
 }
 
 func NormalizeConfigForSave(config *Config) {
-	ApplyDefaults(config)
-	for serviceName, service := range config.GedixConfig.Services {
-		dbType := strings.ToLower(strings.TrimSpace(service.DBType))
-		if dbType == "sqlite" && strings.TrimSpace(service.DBDSN) == "" && len(service.ExtraKeys) == 0 {
-			delete(config.GedixConfig.Services, serviceName)
-		}
-	}
+	MaterializeConfigDefaults(config)
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -370,15 +367,22 @@ func LoadConfig(path string) (Config, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return Config{}, err
 	}
-	ApplyDefaults(&config)
+	MaterializeConfigDefaults(&config)
 	return config, nil
 }
 
 func ApplyDefaults(config *Config) {
+	MaterializeConfigDefaults(config)
+}
+
+func MaterializeConfigDefaults(config *Config) {
 	config.Product = NormalizeProductID(config.Product)
 	product, _ := ProductDefinitionByID(config.Product)
 	if strings.TrimSpace(config.Maquette.AppName) == "" {
 		config.Maquette.AppName = firstNonEmpty(product.DefaultAppName, "prod")
+	}
+	if strings.TrimSpace(config.Maquette.TargetPath) == "" {
+		config.Maquette.TargetPath = DefaultMaquetteTargetPath(*config)
 	}
 	if config.GedixConfig.Services == nil {
 		config.GedixConfig.Services = map[string]ServiceDBConfig{}
@@ -397,6 +401,22 @@ func ApplyDefaults(config *Config) {
 	}
 	if config.Runtime.DebugTargetFlags == nil {
 		config.Runtime.DebugTargetFlags = map[string][]string{}
+	}
+	for _, serviceDefinition := range product.Services {
+		service := config.GedixConfig.Services[serviceDefinition.Name]
+		if strings.TrimSpace(service.DBType) == "" {
+			service.DBType = "sqlite"
+		}
+		if service.ExtraKeys == nil {
+			service.ExtraKeys = map[string]string{}
+		}
+		config.GedixConfig.Services[serviceDefinition.Name] = service
+	}
+	for serviceName, service := range config.GedixConfig.Services {
+		if service.ExtraKeys == nil {
+			service.ExtraKeys = map[string]string{}
+			config.GedixConfig.Services[serviceName] = service
+		}
 	}
 }
 
@@ -500,6 +520,7 @@ func RegisterConfig(configPath string) (RegisteredMaquette, error) {
 	if err != nil {
 		return RegisteredMaquette{}, err
 	}
+	NormalizeConfigForSave(&config)
 	if err := ValidateConfig(config); err != nil {
 		return RegisteredMaquette{}, err
 	}
@@ -511,12 +532,12 @@ func RegisterConfig(configPath string) (RegisteredMaquette, error) {
 	if err := os.MkdirAll(filepath.Join(targetDir, "logs"), 0755); err != nil {
 		return RegisteredMaquette{}, err
 	}
-	source, err := os.ReadFile(configPath)
+	payload, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return RegisteredMaquette{}, err
 	}
 	targetPath := filepath.Join(targetDir, "maquette.json")
-	if err := os.WriteFile(targetPath, source, 0644); err != nil {
+	if err := os.WriteFile(targetPath, append(payload, '\n'), 0644); err != nil {
 		return RegisteredMaquette{}, err
 	}
 	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath, GroupName: config.GroupName}, nil

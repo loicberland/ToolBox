@@ -218,6 +218,94 @@ func TestValidateConfigReportsInvalidDBTypeAndDuplicateDebugTarget(t *testing.T)
 	}
 }
 
+func TestValidateConfigServiceDsnRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		service ServiceDBConfig
+		wantErr bool
+		want    []string
+	}{
+		{
+			name:    "sqlite without dsn",
+			service: ServiceDBConfig{DBType: "sqlite", DBDSN: "", ExtraKeys: map[string]string{}},
+		},
+		{
+			name:    "postgres without dsn",
+			service: ServiceDBConfig{DBType: "postgres", DBDSN: "", ExtraKeys: map[string]string{}},
+			wantErr: true,
+			want:    []string{"Service \"auth\"", "DSN", "postgres"},
+		},
+		{
+			name:    "postgres with dsn",
+			service: ServiceDBConfig{DBType: "postgres", DBDSN: "host=localhost port=5432 dbname=test", ExtraKeys: map[string]string{}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := Config{
+				Name:    "ticket-T5808",
+				Product: GedixProdV10,
+				GedixConfig: GedixConfig{
+					Services: map[string]ServiceDBConfig{
+						"auth": tc.service,
+					},
+				},
+			}
+			err := ValidateConfig(config)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("expected valid config, got %v", err)
+				}
+				return
+			}
+			validationErr, ok := err.(ValidationError)
+			if !ok {
+				t.Fatalf("expected ValidationError, got %T %v", err, err)
+			}
+			message := strings.Join(validationErr.Items, "\n")
+			for _, want := range tc.want {
+				if !strings.Contains(message, want) {
+					t.Fatalf("expected %q in validation message: %#v", want, validationErr.Items)
+				}
+			}
+			if strings.TrimSpace(err.Error()) == "validation failed" && message == "" {
+				t.Fatalf("expected detailed validation items, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateConfigDoesNotRequireReleaseZipOnSave(t *testing.T) {
+	for _, zipPath := range []string{"", filepath.Join(t.TempDir(), "missing-release.zip")} {
+		config := Config{
+			Name:    "ticket-T5808",
+			Product: GedixProdV10,
+			Release: ReleaseConfig{
+				ZipPath: zipPath,
+			},
+		}
+		if err := ValidateConfig(config); err != nil {
+			t.Fatalf("expected release zip %q not to block general validation, got %v", zipPath, err)
+		}
+	}
+}
+
+func TestSaveRegisteredConfigAllowsMissingReleaseZip(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	config := Config{
+		Name:    "Demo Prod",
+		Product: GedixProdV10,
+		Release: ReleaseConfig{
+			ZipPath: filepath.Join(t.TempDir(), "deleted-release.zip"),
+		},
+	}
+
+	if _, err := SaveRegisteredConfig(config); err != nil {
+		t.Fatalf("expected missing release zip not to block save, got %v", err)
+	}
+}
+
 func TestActionsForProductIncludesSystemAndGedixActions(t *testing.T) {
 	actions := ActionsForProduct(GedixProdV10)
 	byID := map[string]bool{}
@@ -351,6 +439,201 @@ func TestSaveRegisteredConfigReplacingAllowsSaveWithoutRename(t *testing.T) {
 	}
 	if loaded.Name != "Demo Prod" || loaded.Maquette.EnvName != "demo" {
 		t.Fatalf("unexpected saved config: %#v", loaded)
+	}
+}
+
+func TestSaveRegisteredConfigMaterializesDefaults(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	config := Config{
+		Name:    "Demo Prod",
+		Product: GedixProdV10,
+		Maquette: MaquetteConfig{
+			EnvName: "live",
+		},
+	}
+
+	item, err := SaveRegisteredConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	saved := readConfigFile(t, item.Path)
+	if saved.Maquette.TargetPath == "" {
+		t.Fatal("expected materialized maquette.targetPath")
+	}
+	if saved.Maquette.TargetPath != DefaultMaquetteTargetPath(config) {
+		t.Fatalf("unexpected targetPath %q", saved.Maquette.TargetPath)
+	}
+	if saved.Maquette.AppName != "prod" {
+		t.Fatalf("unexpected appName %q", saved.Maquette.AppName)
+	}
+	assertProductDefaultServices(t, saved, GedixProdV10)
+
+	raw := readJSONFile(t, item.Path)
+	gedixConfig := rawObject(t, raw, "gedixConfig")
+	if _, ok := gedixConfig["services"].(map[string]any); !ok {
+		t.Fatalf("expected gedixConfig.services object in JSON: %#v", gedixConfig["services"])
+	}
+	if _, ok := gedixConfig["connectors"].(map[string]any); !ok {
+		t.Fatalf("expected gedixConfig.connectors object in JSON: %#v", gedixConfig["connectors"])
+	}
+	services := rawObject(t, gedixConfig, "services")
+	auth := rawObject(t, services, "auth")
+	if _, ok := auth["extraKeys"].(map[string]any); !ok {
+		t.Fatalf("expected auth.extraKeys object in JSON: %#v", auth["extraKeys"])
+	}
+}
+
+func TestSaveRegisteredConfigPreservesUserValuesAndCustomServices(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	customTarget := filepath.Join(t.TempDir(), "custom-target")
+	config := Config{
+		Name:    "Demo Prod",
+		Product: GedixProdV10,
+		Maquette: MaquetteConfig{
+			TargetPath: customTarget,
+			EnvName:    "live",
+			AppName:    "custom_app",
+		},
+		GedixConfig: GedixConfig{
+			Services: map[string]ServiceDBConfig{
+				"auth": {
+					DBType:    "postgres",
+					DBDSN:     "user=gedix dbname=auth sslmode=disable",
+					ExtraKeys: map[string]string{"pool-size": "4"},
+				},
+				"custom-service": {
+					DBType:    "mysql",
+					DBDSN:     "custom-dsn",
+					ExtraKeys: map[string]string{"custom-key": "custom-value"},
+				},
+			},
+		},
+	}
+
+	item, err := SaveRegisteredConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	saved := readConfigFile(t, item.Path)
+	if saved.Maquette.TargetPath != customTarget {
+		t.Fatalf("custom target was overwritten: %q", saved.Maquette.TargetPath)
+	}
+	auth := saved.GedixConfig.Services["auth"]
+	if auth.DBType != "postgres" || auth.DBDSN != "user=gedix dbname=auth sslmode=disable" || auth.ExtraKeys["pool-size"] != "4" {
+		t.Fatalf("auth customization was not preserved: %#v", auth)
+	}
+	custom := saved.GedixConfig.Services["custom-service"]
+	if custom.DBType != "mysql" || custom.DBDSN != "custom-dsn" || custom.ExtraKeys["custom-key"] != "custom-value" {
+		t.Fatalf("custom service was not preserved: %#v", custom)
+	}
+	product, _ := ProductDefinitionByID(GedixProdV10)
+	for _, serviceDefinition := range product.Services {
+		if serviceDefinition.Name == "auth" {
+			continue
+		}
+		service, ok := saved.GedixConfig.Services[serviceDefinition.Name]
+		if !ok {
+			t.Fatalf("missing product service %s", serviceDefinition.Name)
+		}
+		if service.DBType != "sqlite" || service.DBDSN != "" || service.ExtraKeys == nil {
+			t.Fatalf("unexpected default service %s: %#v", serviceDefinition.Name, service)
+		}
+	}
+}
+
+func TestNormalizeConfigForSaveKeepsDefaultSQLiteServices(t *testing.T) {
+	config := Config{
+		Name:    "Demo Prod",
+		Product: GedixProdV10,
+		GedixConfig: GedixConfig{
+			Services: map[string]ServiceDBConfig{
+				"auth": {DBType: "sqlite", DBDSN: "", ExtraKeys: map[string]string{}},
+			},
+		},
+	}
+
+	NormalizeConfigForSave(&config)
+
+	if _, ok := config.GedixConfig.Services["auth"]; !ok {
+		t.Fatal("default SQLite service was removed")
+	}
+}
+
+func TestRegisterConfigWritesMaterializedImportedConfig(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	source := filepath.Join(t.TempDir(), "old-maquette.json")
+	mustWrite(t, source, `{
+  "name": "Imported Prod",
+  "product": "gedix-prod-v10",
+  "maquette": {"envName": "live"},
+  "gedixConfig": {}
+}`)
+
+	item, err := RegisterConfig(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	saved := readConfigFile(t, item.Path)
+	if saved.Maquette.TargetPath != DefaultMaquetteTargetPath(saved) {
+		t.Fatalf("unexpected imported targetPath %q", saved.Maquette.TargetPath)
+	}
+	assertProductDefaultServices(t, saved, GedixProdV10)
+}
+
+func TestLoadOldConfigMaterializesDefaultsAndSavePersistsThem(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	oldConfigPath := filepath.Join(MaquettesDir(), "Old_Prod", "maquette.json")
+	mustMkdir(t, filepath.Dir(oldConfigPath))
+	mustWrite(t, oldConfigPath, `{
+  "name": "Old Prod",
+  "product": "gedix-prod-v10",
+  "maquette": {"envName": "live"},
+  "gedixConfig": {}
+}`)
+
+	loaded, _, err := LoadRegisteredConfig("Old Prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Maquette.TargetPath == "" {
+		t.Fatal("expected loaded old config to contain targetPath")
+	}
+	assertProductDefaultServices(t, loaded, GedixProdV10)
+
+	if _, err := SaveRegisteredConfig(loaded); err != nil {
+		t.Fatal(err)
+	}
+	savedPath := filepath.Join(MaquettesDir(), "Old_Prod", "maquette.json")
+	saved := readConfigFile(t, savedPath)
+	if saved.Maquette.TargetPath == "" {
+		t.Fatal("expected saved old config to persist targetPath")
+	}
+	assertProductDefaultServices(t, saved, GedixProdV10)
+}
+
+func TestSaveRegisteredConfigReplacingPreservesCustomTargetPath(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	customTarget := filepath.Join(t.TempDir(), "custom-target")
+	config := testRegisteredMaquetteConfig("Demo Prod")
+	config.Maquette.TargetPath = customTarget
+	if _, err := SaveRegisteredConfig(config); err != nil {
+		t.Fatal(err)
+	}
+
+	renamed := testRegisteredMaquetteConfig("Demo Prod Renamed")
+	renamed.Maquette.TargetPath = customTarget
+	if _, err := SaveRegisteredConfigReplacing("Demo Prod", renamed); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := LoadRegisteredConfig("Demo Prod Renamed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Maquette.TargetPath != customTarget {
+		t.Fatalf("custom target path was replaced: %q", loaded.Maquette.TargetPath)
 	}
 }
 
@@ -1418,9 +1701,9 @@ func TestUpdateEnvValidation(t *testing.T) {
 		target  string
 		want    string
 	}{
-		{name: "empty release", zipPath: "", target: target, want: "release.zipPath est requis"},
-		{name: "missing release", zipPath: filepath.Join(root, "missing.zip"), target: target, want: "ZIP release introuvable"},
-		{name: "not zip", zipPath: mustFile(t, filepath.Join(root, "release.txt"), ""), target: target, want: "fichier .zip"},
+		{name: "empty release", zipPath: "", target: target, want: "Sélectionnez un ZIP de release"},
+		{name: "missing release", zipPath: filepath.Join(root, "missing.zip"), target: target, want: "introuvable"},
+		{name: "not zip", zipPath: mustFile(t, filepath.Join(root, "release.txt"), ""), target: target, want: "extension .zip"},
 		{name: "missing target", zipPath: zipPath, target: filepath.Join(root, "missing-target"), want: "dossier cible de maquette introuvable"},
 		{name: "dangerous target", zipPath: zipPath, target: filepath.VolumeName(os.TempDir()) + string(os.PathSeparator), want: "chemin cible dangereux"},
 	}
@@ -1539,6 +1822,64 @@ func mustWrite(t *testing.T, path string, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func readConfigFile(t *testing.T, path string) Config {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	return config
+}
+
+func readJSONFile(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func rawObject(t *testing.T, payload map[string]any, key string) map[string]any {
+	t.Helper()
+	value, ok := payload[key].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s object, got %#v", key, payload[key])
+	}
+	return value
+}
+
+func assertProductDefaultServices(t *testing.T, config Config, productID string) {
+	t.Helper()
+	product, err := ProductDefinitionByID(productID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, serviceDefinition := range product.Services {
+		service, ok := config.GedixConfig.Services[serviceDefinition.Name]
+		if !ok {
+			t.Fatalf("missing product service %s", serviceDefinition.Name)
+		}
+		if service.DBType != "sqlite" {
+			t.Fatalf("unexpected dbType for %s: %#v", serviceDefinition.Name, service)
+		}
+		if service.DBDSN != "" {
+			t.Fatalf("unexpected dbDsn for %s: %#v", serviceDefinition.Name, service)
+		}
+		if service.ExtraKeys == nil {
+			t.Fatalf("missing extraKeys for %s: %#v", serviceDefinition.Name, service)
+		}
 	}
 }
 

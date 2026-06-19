@@ -43,6 +43,9 @@ func ConfigureGedixCfg(config Config, writer io.Writer) error {
 		service := config.GedixConfig.Services[serviceName]
 		section := fmt.Sprintf("environments.%s.applications.%s.services.%s", paths.EnvName, paths.AppName, serviceName)
 		if !sectionExists(content, section) {
+			if isDefaultServiceDBConfig(service) {
+				continue
+			}
 			fmt.Fprintf(writer, "[ERROR] Section introuvable dans gedix.cfg : [%s]\n", section)
 			return fmt.Errorf("section introuvable dans gedix.cfg: [%s]", section)
 		}
@@ -392,4 +395,9 @@ func sortedMapKeys(items map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func isDefaultServiceDBConfig(service ServiceDBConfig) bool {
+	dbType := strings.ToLower(strings.TrimSpace(service.DBType))
+	return (dbType == "" || dbType == "sqlite") && strings.TrimSpace(service.DBDSN) == "" && len(service.ExtraKeys) == 0
 }

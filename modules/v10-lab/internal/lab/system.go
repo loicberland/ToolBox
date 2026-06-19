@@ -21,12 +21,10 @@ func CreateEnv(ctx ActionContext, params map[string]any) error {
 	zipPath := firstNonEmpty(stringParam(params, "zipPath"), config.Release.ZipPath)
 	workDir := firstNonEmpty(stringParam(params, "workDir"), config.Release.WorkDir)
 	overwrite := config.Release.Overwrite || boolParam(params, "overwrite")
-	if strings.TrimSpace(zipPath) == "" {
-		return fmt.Errorf("release.zipPath est requis")
+	if err := ValidateReleaseZipPath(zipPath); err != nil {
+		return err
 	}
-	if _, err := os.Stat(zipPath); err != nil {
-		return fmt.Errorf("ZIP release introuvable %s: %w", zipPath, err)
-	}
+	zipPath = strings.TrimSpace(zipPath)
 	target := ResolveMaquetteTargetPath(config)
 	fmt.Fprintf(ctx.Writer, "[INFO] Vérification du dossier cible : %s\n", target)
 	if err := checkCreateTargetAvailable(target, overwrite); err != nil {
@@ -106,6 +104,7 @@ func UpdateEnv(ctx ActionContext, params map[string]any) error {
 	if err := validateUpdateEnvInputs(zipPath, target); err != nil {
 		return err
 	}
+	zipPath = strings.TrimSpace(zipPath)
 	tempRoot, err := makeUpdateTempDir(workDir, config.Name)
 	if err != nil {
 		return err
@@ -748,19 +747,30 @@ func checkCreateTargetAvailable(target string, overwrite bool) error {
 	return nil
 }
 
-func validateUpdateEnvInputs(zipPath string, target string) error {
-	if strings.TrimSpace(zipPath) == "" {
-		return fmt.Errorf("release.zipPath est requis pour mettre à jour la maquette")
+func ValidateReleaseZipPath(zipPath string) error {
+	zipPath = strings.TrimSpace(zipPath)
+	if zipPath == "" {
+		return fmt.Errorf("Sélectionnez un ZIP de release avant de créer ou mettre à jour la maquette.")
 	}
 	info, err := os.Stat(zipPath)
 	if err != nil {
-		return fmt.Errorf("ZIP release introuvable %s: %w", zipPath, err)
+		if os.IsNotExist(err) {
+			return fmt.Errorf("Le ZIP de release est introuvable : %q.", zipPath)
+		}
+		return fmt.Errorf("Le ZIP de release est inaccessible : %q: %w", zipPath, err)
 	}
 	if info.IsDir() {
-		return fmt.Errorf("release.zipPath doit pointer vers un fichier ZIP: %s", zipPath)
+		return fmt.Errorf("Le chemin du ZIP de release désigne un dossier : %q.", zipPath)
 	}
 	if !strings.EqualFold(filepath.Ext(zipPath), ".zip") {
-		return fmt.Errorf("release.zipPath doit pointer vers un fichier .zip: %s", zipPath)
+		return fmt.Errorf("Le fichier sélectionné doit être un ZIP avec l'extension .zip.")
+	}
+	return nil
+}
+
+func validateUpdateEnvInputs(zipPath string, target string) error {
+	if err := ValidateReleaseZipPath(zipPath); err != nil {
+		return err
 	}
 	if err := ensureSafeExistingTargetPath(target); err != nil {
 		return err

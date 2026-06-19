@@ -1885,6 +1885,19 @@ textarea {
   flex: 0 0 auto;
 }
 
+input.field-invalid,
+textarea.field-invalid,
+select.field-invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.field-error-text {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .readonly-notice.warning {
   display: grid;
   gap: 8px;
