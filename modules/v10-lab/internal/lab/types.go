@@ -158,6 +158,18 @@ type MaquetteGroup struct {
 	Name string `json:"name"`
 }
 
+// DuplicateMaquetteRequest describes the user supplied parts of a duplicate.
+// The target directory itself is always derived here, rather than in the UI.
+type DuplicateMaquetteRequest struct {
+	Name       string
+	ParentPath string
+	CopyData   bool
+}
+
+type DuplicateConflictError struct{ Message string }
+
+func (e DuplicateConflictError) Error() string { return e.Message }
+
 type groupRegistry struct {
 	Groups []MaquetteGroup `json:"groups"`
 }
@@ -241,6 +253,111 @@ func SaveRegisteredConfig(config Config) (RegisteredMaquette, error) {
 		return RegisteredMaquette{}, err
 	}
 	return RegisteredMaquette{Name: config.Name, Product: config.Product, Path: targetPath, GroupName: config.GroupName}, nil
+}
+
+// DuplicateRegisteredMaquette creates a new registered configuration and optionally
+// copies the physical Gedix directory. API tokens, logs and data are deliberately
+// not part of this operation: SaveRegisteredConfig creates fresh internal folders.
+func DuplicateRegisteredMaquette(sourceName string, request DuplicateMaquetteRequest) (Config, error) {
+	request.Name = strings.TrimSpace(request.Name)
+	request.ParentPath = strings.TrimSpace(request.ParentPath)
+	if request.Name == "" || request.ParentPath == "" {
+		return Config{}, ValidationError{Items: []string{"nom et repertoire parent obligatoires"}}
+	}
+	source, _, err := LoadRegisteredConfig(sourceName)
+	if err != nil {
+		return Config{}, err
+	}
+	if existing, _, err := LoadRegisteredConfig(request.Name); err == nil && existing.Name != "" {
+		return Config{}, DuplicateConflictError{Message: "maquette deja enregistree"}
+	} else if err != nil && !os.IsNotExist(err) {
+		return Config{}, err
+	}
+	target := filepath.Join(filepath.Clean(request.ParentPath), safeDirName(request.Name))
+	sourcePath := filepath.Clean(ResolveMaquetteTargetPath(source))
+	if sameCleanPath(sourcePath, target) {
+		return Config{}, ValidationError{Items: []string{"le chemin cible est identique au chemin source"}}
+	}
+	rel, err := filepath.Rel(sourcePath, target)
+	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return Config{}, ValidationError{Items: []string{"le chemin cible ne peut pas etre situe dans le repertoire source"}}
+	}
+	if _, err := os.Stat(target); err == nil {
+		return Config{}, DuplicateConflictError{Message: "le repertoire cible existe deja"}
+	} else if !os.IsNotExist(err) {
+		return Config{}, err
+	}
+	copy := source
+	copy.Name = request.Name
+	copy.Maquette.TargetPath = target
+	if request.CopyData {
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			return Config{}, err
+		}
+		if !info.IsDir() {
+			return Config{}, ValidationError{Items: []string{"le chemin source n'est pas un repertoire"}}
+		}
+		if err := copyDirectory(sourcePath, target); err != nil {
+			return Config{}, err
+		}
+	}
+	if _, err := SaveRegisteredConfig(copy); err != nil {
+		if request.CopyData {
+			_ = os.RemoveAll(target)
+		}
+		return Config{}, err
+	}
+	return copy, nil
+}
+
+func copyDirectory(source, destination string) (err error) {
+	if err = os.MkdirAll(destination, 0755); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(destination)
+		}
+	}()
+	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == source {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("lien symbolique refuse: %s", path)
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		out := filepath.Join(destination, rel)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(out, info.Mode().Perm())
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		file, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(file, in)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
 }
 
 func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaquette, error) {
@@ -505,7 +622,7 @@ func MaquettesFilesDir() string {
 }
 
 func DefaultMaquetteTargetPath(config Config) string {
-	return filepath.Join(MaquettesFilesDir(), "Gedix_"+safeDirName(config.Name))
+	return filepath.Join(MaquettesFilesDir(), safeDirName(config.Name))
 }
 
 func ResolveMaquetteTargetPath(config Config) string {

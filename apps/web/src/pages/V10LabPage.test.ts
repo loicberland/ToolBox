@@ -1,4 +1,6 @@
 import type { V10Config, V10Product } from '../api/v10Lab';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 Object.assign(globalThis, { window: { TOOLBOX: { services: { api: { url: '/api' } } } } });
 
@@ -52,5 +54,13 @@ describe('executableCommandGroups', () => {
     const groups = executableCommandGroups({ ...config, gedixConfig: { ...config.gedixConfig, agents: {}, adaptors: {} } }, product, false);
 
     expect(groups.map((group) => group.label)).toEqual(['Services', 'Connecteurs']);
+  });
+});
+
+describe('DuplicateMaquetteDialog', () => {
+  it('renders a checked copy-data checkbox before its text in the horizontal label', () => {
+    const source = readFileSync(join(__dirname, 'V10LabPage.tsx'), 'utf8');
+    expect(source).toMatch(/<label className="duplicate-copy-data"><input type="checkbox" checked=\{copyData\}/);
+    expect(source).toMatch(/<input type="checkbox" checked=\{copyData\}[\s\S]*?<span>\{m\.copyData\}<\/span><\/label>/);
   });
 });

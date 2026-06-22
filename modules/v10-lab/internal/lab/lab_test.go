@@ -369,6 +369,70 @@ func TestAPITokenStorage(t *testing.T) {
 	}
 }
 
+func TestDuplicateRegisteredMaquetteCopiesConfigurationAndFiles(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	source := testRegisteredMaquetteConfig("Samson")
+	source.GroupName = "Demo"
+	source.Pipeline = []PipelineStep{{Action: "create-plant", Label: "Plant", Params: map[string]any{"name": "A"}}}
+	source.Maquette.TargetPath = filepath.Join(t.TempDir(), "samson")
+	if _, err := SaveRegisteredConfig(source); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(source.Maquette.TargetPath, "nested"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source.Maquette.TargetPath, "nested", "content.txt"), []byte("content"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	parent := t.TempDir()
+	copy, err := DuplicateRegisteredMaquette(source.Name, DuplicateMaquetteRequest{Name: "Samson_copie", ParentPath: parent, CopyData: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copy.GroupName != source.GroupName || copy.Pipeline[0].Action != source.Pipeline[0].Action {
+		t.Fatalf("source settings were not preserved: %#v", copy)
+	}
+	if copy.Maquette.TargetPath != filepath.Join(parent, "Samson_copie") {
+		t.Fatalf("unexpected target %q", copy.Maquette.TargetPath)
+	}
+	if _, err := os.Stat(filepath.Join(parent, "Gedix_Samson_copie")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected prefixed target directory: %v", err)
+	}
+	if content, err := os.ReadFile(filepath.Join(copy.Maquette.TargetPath, "nested", "content.txt")); err != nil || string(content) != "content" {
+		t.Fatalf("file not copied: %v %q", err, content)
+	}
+	loaded, _, err := LoadRegisteredConfig(copy.Name)
+	if err != nil {
+		t.Fatalf("configuration not saved: %v", err)
+	}
+	if loaded.Maquette.TargetPath != filepath.Join(parent, "Samson_copie") {
+		t.Fatalf("unexpected saved target %q", loaded.Maquette.TargetPath)
+	}
+}
+
+func TestDuplicateRegisteredMaquetteWithoutDataDoesNotCreateTarget(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	source := testRegisteredMaquetteConfig("Samson")
+	source.Maquette.TargetPath = filepath.Join(t.TempDir(), "source")
+	if _, err := SaveRegisteredConfig(source); err != nil {
+		t.Fatal(err)
+	}
+	parent := t.TempDir()
+	copy, err := DuplicateRegisteredMaquette(source.Name, DuplicateMaquetteRequest{Name: "Samson_copie", ParentPath: parent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(copy.Maquette.TargetPath); !os.IsNotExist(err) {
+		t.Fatalf("target should not exist, got %v", err)
+	}
+	if copy.Maquette.TargetPath != filepath.Join(parent, "Samson_copie") {
+		t.Fatalf("unexpected target %q", copy.Maquette.TargetPath)
+	}
+	if strings.Contains(filepath.Base(copy.Maquette.TargetPath), "Gedix_") {
+		t.Fatalf("target must not include Gedix_ prefix: %q", copy.Maquette.TargetPath)
+	}
+}
+
 func TestSaveRegisteredConfigReplacingAllowsCaseOnlyRename(t *testing.T) {
 	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
 	oldConfig := testRegisteredMaquetteConfig("Demo Prod")

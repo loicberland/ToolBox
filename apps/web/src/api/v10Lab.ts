@@ -141,6 +141,12 @@ export type MaquetteGroup = {
   name: string;
 };
 
+export type DuplicateMaquetteRequest = {
+  name: string;
+  parentPath: string;
+  copyData: boolean;
+};
+
 export type ExecutionResponse = {
   running?: boolean;
   status: string;
@@ -255,6 +261,7 @@ export const v10LabApi = {
   importExistingMaquettes: (rootPath: string) => request<ImportExistingMaquettesResponse>('/v10-lab/maquettes/import-existing', jsonRequest('POST', { rootPath })),
   getMaquette: (name: string) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`),
   updateMaquette: (name: string, config: V10Config) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, jsonRequest('PUT', config)),
+  duplicateMaquette: (sourceName: string, payload: DuplicateMaquetteRequest) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(sourceName)}/duplicate`, jsonRequest('POST', payload)),
   deleteMaquette: (name: string) => request<void>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   getApiTokenStatus: (name: string) => request<ApiTokenStatus>(`/v10-lab/maquettes/${encodeURIComponent(name)}/api-token`),
   saveApiToken: (name: string, token: string) => request<ApiTokenStatus>(`/v10-lab/maquettes/${encodeURIComponent(name)}/api-token`, jsonRequest('PUT', { token })),

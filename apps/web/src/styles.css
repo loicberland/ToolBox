@@ -2111,6 +2111,21 @@ select.field-invalid {
   color: var(--muted);
 }
 
+.duplicate-copy-data {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.duplicate-copy-data input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
 .permanent-delete-dialog {
   width: min(560px, 100%);
 }

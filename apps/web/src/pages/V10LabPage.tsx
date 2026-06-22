@@ -85,6 +85,11 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
   const [confirmUpdate, setConfirmUpdate] = useState(false);
+  const [duplicateSource, setDuplicateSource] = useState<MaquetteSummary | null>(null);
+  const [duplicateName, setDuplicateName] = useState('');
+  const [duplicateParentPath, setDuplicateParentPath] = useState('');
+  const [duplicateCopyData, setDuplicateCopyData] = useState(true);
+  const [duplicating, setDuplicating] = useState(false);
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
   const currentMaquetteRef = useRef<HTMLElement | null>(null);
   const maquetteSelectorRef = useRef<HTMLElement | null>(null);
@@ -607,6 +612,26 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     });
   }
 
+  function startDuplicate(source: MaquetteSummary) {
+    const existing = new Set(maquettes.map((item) => item.name.toLocaleLowerCase()));
+    const base = `${source.name}_copie`;
+    let name = base;
+    for (let index = 2; existing.has(name.toLocaleLowerCase()); index += 1) name = `${base}_${index}`;
+    setDuplicateSource(source); setDuplicateName(name); setDuplicateParentPath(parentPath(source.targetPath)); setDuplicateCopyData(true);
+  }
+
+  async function duplicateMaquette() {
+    if (!duplicateSource || duplicating) return;
+    if (config && isDirty && !(await saveCurrent())) return;
+    setDuplicating(true); setError('');
+    try {
+      const created = normalizeConfig(await v10LabApi.duplicateMaquette(duplicateSource.name, { name: duplicateName, parentPath: duplicateParentPath, copyData: duplicateCopyData }));
+      setDuplicateSource(null); await reloadList();
+      if (created.groupName) setOpenGroups((current) => ({ ...current, [created.groupName!]: true }));
+      await openMaquette(created.name); setMessage(m.duplicateSuccess);
+    } catch (err) { showError(err instanceof Error ? err.message : m.duplicateError); } finally { setDuplicating(false); }
+  }
+
   async function killGXProcesses() {
     setConfirmKill(false);
     await run(async () => {
@@ -884,7 +909,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
                   <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: group.name }); setShowCreate(true); setOpenGroups((current) => ({ ...current, [group.name]: true })); }}>Ajouter une maquette</Button>
                   <Button type="button" size="sm" variant="danger" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void deleteGroup(group.name); }} disabled={group.items.length > 0}>Supprimer</Button>
                 </div>
-                {openGroups[group.name] && <MaquetteList items={group.items} selectedName={selectedName} onToggle={toggleMaquette} />}
+                {openGroups[group.name] && <MaquetteList items={group.items} selectedName={selectedName} onToggle={toggleMaquette} onDuplicate={startDuplicate} />}
               </div>
             ))}
             <div className="v10-group">
@@ -900,7 +925,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
                 <span className="muted">{ungroupedMaquettes.length}</span>
                 <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setDraft({ ...defaultConfig(currentProduct.id, currentProduct), groupName: '' }); setShowCreate(true); setOpenUngrouped(true); }}>Ajouter une maquette</Button>
               </div>
-              {openUngrouped && <MaquetteList items={ungroupedMaquettes} selectedName={selectedName} onToggle={toggleMaquette} />}
+              {openUngrouped && <MaquetteList items={ungroupedMaquettes} selectedName={selectedName} onToggle={toggleMaquette} onDuplicate={startDuplicate} />}
             </div>
           </div>
         )}
@@ -952,6 +977,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
                 {showMaquetteSelector ? m.maquetteSelector.hide : m.maquetteSelector.show}
               </Button>
               <Button type="button" variant="success" onClick={() => void openCurrentMaquetteFolder()} disabled={busy || !config.maquette.targetPath.trim()}>{m.openMaquetteFolder}</Button>
+              <Button type="button" variant="secondary" onClick={() => startDuplicate({ name: config.name, product: config.product, targetPath: config.maquette.targetPath, appName: config.maquette.appName, existsOnDisk: false, groupName: config.groupName })} disabled={busy}>{m.duplicate}</Button>
               <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
               <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
             </div>
@@ -1050,6 +1076,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         onCancel={() => setConfirmDelete(null)}
         onConfirm={() => confirmDelete && void deleteMaquette(confirmDelete)}
       />
+      <DuplicateMaquetteDialog open={duplicateSource !== null} name={duplicateName} parentPath={duplicateParentPath} copyData={duplicateCopyData} busy={duplicating} error={error} onNameChange={setDuplicateName} onParentPathChange={setDuplicateParentPath} onCopyDataChange={setDuplicateCopyData} onCancel={() => !duplicating && setDuplicateSource(null)} onConfirm={() => void duplicateMaquette()} />
       <ConfirmDialog
         open={confirmKill}
         title={m.killTitle}
@@ -1070,7 +1097,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   );
 }
 
-function MaquetteList({ items, selectedName, onToggle }: { items: MaquetteSummary[]; selectedName: string; onToggle: (name: string) => Promise<void> }) {
+function MaquetteList({ items, selectedName, onToggle, onDuplicate }: { items: MaquetteSummary[]; selectedName: string; onToggle: (name: string) => Promise<void>; onDuplicate: (item: MaquetteSummary) => void }) {
   const handleKeyDown = (event: React.KeyboardEvent, name: string) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
       return;
@@ -1104,11 +1131,30 @@ function MaquetteList({ items, selectedName, onToggle }: { items: MaquetteSummar
           <span>{item.existsOnDisk ? m.yes : m.no}</span>
           <div className="button-row">
             <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void onToggle(item.name); }}>{item.name === selectedName ? m.close : m.open}</Button>
+            <Button type="button" size="sm" variant="secondary" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onDuplicate(item); }}>{m.duplicate}</Button>
           </div>
         </div>
       ))}
     </div>
   );
+}
+
+function DuplicateMaquetteDialog({ open, name, parentPath, copyData, busy, error, onNameChange, onParentPathChange, onCopyDataChange, onCancel, onConfirm }: { open: boolean; name: string; parentPath: string; copyData: boolean; busy: boolean; error: string; onNameChange: (value: string) => void; onParentPathChange: (value: string) => void; onCopyDataChange: (value: boolean) => void; onCancel: () => void; onConfirm: () => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => { if (open) window.requestAnimationFrame(() => inputRef.current?.focus()); }, [open]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onCancel(); };
+    window.addEventListener('keydown', onKeyDown); return () => window.removeEventListener('keydown', onKeyDown);
+  }, [busy, onCancel]);
+  if (!open) return null;
+  return <div className="dialog-backdrop"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-label={m.duplicateTitle}>
+    <h3>{m.duplicateTitle}</h3>
+    <label>{m.duplicateName}<input ref={inputRef} value={name} disabled={busy} onChange={(event) => onNameChange(event.currentTarget.value)} /></label>
+    <label>{m.parentPath}<input value={parentPath} disabled={busy} onChange={(event) => onParentPathChange(event.currentTarget.value)} /></label>
+    <label className="duplicate-copy-data"><input type="checkbox" checked={copyData} disabled={busy} onChange={(event) => onCopyDataChange(event.currentTarget.checked)} /><span>{m.copyData}</span></label>
+    {error && <p className="error">{error}</p>}
+    <div className="button-row end"><Button type="button" variant="secondary" disabled={busy} onClick={onCancel}>{messages.common.cancel}</Button><Button type="button" disabled={busy || !name.trim() || !parentPath.trim()} onClick={onConfirm}>{busy ? m.duplicating : m.duplicate}</Button></div>
+  </div></div>;
 }
 
 function MaquetteGeneralForm({ config, products, groups, defaultTargetPath, onChange, onSelectZip, creating = false }: {
@@ -2652,6 +2698,12 @@ function safeFileName(value: string): string {
 function defaultActionPlanName(maquetteName: string): string {
   const name = maquetteName.trim();
   return name ? formatMessage(m.pipeline.defaultPlanName, { name }) : '';
+}
+
+function parentPath(path: string): string {
+  const normalized = path.replace(/[\\/]+$/, '');
+  const index = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+  return index > 0 ? normalized.slice(0, index) : '';
 }
 
 function formatMessage(template: string, values: Record<string, string>): string {

@@ -45,6 +45,7 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes", h.listMaquettes).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes", h.createMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/import-existing", h.importExistingMaquettes).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/duplicate", h.duplicateMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquette-groups", h.listMaquetteGroups).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquette-groups", h.createMaquetteGroup).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquette-groups/{name}", h.updateMaquetteGroup).Methods(http.MethodPut)
@@ -168,6 +169,12 @@ type APITokenRequest struct {
 	Token string `json:"token"`
 }
 
+type DuplicateMaquetteRequest struct {
+	Name       string `json:"name"`
+	ParentPath string `json:"parentPath"`
+	CopyData   bool   `json:"copyData"`
+}
+
 type SaveActionPlanRequest struct {
 	Name        string             `json:"name"`
 	ProductID   string             `json:"productId,omitempty"`
@@ -261,6 +268,21 @@ func (h *Handler) createMaquette(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) duplicateMaquette(w http.ResponseWriter, r *http.Request) {
+	var request DuplicateMaquetteRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	config, err := lab.DuplicateRegisteredMaquette(mux.Vars(r)["name"], lab.DuplicateMaquetteRequest{
+		Name: request.Name, ParentPath: request.ParentPath, CopyData: request.CopyData,
+	})
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, config)
 }
 
 func (h *Handler) importExistingMaquettes(w http.ResponseWriter, r *http.Request) {
@@ -695,6 +717,11 @@ func respond(w http.ResponseWriter, value any, err error) {
 }
 
 func respondError(w http.ResponseWriter, err error) {
+	var conflictErr lab.DuplicateConflictError
+	if errors.As(err, &conflictErr) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
 	var validationErr lab.ValidationError
 	if errors.As(err, &validationErr) {
 		writeJSON(w, http.StatusBadRequest, ExecutionResponse{Status: "invalid", Errors: validationErr.Items})
