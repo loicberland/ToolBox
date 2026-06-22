@@ -2126,6 +2126,12 @@ select.field-invalid {
   flex: 0 0 auto;
 }
 
+.confirm-dialog .warning-message {
+  margin: 12px 0;
+  color: #92400e;
+  font-weight: 700;
+}
+
 .permanent-delete-dialog {
   width: min(560px, 100%);
 }

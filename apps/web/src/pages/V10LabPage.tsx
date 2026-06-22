@@ -83,6 +83,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [toastInfo, setToastInfo] = useState('');
   const [toastError, setToastError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleteDirectory, setDeleteDirectory] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
   const [confirmUpdate, setConfirmUpdate] = useState(false);
   const [duplicateSource, setDuplicateSource] = useState<MaquetteSummary | null>(null);
@@ -601,15 +602,26 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
 
   async function deleteMaquette(name: string) {
     await run(async () => {
-      await v10LabApi.deleteMaquette(name);
+      await v10LabApi.deleteMaquette(name, deleteDirectory);
       setConfirmDelete(null);
+	  setDeleteDirectory(false);
       if (selectedName === name) {
         setSelectedName('');
         setConfig(null);
       }
       await reloadList();
-      setMessage(m.deleted);
+	  setMessage(deleteDirectory ? m.deletedWithDirectory : m.deleted);
     });
+  }
+
+  function openDeleteConfirmation(name: string) {
+    setDeleteDirectory(false);
+    setConfirmDelete(name);
+  }
+
+  function cancelDeleteConfirmation() {
+    setDeleteDirectory(false);
+    setConfirmDelete(null);
   }
 
   function startDuplicate(source: MaquetteSummary) {
@@ -979,7 +991,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               <Button type="button" variant="success" onClick={() => void openCurrentMaquetteFolder()} disabled={busy || !config.maquette.targetPath.trim()}>{m.openMaquetteFolder}</Button>
               <Button type="button" variant="secondary" onClick={() => startDuplicate({ name: config.name, product: config.product, targetPath: config.maquette.targetPath, appName: config.maquette.appName, existsOnDisk: false, groupName: config.groupName })} disabled={busy}>{m.duplicate}</Button>
               <Button type="button" onClick={() => void saveCurrent()} disabled={busy}>{m.save}</Button>
-              <Button type="button" variant="danger" onClick={() => setConfirmDelete(config.name)} disabled={busy}>{m.delete}</Button>
+              <Button type="button" variant="danger" onClick={() => openDeleteConfirmation(config.name)} disabled={busy}>{m.delete}</Button>
             </div>
             <div>
               <h3>{config.name}</h3>
@@ -1073,9 +1085,12 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         title={m.deleteTitle}
         message={m.deleteMessage}
         confirmLabel={m.delete}
-        onCancel={() => setConfirmDelete(null)}
+        onCancel={cancelDeleteConfirmation}
         onConfirm={() => confirmDelete && void deleteMaquette(confirmDelete)}
-      />
+      >
+        <label className="duplicate-copy-data"><input type="checkbox" checked={deleteDirectory} disabled={busy} onChange={(event) => setDeleteDirectory(event.currentTarget.checked)} /><span>{m.deleteDirectory}</span></label>
+        {deleteDirectory && config?.name === confirmDelete && <p className="warning-message">{formatMessage(m.deleteDirectoryWarning, { path: config.maquette.targetPath })}</p>}
+      </ConfirmDialog>
       <DuplicateMaquetteDialog open={duplicateSource !== null} name={duplicateName} parentPath={duplicateParentPath} copyData={duplicateCopyData} busy={duplicating} error={error} onNameChange={setDuplicateName} onParentPathChange={setDuplicateParentPath} onCopyDataChange={setDuplicateCopyData} onCancel={() => !duplicating && setDuplicateSource(null)} onConfirm={() => void duplicateMaquette()} />
       <ConfirmDialog
         open={confirmKill}

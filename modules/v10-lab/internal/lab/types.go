@@ -435,12 +435,74 @@ func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaq
 }
 
 func DeleteRegisteredConfig(name string) error {
+	return DeleteRegisteredConfigWithDirectory(name, false)
+}
+
+// DeleteRegisteredConfigWithDirectory removes the physical maquette directory only
+// when requested. The directory is validated and removed before the registration,
+// so a filesystem error never makes the registered maquette unrecoverable.
+func DeleteRegisteredConfigWithDirectory(name string, deleteDirectory bool) error {
+	if deleteDirectory {
+		config, err := loadRegisteredConfigForDelete(name)
+		if err != nil {
+			return err
+		}
+		if err := removeMaquetteTargetDirectory(name, config.Maquette.TargetPath); err != nil {
+			return err
+		}
+	}
 	if err := DeleteAPIToken(name); err != nil {
 		return err
 	}
 	path := filepath.Join(MaquettesDir(), safeDirName(name), "maquette.json")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
+	}
+	return nil
+}
+
+func loadRegisteredConfigForDelete(name string) (Config, error) {
+	path := filepath.Join(MaquettesDir(), safeDirName(name), "maquette.json")
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	var config Config
+	if err := json.Unmarshal(payload, &config); err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}
+
+func removeMaquetteTargetDirectory(name, targetPath string) error {
+	targetPath = strings.TrimSpace(targetPath)
+	if targetPath == "" {
+		return fmt.Errorf("impossible de supprimer le repertoire de la maquette %q : chemin cible vide", name)
+	}
+	if !filepath.IsAbs(targetPath) {
+		return fmt.Errorf("impossible de supprimer le repertoire de la maquette %q : le chemin cible doit etre absolu", name)
+	}
+	absolutePath, err := filepath.Abs(filepath.Clean(targetPath))
+	if err != nil {
+		return fmt.Errorf("impossible de supprimer le repertoire de la maquette %q : %w", name, err)
+	}
+	volume := filepath.VolumeName(absolutePath)
+	root := volume + string(filepath.Separator)
+	if filepath.Clean(absolutePath) == filepath.Clean(root) {
+		return fmt.Errorf("impossible de supprimer le repertoire de la maquette %q : le chemin cible ne peut pas etre une racine", name)
+	}
+	info, err := os.Stat(absolutePath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("impossible de supprimer le repertoire de la maquette %q : %w", name, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("impossible de supprimer le repertoire de la maquette %q : le chemin cible n'est pas un repertoire", name)
+	}
+	if err := os.RemoveAll(absolutePath); err != nil {
+		return fmt.Errorf("impossible de supprimer le repertoire de la maquette %q : %w", name, err)
 	}
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -388,7 +389,16 @@ func (h *Handler) updateMaquette(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteMaquette(w http.ResponseWriter, r *http.Request) {
-	if err := lab.DeleteRegisteredConfig(mux.Vars(r)["name"]); err != nil {
+	deleteDirectory := false
+	if raw := r.URL.Query().Get("deleteDirectory"); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "deleteDirectory invalide"})
+			return
+		}
+		deleteDirectory = parsed
+	}
+	if err := lab.DeleteRegisteredConfigWithDirectory(mux.Vars(r)["name"], deleteDirectory); err != nil {
 		respondError(w, err)
 		return
 	}

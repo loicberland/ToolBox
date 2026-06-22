@@ -82,6 +82,80 @@ func TestMaquetteCRUDAndValidate(t *testing.T) {
 	}
 }
 
+func TestDeleteMaquetteKeepsPhysicalDirectoryByDefault(t *testing.T) {
+	root, router, config, target := registeredMaquetteForDelete(t)
+	_ = root
+	mustWrite(t, filepath.Join(target, "marker.txt"), "keep")
+	if err := lab.SaveAPIToken(config.Name, "secret-token"); err != nil {
+		t.Fatal(err)
+	}
+	deleteMaquetteRequest(t, router, "/api/v10-lab/maquettes/"+config.Name, http.StatusNoContent)
+	if _, err := os.Stat(filepath.Join(target, "marker.txt")); err != nil {
+		t.Fatalf("physical target should remain: %v", err)
+	}
+	assertMaquetteRegistrationDeleted(t, config.Name)
+}
+
+func TestDeleteMaquetteKeepsPhysicalDirectoryWhenFalse(t *testing.T) {
+	_, router, config, target := registeredMaquetteForDelete(t)
+	mustWrite(t, filepath.Join(target, "marker.txt"), "keep")
+	deleteMaquetteRequest(t, router, "/api/v10-lab/maquettes/"+config.Name+"?deleteDirectory=false", http.StatusNoContent)
+	if _, err := os.Stat(filepath.Join(target, "marker.txt")); err != nil {
+		t.Fatalf("physical target should remain: %v", err)
+	}
+	assertMaquetteRegistrationDeleted(t, config.Name)
+}
+
+func TestDeleteMaquetteRemovesPhysicalDirectoryWhenRequested(t *testing.T) {
+	_, router, config, target := registeredMaquetteForDelete(t)
+	mustWrite(t, filepath.Join(target, "nested", "marker.txt"), "remove")
+	if err := lab.SaveAPIToken(config.Name, "secret-token"); err != nil {
+		t.Fatal(err)
+	}
+	deleteMaquetteRequest(t, router, "/api/v10-lab/maquettes/"+config.Name+"?deleteDirectory=true", http.StatusNoContent)
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("physical target should be removed, got %v", err)
+	}
+	assertMaquetteRegistrationDeleted(t, config.Name)
+}
+
+func TestDeleteMaquetteDirectoryValidationAndMissingDirectory(t *testing.T) {
+	t.Run("missing directory is accepted", func(t *testing.T) {
+		_, router, config, _ := registeredMaquetteForDelete(t)
+		deleteMaquetteRequest(t, router, "/api/v10-lab/maquettes/"+config.Name+"?deleteDirectory=true", http.StatusNoContent)
+		assertMaquetteRegistrationDeleted(t, config.Name)
+	})
+	for _, target := range []string{"", "relative/path", string(filepath.Separator)} {
+		t.Run("rejects dangerous target "+target, func(t *testing.T) {
+			_, router, config, _ := registeredMaquetteForDelete(t)
+			setRegisteredTargetPath(t, config.Name, target)
+			deleteMaquetteRequest(t, router, "/api/v10-lab/maquettes/"+config.Name+"?deleteDirectory=true", http.StatusBadRequest)
+			if _, _, err := lab.LoadRegisteredConfig(config.Name); err != nil {
+				t.Fatalf("registration should remain: %v", err)
+			}
+		})
+	}
+	t.Run("file target preserves registration", func(t *testing.T) {
+		_, router, config, target := registeredMaquetteForDelete(t)
+		mustWrite(t, target, "file")
+		deleteMaquetteRequest(t, router, "/api/v10-lab/maquettes/"+config.Name+"?deleteDirectory=true", http.StatusBadRequest)
+		if _, _, err := lab.LoadRegisteredConfig(config.Name); err != nil {
+			t.Fatalf("registration should remain: %v", err)
+		}
+	})
+	t.Run("invalid query is rejected without deletion", func(t *testing.T) {
+		_, router, config, target := registeredMaquetteForDelete(t)
+		mustWrite(t, filepath.Join(target, "marker.txt"), "keep")
+		deleteMaquetteRequest(t, router, "/api/v10-lab/maquettes/"+config.Name+"?deleteDirectory=nimportequoi", http.StatusBadRequest)
+		if _, err := os.Stat(target); err != nil {
+			t.Fatalf("target should remain: %v", err)
+		}
+		if _, _, err := lab.LoadRegisteredConfig(config.Name); err != nil {
+			t.Fatalf("registration should remain: %v", err)
+		}
+	})
+}
+
 func TestMaquetteCreateValidationErrorReturnsDetails(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(toolboxruntime.EnvRoot, root)
@@ -570,6 +644,55 @@ func testConfig() lab.Config {
 		Pipeline: []lab.PipelineStep{
 			{Action: "configure-gedix-cfg", Label: "Configurer gedix.cfg", Params: map[string]any{}},
 		},
+	}
+}
+
+func registeredMaquetteForDelete(t *testing.T) (string, http.Handler, lab.Config, string) {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+	target := filepath.Join(root, "physical-maquette")
+	config := testConfig()
+	config.Maquette.TargetPath = target
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes", config, http.StatusCreated)
+	return root, router, config, target
+}
+
+func deleteMaquetteRequest(t *testing.T, router http.Handler, path string, expectedStatus int) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodDelete, path, nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != expectedStatus {
+		t.Fatalf("DELETE %s status=%d body=%s", path, response.Code, response.Body.String())
+	}
+}
+
+func assertMaquetteRegistrationDeleted(t *testing.T, name string) {
+	t.Helper()
+	if _, _, err := lab.LoadRegisteredConfig(name); !os.IsNotExist(err) {
+		t.Fatalf("registration should be deleted, got %v", err)
+	}
+	if hasToken, err := lab.HasAPIToken(name); err != nil || hasToken {
+		t.Fatalf("API token should be deleted, hasToken=%v err=%v", hasToken, err)
+	}
+}
+
+func setRegisteredTargetPath(t *testing.T, name, target string) {
+	t.Helper()
+	config, path, err := lab.LoadRegisteredConfig(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Maquette.TargetPath = target
+	payload, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(payload, '\n'), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
 
