@@ -1029,7 +1029,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <p>{m.description}</p>
         </div>
         <div className="page-actions">
-          <Button type="button" variant="secondary" onClick={() => void importExistingMaquettes()} disabled={busy}>Scanner maquettes</Button>
+          <Button type="button" variant="secondary" onClick={() => void importExistingMaquettes()} disabled={busy}>Scanner</Button>
           <Button type="button" variant="secondary" onClick={() => void selectImportJSON()} disabled={busy}>Importer</Button>
           <Button type="button" onClick={() => setShowCreate((value) => !value)}>{m.newMaquette}</Button>
         </div>
