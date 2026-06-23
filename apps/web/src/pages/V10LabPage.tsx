@@ -68,6 +68,10 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
   const [config, setConfig] = useState<V10Config | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>(m.tabs.general);
   const [showCreate, setShowCreate] = useState(false);
+  const [importPath, setImportPath] = useState('');
+  const [importConfig, setImportConfig] = useState<V10Config | null>(null);
+  const [importName, setImportName] = useState('');
+  const [importGroupName, setImportGroupName] = useState('');
   const [showMaquetteSelector, setShowMaquetteSelector] = useState(true);
   const [draft, setDraft] = useState(() => defaultConfig());
   const [jsonText, setJsonText] = useState('');
@@ -681,10 +685,31 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       setIsDirty(false);
       setSaveAttempted(false);
       await reloadList();
-      setMessage(m.jsonSaved);
+      setMessage(m.jsonChangesApplied);
       setError('');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'JSON invalide');
+      showError(err instanceof Error ? err.message : m.invalidJson);
+    }
+  }
+
+  function downloadJSON() {
+    if (!config) {
+      return;
+    }
+    try {
+      const content = prettyJSONForDownload(jsonText);
+      const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = maquetteJSONFileName(config.name);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setMessage(m.jsonDownloaded);
+    } catch {
+      showError(m.invalidJson);
     }
   }
 
@@ -706,6 +731,52 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       const result = await v10LabApi.importExistingMaquettes(selected.path);
       await reloadList();
       setMessage(`${result.imported.length} maquette(s) importée(s), ${result.skipped.length} ignorée(s).${result.warnings.length ? ` ${result.warnings.join(' ')}` : ''}`);
+    });
+  }
+
+  function resetImportJSON() {
+    setImportPath('');
+    setImportConfig(null);
+    setImportName('');
+    setImportGroupName('');
+  }
+
+  function matchingGroupName(name: string | undefined) {
+    const normalized = name?.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    return normalized ? groups.find((group) => group.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase() === normalized)?.name ?? '' : '';
+  }
+
+  async function selectImportJSON() {
+    await run(async () => {
+      const selected = await v10LabApi.selectImportJSONPath();
+      if (selected.cancelled || !selected.path) {
+        return;
+      }
+      const preview = await v10LabApi.previewImportJSON(selected.path);
+      const next = normalizeConfig(preview.config);
+      setImportPath(preview.path);
+      setImportConfig(next);
+      setImportName(next.name);
+      setImportGroupName(matchingGroupName(next.groupName));
+    });
+  }
+
+  async function confirmImportJSON() {
+    if (!importConfig || !importName.trim()) {
+      return;
+    }
+    await run(async () => {
+      const name = importName.trim();
+      await v10LabApi.importJSON(importPath, name, importGroupName);
+      resetImportJSON();
+      await reloadList();
+      if (importGroupName) {
+        setOpenGroups((current) => ({ ...current, [importGroupName]: true }));
+      } else {
+        setOpenUngrouped(true);
+      }
+      await openMaquette(name);
+      setMessage(m.importJSON.imported);
     });
   }
 
@@ -958,7 +1029,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           <p>{m.description}</p>
         </div>
         <div className="page-actions">
-          <Button type="button" variant="secondary" onClick={() => void importExistingMaquettes()} disabled={busy}>Scanner maquettes existantes</Button>
+          <Button type="button" variant="secondary" onClick={() => void importExistingMaquettes()} disabled={busy}>Scanner maquettes</Button>
+          <Button type="button" variant="secondary" onClick={() => void selectImportJSON()} disabled={busy}>Importer</Button>
           <Button type="button" onClick={() => setShowCreate((value) => !value)}>{m.newMaquette}</Button>
         </div>
       </header>
@@ -976,7 +1048,31 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
           </div>
         </section>
       )}
-      
+
+      {importConfig && (
+        <section className="ui-card v10-section">
+          <div className="ui-card-header">
+            <h3>Importer une maquette JSON</h3>
+          </div>
+          <label>Fichier JSON
+            <input value={importPath} readOnly />
+          </label>
+          <label>Nom de la maquette <RequiredDot />
+            <input value={importName} onChange={(event) => setImportName(event.currentTarget.value)} />
+          </label>
+          <label>Groupe
+            <select value={importGroupName} onChange={(event) => setImportGroupName(event.currentTarget.value)}>
+              <option value="">Sans groupe</option>
+              {groups.map((group) => <option key={group.name} value={group.name}>{group.name}</option>)}
+            </select>
+          </label>
+          <div className="button-row end">
+            <Button type="button" variant="secondary" onClick={resetImportJSON} disabled={busy}>{messages.common.cancel}</Button>
+            <Button type="button" onClick={() => void confirmImportJSON()} disabled={busy || !importName.trim()}>Importer</Button>
+          </div>
+        </section>
+      )}
+
       {error && <p className="error whitespace">{error}</p>}
       {message && <p className="info-message">{message}</p>}
       
@@ -1070,8 +1166,9 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               {execution?.status === 'valid' && <p className="info-message">{execution.output || m.validationOk}</p>}
               <div className="button-row end">
                 <Button type="button" variant="secondary" onClick={() => void navigator.clipboard?.writeText(jsonText)}>{m.copy}</Button>
-                <Button type="button" onClick={() => void saveJSON()}>{m.saveJson}</Button>
-                <Button type="button" variant="secondary" onClick={() => void validateCurrent()} disabled={busy}>{m.json.validateConfig}</Button>
+                <Button type="button" variant="secondary" onClick={() => void saveJSON()}>{m.applyJsonChanges}</Button>
+                <Button type="button" variant="primary" onClick={() => void validateCurrent()} disabled={busy}>{m.json.validateConfig}</Button>
+                <Button type="button" variant="success" onClick={downloadJSON}>{m.downloadJson}</Button>
               </div>
             </div>
           )}
@@ -2708,6 +2805,15 @@ function safeFileName(value: string): string {
     .replace(/-+/g, '-')
     .replace(/^\.+$/, '');
   return cleaned || 'plan-actions';
+}
+
+export function prettyJSONForDownload(value: string): string {
+  return JSON.stringify(JSON.parse(value), null, 2);
+}
+
+export function maquetteJSONFileName(value: string): string {
+  const base = value.replace(/(?:\.json)+$/i, '').replace(/[\u0000-\u001F<>:"/\\|?*]/g, '-');
+  return `${base || 'maquette'}.json`;
 }
 
 function defaultActionPlanName(maquetteName: string): string {

@@ -243,6 +243,84 @@ func TestMaquetteGroups(t *testing.T) {
 	}
 }
 
+func TestImportJSON(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+
+	config := testConfig()
+	config.Name = "Configuration source"
+	config.Maquette.TargetPath = `D:\Chemin\Source`
+	config.Release.ZipPath = `C:\Downloads\ancienne-release.zip`
+	path := filepath.Join(t.TempDir(), "maquette.json")
+	payload, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var preview ImportJSONPreviewResponse
+	postJSONInto(t, router, "/api/v10-lab/maquettes/import-json/preview", ImportJSONPathRequest{Path: path}, &preview, http.StatusOK)
+	if preview.Path != path || preview.Config.Name != config.Name {
+		t.Fatalf("unexpected preview: %#v", preview)
+	}
+
+	var group lab.MaquetteGroup
+	postJSONInto(t, router, "/api/v10-lab/maquette-groups", MaquetteGroupRequest{Name: "Production"}, &group, http.StatusCreated)
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes/import-json", ImportJSONRequest{Path: path, Name: "  Destination  ", GroupName: " production "}, http.StatusCreated)
+	var imported lab.Config
+	getJSON(t, router, "/api/v10-lab/maquettes/Destination", &imported, http.StatusOK)
+	if imported.Name != "Destination" || imported.GroupName != group.Name || imported.GedixConfig.FQDN != config.GedixConfig.FQDN || imported.Maquette.AppName != config.Maquette.AppName || len(imported.Pipeline) != len(config.Pipeline) {
+		t.Fatalf("import did not preserve and override expected fields: %#v", imported)
+	}
+	if imported.Maquette.TargetPath == config.Maquette.TargetPath || imported.Maquette.TargetPath != lab.DefaultMaquetteTargetPath(imported) {
+		t.Fatalf("unexpected imported target path: %q", imported.Maquette.TargetPath)
+	}
+	if imported.Release.ZipPath != "" || imported.Release.Overwrite != config.Release.Overwrite {
+		t.Fatalf("unexpected imported release: %#v", imported.Release)
+	}
+
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes/import-json", ImportJSONRequest{Path: path, Name: "destination"}, http.StatusConflict)
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes/import-json", ImportJSONRequest{Path: path, Name: "Other", GroupName: "missing"}, http.StatusUnprocessableEntity)
+}
+
+func TestImportJSONValidation(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(toolboxruntime.EnvRoot, root)
+	router := mux.NewRouter()
+	NewHandler().Register(router)
+	valid, err := json.Marshal(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	write := func(name string, content []byte) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, content, 0600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	for _, test := range []struct {
+		name string
+		path string
+	}{
+		{"missing file", filepath.Join(dir, "missing.json")},
+		{"wrong extension", write("maquette.txt", valid)},
+		{"malformed JSON", write("invalid.json", []byte("{"))},
+		{"trailing document", write("trailing.json", append(valid, []byte(" {}")...))},
+		{"unknown product", write("unknown-product.json", []byte(strings.Replace(string(valid), lab.GedixProdV10, "unknown-product", 1)))},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes/import-json/preview", ImportJSONPathRequest{Path: test.path}, http.StatusBadRequest)
+		})
+	}
+	postJSON(t, router, http.MethodPost, "/api/v10-lab/maquettes/import-json", ImportJSONRequest{Path: write("valid.json", valid), Name: "   "}, http.StatusBadRequest)
+}
+
 func TestSavedActionPlansHTTP(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(toolboxruntime.EnvRoot, root)

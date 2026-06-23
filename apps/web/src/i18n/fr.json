@@ -49,7 +49,7 @@
     "title": "V10 Lab",
     "subtitle": "Générateur de maquettes V10",
     "description": "Gérez les maquettes, leur configuration Gedix et les futurs plans d'actions API métier.",
-    "newMaquette": "Nouvelle maquette",
+    "newMaquette": "Nouvelle",
     "registeredMaquettes": "Maquettes enregistrées",
     "maquetteSelector": {
       "show": "Changer de maquette",
@@ -127,7 +127,10 @@
     "savingBeforeTabChange": "Sauvegarde avant changement d'onglet...",
     "savingBeforeModuleChange": "Sauvegarde avant changement d'application...",
     "created": "Maquette enregistrée.",
-    "jsonSaved": "JSON sauvegardé.",
+    "importJSON": {
+      "imported": "Maquette importée."
+    },
+    "jsonChangesApplied": "Modifications JSON appliquées.",
     "deleted": "Maquette supprimée de V10 Lab. Le répertoire physique n’a pas été supprimé.",
     "deletedWithDirectory": "Maquette et répertoire supprimés.",
     "deleteTitle": "Supprimer la maquette",
@@ -139,7 +142,10 @@
     "noLog": "Aucun log disponible.",
     "selectLog": "Sélectionnez un log.",
     "copy": "Copier",
-    "saveJson": "Sauvegarder JSON",
+    "applyJsonChanges": "Appliquer les modifications",
+    "downloadJson": "Enregistrer le JSON",
+    "jsonDownloaded": "JSON téléchargé.",
+    "invalidJson": "Le JSON est invalide.",
     "addStep": "Ajouter une étape",
     "addGroup": "Ajouter un groupe",
     "addAction": "Ajouter une action",

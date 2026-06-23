@@ -40,12 +40,15 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/default-target", h.defaultTarget).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/releases/select-path", h.selectReleasePath).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/folders/select-path", h.selectFolderPath).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/import-json/select-path", h.selectImportJSONPath).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/action-plans", h.listActionPlans).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/action-plans", h.saveActionPlan).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/action-plans/{id}", h.deleteActionPlan).Methods(http.MethodDelete)
 	r.HandleFunc("/api/v10-lab/maquettes", h.listMaquettes).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes", h.createMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/import-existing", h.importExistingMaquettes).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/import-json/preview", h.previewImportJSON).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/import-json", h.importJSON).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/duplicate", h.duplicateMaquette).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquette-groups", h.listMaquetteGroups).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquette-groups", h.createMaquetteGroup).Methods(http.MethodPost)
@@ -127,6 +130,21 @@ type ImportExistingMaquettesResponse struct {
 	Imported []MaquetteSummary `json:"imported"`
 	Skipped  []string          `json:"skipped"`
 	Warnings []string          `json:"warnings"`
+}
+
+type ImportJSONPathRequest struct {
+	Path string `json:"path"`
+}
+
+type ImportJSONPreviewResponse struct {
+	Path   string     `json:"path"`
+	Config lab.Config `json:"config"`
+}
+
+type ImportJSONRequest struct {
+	Path      string `json:"path"`
+	Name      string `json:"name"`
+	GroupName string `json:"groupName"`
 }
 
 type MaquetteOpenURLResponse struct {
@@ -237,6 +255,19 @@ func (h *Handler) selectFolderPath(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, SelectReleasePathResponse{Path: path, Cancelled: cancelled})
 }
 
+func (h *Handler) selectImportJSONPath(w http.ResponseWriter, _ *http.Request) {
+	if runtime.GOOS != "windows" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "la selection graphique de fichier est disponible uniquement sous Windows"})
+		return
+	}
+	path, cancelled, err := openWindowsFileDialog("Fichiers JSON (*.json)|*.json", "Selectionner une configuration de maquette V10 Lab")
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, SelectReleasePathResponse{Path: path, Cancelled: cancelled})
+}
+
 func (h *Handler) listMaquettes(w http.ResponseWriter, _ *http.Request) {
 	items, err := lab.ListMaquettes()
 	if err != nil {
@@ -297,6 +328,57 @@ func (h *Handler) importExistingMaquettes(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) previewImportJSON(w http.ResponseWriter, r *http.Request) {
+	var request ImportJSONPathRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	config, err := readImportJSON(request.Path)
+	if err != nil {
+		respondImportJSONError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ImportJSONPreviewResponse{Path: strings.TrimSpace(request.Path), Config: config})
+}
+
+func (h *Handler) importJSON(w http.ResponseWriter, r *http.Request) {
+	var request ImportJSONRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	config, err := readImportJSON(request.Path)
+	if err != nil {
+		respondImportJSONError(w, err)
+		return
+	}
+	config.Name = strings.TrimSpace(request.Name)
+	config.GroupName, err = canonicalImportGroupName(request.GroupName)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	config.Maquette.TargetPath = ""
+	config.Release.ZipPath = ""
+	lab.NormalizeConfigForSave(&config)
+	if err := lab.ValidateConfig(config); err != nil {
+		respondImportJSONError(w, err)
+		return
+	}
+	if existing, found, err := registeredMaquetteByName(config.Name); err != nil {
+		respondError(w, err)
+		return
+	} else if found {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": fmt.Sprintf("Une maquette portant le nom %q existe deja.", existing.Name)})
+		return
+	}
+	item, err := lab.SaveRegisteredConfig(config)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
 }
 
 func (h *Handler) listMaquetteGroups(w http.ResponseWriter, _ *http.Request) {
@@ -1265,10 +1347,14 @@ func stripCfgComment(line string) string {
 }
 
 func openWindowsZipDialog() (string, bool, error) {
+	return openWindowsFileDialog("Archives ZIP (*.zip)|*.zip", "Selectionner une release Gedix V10")
+}
+
+func openWindowsFileDialog(filter, title string) (string, bool, error) {
 	script := `Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.OpenFileDialog
-$dialog.Filter = "Archives ZIP (*.zip)|*.zip"
-$dialog.Title = "Selectionner une release Gedix V10"
+$dialog.Filter = ` + strconv.Quote(filter) + `
+$dialog.Title = ` + strconv.Quote(title) + `
 $dialog.CheckFileExists = $true
 $dialog.Multiselect = $false
 if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
@@ -1284,6 +1370,99 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 		return "", true, nil
 	}
 	return path, false, nil
+}
+
+func readImportJSON(path string) (lab.Config, error) {
+	path = strings.TrimSpace(path)
+	if !strings.EqualFold(filepath.Ext(path), ".json") {
+		return lab.Config{}, importJSONError{message: "Le fichier selectionne n'est pas un fichier JSON."}
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return lab.Config{}, importJSONError{message: "Le fichier JSON selectionne est introuvable."}
+		}
+		return lab.Config{}, fmt.Errorf("lecture du fichier JSON: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return lab.Config{}, importJSONError{message: "Le fichier selectionne n'est pas un fichier regulier."}
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return lab.Config{}, fmt.Errorf("lecture du fichier JSON: %w", err)
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	var config lab.Config
+	if err := decoder.Decode(&config); err != nil {
+		return lab.Config{}, importJSONError{message: "Le fichier JSON est invalide."}
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return lab.Config{}, importJSONError{message: "Le fichier JSON est invalide."}
+	}
+	if err := lab.ValidateConfig(config); err != nil {
+		return lab.Config{}, importJSONError{message: importJSONValidationMessage(err)}
+	}
+	return config, nil
+}
+
+type importJSONError struct{ message string }
+
+func (err importJSONError) Error() string { return err.message }
+
+func importJSONValidationMessage(err error) string {
+	if validation, ok := err.(lab.ValidationError); ok {
+		for _, item := range validation.Items {
+			if strings.HasPrefix(item, "product:") {
+				return "Le produit indique dans le JSON n'est pas pris en charge."
+			}
+		}
+	}
+	return "Le fichier ne contient pas une configuration de maquette valide."
+}
+
+func respondImportJSONError(w http.ResponseWriter, err error) {
+	var importErr importJSONError
+	if errors.As(err, &importErr) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": importErr.message})
+		return
+	}
+	respondError(w, err)
+}
+
+func canonicalImportGroupName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", nil
+	}
+	groups, err := lab.ListMaquetteGroups()
+	if err != nil {
+		return "", err
+	}
+	for _, group := range groups {
+		if strings.EqualFold(normalizedImportGroupName(group.Name), normalizedImportGroupName(name)) {
+			return group.Name, nil
+		}
+	}
+	return "", fmt.Errorf("le groupe selectionne n'existe pas")
+}
+
+func normalizedImportGroupName(name string) string {
+	return strings.Join(strings.Fields(name), " ")
+}
+
+func registeredMaquetteByName(name string) (lab.RegisteredMaquette, bool, error) {
+	items, err := lab.ListMaquettes()
+	if err != nil {
+		return lab.RegisteredMaquette{}, false, err
+	}
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.Name), strings.TrimSpace(name)) {
+			return item, true, nil
+		}
+	}
+	return lab.RegisteredMaquette{}, false, nil
 }
 
 func openWindowsFolderDialog() (string, bool, error) {

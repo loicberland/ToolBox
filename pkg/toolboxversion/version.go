@@ -8,9 +8,9 @@ import (
 
 const (
 	APIVersion       = "1.0.0"
-	WebServerVersion = "1.3.0"
+	WebServerVersion = "1.4.0"
 	TestSheetVersion = "1.0.0"
-	V10LabVersion    = "1.3.0"
+	V10LabVersion    = "1.4.0"
 )
 
 var (

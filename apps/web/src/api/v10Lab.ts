@@ -177,6 +177,11 @@ export type ImportExistingMaquettesResponse = {
   warnings: string[];
 };
 
+export type ImportJSONPreviewResponse = {
+  path: string;
+  config: V10Config;
+};
+
 export type ScanCfgResponse = {
   envName: string;
   appName: string;
@@ -249,6 +254,8 @@ export const v10LabApi = {
   defaultTarget: (name: string) => request<{ targetPath: string }>(`/v10-lab/default-target?name=${encodeURIComponent(name)}`),
   selectReleasePath: () => request<SelectReleasePathResponse>('/v10-lab/releases/select-path', { method: 'POST' }),
   selectFolderPath: () => request<SelectReleasePathResponse>('/v10-lab/folders/select-path', { method: 'POST' }),
+
+  selectImportJSONPath: () => request<SelectReleasePathResponse>('/v10-lab/maquettes/import-json/select-path', { method: 'POST' }),
   listMaquettes: () => request<MaquetteSummary[]>('/v10-lab/maquettes'),
   listSavedActionPlans: (productId?: string) => request<V10SavedActionPlan[]>(`/v10-lab/action-plans${productId ? `?productId=${encodeURIComponent(productId)}` : ''}`),
   saveActionPlan: (payload: SaveActionPlanPayload) => request<V10SavedActionPlan>('/v10-lab/action-plans', jsonRequest('POST', payload)),
@@ -259,6 +266,8 @@ export const v10LabApi = {
   deleteMaquetteGroup: (name: string) => request<void>(`/v10-lab/maquette-groups/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   createMaquette: (config: V10Config) => request('/v10-lab/maquettes', jsonRequest('POST', config)),
   importExistingMaquettes: (rootPath: string) => request<ImportExistingMaquettesResponse>('/v10-lab/maquettes/import-existing', jsonRequest('POST', { rootPath })),
+  previewImportJSON: (path: string) => request<ImportJSONPreviewResponse>('/v10-lab/maquettes/import-json/preview', jsonRequest('POST', { path })),
+  importJSON: (path: string, name: string, groupName: string) => request<void>('/v10-lab/maquettes/import-json', jsonRequest('POST', { path, name, groupName })),
   getMaquette: (name: string) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`),
   updateMaquette: (name: string, config: V10Config) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(name)}`, jsonRequest('PUT', config)),
   duplicateMaquette: (sourceName: string, payload: DuplicateMaquetteRequest) => request<V10Config>(`/v10-lab/maquettes/${encodeURIComponent(sourceName)}/duplicate`, jsonRequest('POST', payload)),
