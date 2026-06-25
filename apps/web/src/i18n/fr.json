@@ -248,7 +248,7 @@
       "addCustomArguments": "Ajouter les arguments",
       "apiPipelineTitle": "Plan d'actions",
       "maintenanceTitle": "Maintenance",
-      "createMaquette": "Créer maquette",
+      "installMaquette": "Installer maquette",
       "updateMaquette": "Mettre à jour maquette",
       "configureCfg": "Modifier gedix.cfg",
       "startMaquette": "Démarrer maquette",

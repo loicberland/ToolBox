@@ -25,7 +25,7 @@ func TestValidateConfigAcceptsSystemShape(t *testing.T) {
 			ZipPath: zipPath,
 		},
 		Pipeline: []PipelineStep{
-			{Action: "create-env"},
+			{Action: "install-env"},
 			{Action: "configure-gedix-cfg"},
 			{Action: "start-maquette"},
 		},
@@ -313,12 +313,12 @@ func TestActionsForProductIncludesSystemAndGedixActions(t *testing.T) {
 		byID[action.ID] = true
 	}
 
-	for _, id := range []string{"create-env", "configure-gedix-cfg", "start-maquette", "kill-gx-processes", "update-env", "create-plant", "create-workshop", "create-machine-group", "create-target", "create-machine", "create-machining-job-default-states", "create-presetting-program-default-states", "create-document-default-states", "create-machining-job"} {
+	for _, id := range []string{"install-env", "configure-gedix-cfg", "start-maquette", "kill-gx-processes", "update-env", "create-plant", "create-workshop", "create-machine-group", "create-target", "create-machine", "create-machining-job-default-states", "create-presetting-program-default-states", "create-document-default-states", "create-machining-job"} {
 		if !byID[id] {
 			t.Fatalf("expected action %s in product actions", id)
 		}
 	}
-	for _, id := range []string{"stop-maquette", "stop-services", "create-cnc-folder"} {
+	for _, id := range []string{"create-cnc-folder"} {
 		if byID[id] {
 			t.Fatalf("unexpected non-coded action %s in product actions", id)
 		}

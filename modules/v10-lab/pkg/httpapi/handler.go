@@ -1519,7 +1519,7 @@ func apiPipelineSteps(steps []lab.PipelineStep, product string) []lab.PipelineSt
 
 func isRunnableSystemAction(actionID string) bool {
 	switch actionID {
-	case "create-env", "configure-gedix-cfg", "start-maquette", "stop-maquette", "kill-gx-processes", "update-env", "start-services", "stop-services":
+	case "install-env", "configure-gedix-cfg", "start-maquette", "kill-gx-processes", "update-env", "start-services":
 		return true
 	default:
 		return false

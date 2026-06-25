@@ -27,7 +27,7 @@ import { isServiceDsnRequired, validateServiceDsns } from './v10LabValidation';
 
 const m = messages.v10Lab;
 const tabs = [m.tabs.general, m.tabs.gedix, m.tabs.services, m.tabs.adaptors, m.tabs.connectors, m.tabs.pipeline, m.tabs.execution, m.tabs.json] as const;
-const systemPipelineActions = new Set(['create-env', 'configure-gedix-cfg', 'start-maquette', 'stop-maquette', 'start-services', 'stop-services', 'kill-gx-processes', 'update-env']);
+const systemPipelineActions = new Set(['install-env', 'configure-gedix-cfg', 'start-maquette', 'start-services', 'kill-gx-processes', 'update-env']);
 type Tab = typeof tabs[number];
 type RunState = 'idle' | 'running' | 'success' | 'failed';
 type ConnectorFormRow = {
@@ -1147,7 +1147,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
               logs={logs}
               selectedLog={selectedLog}
               onConfigChange={updateConfig}
-              onCreate={() => void runSystemAction('create-env')}
+              onCreate={() => void runSystemAction('install-env')}
               onUpdate={() => setConfirmUpdate(true)}
               onConfigure={() => void runSystemAction('configure-gedix-cfg')}
               onStart={() => void runSystemAction('start-maquette')}
@@ -1826,7 +1826,7 @@ function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActio
                       <input value={step.label} onChange={(event) => updateStep(index, { ...step, label: event.currentTarget.value })} />
                     </label>
                   </div>
-                  {step.action === 'create-env' && <p className="readonly-notice">{m.actionUsesGeneralSettings}</p>}
+                  {step.action === 'install-env' && <p className="readonly-notice">{m.actionUsesGeneralSettings}</p>}
                   {fields.length > 0 && (
                     <div className="form-grid v10-form-grid">
                       {fields.map((field) => (
@@ -2232,7 +2232,7 @@ function ExecutionPanel({ config, product, busy, runState, execution, logs, sele
       <section className="v10-execution-section">
         <h4>{m.execution.actionsTitle}</h4>
         <div className="button-row">
-          <Button type="button" onClick={onCreate} disabled={disabled}>{m.execution.createMaquette}</Button>
+          <Button type="button" onClick={onCreate} disabled={disabled}>{m.execution.installMaquette}</Button>
           <Button type="button" variant="secondary" onClick={onUpdate} disabled={disabled}>{m.execution.updateMaquette}</Button>
           <Button type="button" variant="secondary" onClick={onConfigure} disabled={disabled}>{m.execution.configureCfg}</Button>
           <Button type="button" variant="success" onClick={onStart} disabled={disabled}>{m.execution.startMaquette}</Button>

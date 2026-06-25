@@ -416,8 +416,6 @@ gx-auth.exe listen --debug -v2
 connector-focas-01\gx-connector.exe listen --debug -v2
 ```
 
-`kill-gx-processes` est volontairement manuel et ne doit pas etre appele automatiquement par `stop-maquette`.
-
 ## Build
 
 Le build principal est un outil Go cross-platform, utilisable depuis Windows sans Git Bash. Pour distribuer ToolBox, utilisez `installer` ou `package`, qui produisent uniquement `_build/toolbox-package.exe`.

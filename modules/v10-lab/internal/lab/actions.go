@@ -5,9 +5,9 @@ import "fmt"
 func Actions() []Action {
 	return []Action{
 		{
-			ID:          "create-env",
-			Label:       "Créer maquette",
-			Description: "Crée une maquette Gedix V10 depuis un ZIP de release.",
+			ID:          "install-env",
+			Label:       "Installer maquette",
+			Description: "Installe une maquette Gedix V10 depuis un ZIP de release.",
 			Kind:        KindSystem,
 			Products:    []string{},
 			Fields: []ActionField{

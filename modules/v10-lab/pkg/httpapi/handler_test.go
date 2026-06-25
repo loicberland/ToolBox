@@ -385,14 +385,14 @@ func TestActionsByProduct(t *testing.T) {
 			t.Fatalf("expected visible API action %s, got %#v", id, actions)
 		}
 	}
-	if byID["create-cnc-folder"] || byID["stop-maquette"] || byID["stop-services"] {
+	if byID["create-cnc-folder"] {
 		t.Fatalf("unexpected placeholder action, got %#v", actions)
 	}
 }
 
 func TestAPIPipelineStepsDropsSystemActions(t *testing.T) {
 	steps := apiPipelineSteps([]lab.PipelineStep{
-		{Action: "create-env"},
+		{Action: "install-env"},
 		{Action: "create-workshop"},
 		{Action: "configure-gedix-cfg"},
 	}, lab.GedixProdV10)
