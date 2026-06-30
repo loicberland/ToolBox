@@ -548,6 +548,67 @@ func TestSaveRegisteredConfigMaterializesDefaults(t *testing.T) {
 	}
 }
 
+func TestSaveRegisteredConfigRemovesHiddenPipelineFields(t *testing.T) {
+	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
+	config := testRegisteredMaquetteConfig("Demo Prod")
+	config.Pipeline = []PipelineStep{{Action: "create-machine", Params: map[string]any{
+		"entity_name":          "Machine",
+		"has_command_program":  false,
+		"command_program_name": "old",
+		"description":          "kept",
+	}}}
+
+	item, err := SaveRegisteredConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw := readJSONFile(t, item.Path)
+	params := raw["pipeline"].([]any)[0].(map[string]any)["params"].(map[string]any)
+	if _, exists := params["command_program_name"]; exists {
+		t.Fatalf("hidden pipeline field should not be written to maquette JSON: %#v", params)
+	}
+	if params["description"] != "kept" || params["entity_name"] != "Machine" {
+		t.Fatalf("visible pipeline fields should be preserved: %#v", params)
+	}
+}
+
+func TestLoadConfigNormalizesLegacyHiddenPipelineFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "maquette.json")
+	mustWrite(t, path, `{
+  "name": "Demo Prod",
+  "product": "gedix-prod-v10",
+  "release": {},
+  "maquette": {},
+  "gedixConfig": {"services": {}, "connectors": {}},
+  "runtime": {},
+  "pipeline": [
+    {
+      "action": "create-machine",
+      "label": "Machine",
+      "params": {
+        "entity_name": "Machine",
+        "has_command_program": false,
+        "command_program_name": "old",
+        "description": "kept"
+      }
+    }
+  ]
+}`)
+
+	config, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := config.Pipeline[0].Params
+	if _, exists := params["command_program_name"]; exists {
+		t.Fatalf("legacy hidden pipeline field should be removed on load: %#v", params)
+	}
+	if params["description"] != "kept" || params["entity_name"] != "Machine" {
+		t.Fatalf("visible pipeline fields should be preserved on load: %#v", params)
+	}
+}
+
 func TestSaveRegisteredConfigPreservesUserValuesAndCustomServices(t *testing.T) {
 	t.Setenv(toolboxruntime.EnvRoot, t.TempDir())
 	customTarget := filepath.Join(t.TempDir(), "custom-target")

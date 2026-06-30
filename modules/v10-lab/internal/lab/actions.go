@@ -196,6 +196,7 @@ func Actions() []Action {
 				{Name: "target_name_root", Label: "Cible CN (racine)", Type: "string", Default: "", HiddenWhenAny: []map[string]any{{"dnc_port_type": "serial"}, {"is_root_browsing_allowed": false}}},
 				{Name: "is_file_deletion_allowed", Label: "Autoriser la suppression des fichiers", Type: "bool", Default: true, HiddenWhenAny: []map[string]any{{"dnc_port_type": "serial"}, {"is_root_browsing_allowed": false}}},
 				{Name: "is_file_viewing_allowed", Label: "Autoriser la visualisation des fichier", Type: "bool", Default: true, HiddenWhenAny: []map[string]any{{"dnc_port_type": "serial"}, {"is_root_browsing_allowed": false}}},
+				{Name: "is_file_comparison_allowed", Label: "Autoriser la comparaison des fichier", Type: "bool", Default: true, HiddenWhenAny: []map[string]any{{"dnc_port_type": "serial"}, {"is_root_browsing_allowed": false}}},
 				{Name: "machine_group_ids", Label: "IDs des groupes de machines", Type: "number[]", Default: []any{}, ItemMin: 1},
 				{Name: "is_operator_instructions_displayed", Label: "Afficher les instructions opérateur", Type: "bool", Default: false},
 				{Name: "operator_instructions", Label: "Instructions opérateur", Type: "text", Default: "", HiddenWhen: map[string]any{"is_operator_instructions_displayed": false}},
@@ -287,7 +288,97 @@ func paramsWithDefaults(action Action, params map[string]any) map[string]any {
 	for key, value := range params {
 		next[key] = value
 	}
+	pruneHiddenActionFieldValues(action.Fields, next, nil)
 	for _, field := range action.Fields {
+		if _, exists := next[field.Name]; !exists && field.Default != nil && !actionFieldHidden(field, actionFieldVisibilityParams(action.Fields, next, nil)) {
+			next[field.Name] = field.Default
+		}
+	}
+	return next
+}
+
+func normalizeActionParamsForSave(action Action, params map[string]any) map[string]any {
+	next := map[string]any{}
+	for key, value := range params {
+		next[key] = value
+	}
+	pruneHiddenActionFieldValues(action.Fields, next, nil)
+	return next
+}
+
+func normalizePipelineStepsForSave(steps []PipelineStep) []PipelineStep {
+	next := clonePipelineSteps(steps)
+	for index := range next {
+		action, ok := FindAction(next[index].Action)
+		if !ok {
+			continue
+		}
+		next[index].Params = normalizeActionParamsForSave(action, next[index].Params)
+	}
+	return next
+}
+
+func normalizeConfigPipelineForSave(config *Config) {
+	config.Pipeline = normalizePipelineStepsForSave(config.Pipeline)
+}
+
+func pruneHiddenActionFieldValues(fields []ActionField, params map[string]any, parentParams map[string]any) {
+	if params == nil {
+		return
+	}
+	visibilityParams := actionFieldVisibilityParams(fields, params, parentParams)
+	for _, field := range fields {
+		if actionFieldHidden(field, visibilityParams) {
+			delete(params, field.Name)
+			continue
+		}
+		if field.Type == "object[]" && len(field.ItemFields) > 0 {
+			params[field.Name] = normalizeObjectArrayFieldValue(params[field.Name], field.ItemFields, visibilityParams)
+		}
+	}
+}
+
+func normalizeObjectArrayFieldValue(value any, itemFields []ActionField, parentParams map[string]any) any {
+	switch rows := value.(type) {
+	case []map[string]any:
+		next := make([]map[string]any, 0, len(rows))
+		for _, row := range rows {
+			next = append(next, normalizeObjectArrayRow(row, itemFields, parentParams))
+		}
+		return next
+	case []any:
+		next := make([]any, 0, len(rows))
+		for _, row := range rows {
+			if typed, ok := row.(map[string]any); ok {
+				next = append(next, normalizeObjectArrayRow(typed, itemFields, parentParams))
+				continue
+			}
+			next = append(next, row)
+		}
+		return next
+	default:
+		return value
+	}
+}
+
+func normalizeObjectArrayRow(row map[string]any, itemFields []ActionField, parentParams map[string]any) map[string]any {
+	next := map[string]any{}
+	for key, value := range row {
+		next[key] = value
+	}
+	pruneHiddenActionFieldValues(itemFields, next, parentParams)
+	return next
+}
+
+func actionFieldVisibilityParams(fields []ActionField, params map[string]any, parentParams map[string]any) map[string]any {
+	next := map[string]any{}
+	for key, value := range parentParams {
+		next[key] = value
+	}
+	for key, value := range params {
+		next[key] = value
+	}
+	for _, field := range fields {
 		if _, exists := next[field.Name]; !exists && field.Default != nil {
 			next[field.Name] = field.Default
 		}
