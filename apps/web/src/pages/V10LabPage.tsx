@@ -321,7 +321,8 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     let saved = false;
     await run(async () => {
       const oldName = config.name;
-      const next = normalizeConfig(await v10LabApi.updateMaquette(selectedName || oldName, normalizeConfig(config)));
+      const nextConfig = normalizeConfig({ ...config, pipeline: normalizePipelineStepsForActionDefinitions(config.pipeline ?? [], actions) });
+      const next = normalizeConfig(await v10LabApi.updateMaquette(selectedName || oldName, nextConfig));
       setConfig(next);
       setSelectedName(next.name);
       setIsDirty(false);
@@ -342,7 +343,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       showError('Nom du plan d\'actions obligatoire.');
       return;
     }
-    const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
+    const apiSteps = normalizePipelineStepsForActionDefinitions((config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action)), actions);
     await run(async () => {
       let saved: V10SavedActionPlan;
       try {
@@ -382,7 +383,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
       return;
     }
     const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
-    updateConfig({ ...config, pipeline: [...apiSteps, ...deepClonePipeline(plan.actions)] });
+    updateConfig({ ...config, pipeline: [...apiSteps, ...normalizePipelineStepsForActionDefinitions(deepClonePipeline(plan.actions), actions)] });
     setMessage('Plan d\'actions ajouté au plan actuel.');
   }
 
@@ -390,7 +391,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
     if (!config) {
       return;
     }
-    const apiSteps = (config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action));
+    const apiSteps = normalizePipelineStepsForActionDefinitions((config.pipeline ?? []).filter((step) => !systemPipelineActions.has(step.action)), actions);
     const payload: ImportableActionPlan = {
       schema: 'toolbox-v10-lab-action-plan',
       version: 1,
@@ -436,7 +437,7 @@ export function V10LabPage({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (han
         return;
       }
       const legacySteps = (config.pipeline ?? []).filter((step) => systemPipelineActions.has(step.action));
-      updateConfig({ ...config, pipeline: [...legacySteps, ...deepClonePipeline(importedSteps)] });
+      updateConfig({ ...config, pipeline: [...legacySteps, ...normalizePipelineStepsForActionDefinitions(deepClonePipeline(importedSteps), actions)] });
       setActionPlanName(parsed.name ?? '');
       setMessage(m.pipeline.importedUnsaved);
     } catch (err) {
@@ -1710,7 +1711,9 @@ function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActio
     toggleStep(index);
   };
   const updateStep = (index: number, step: PipelineStep) => {
-    onChange({ ...config, pipeline: apiSteps.map((item, itemIndex) => itemIndex === index ? step : item) });
+    const action = byID[step.action];
+    const nextStep = action ? { ...step, params: normalizeActionParamsForSave(action, step.params ?? {}) } : step;
+    onChange({ ...config, pipeline: apiSteps.map((item, itemIndex) => itemIndex === index ? nextStep : item) });
   };
   const move = (index: number, direction: -1 | 1) => {
     const next = [...apiSteps];
@@ -2125,6 +2128,60 @@ function actionValuesEqual(left: unknown, right: unknown): boolean {
     return leftNumber === rightNumber;
   }
   return String(left) === String(right);
+}
+
+export function normalizePipelineStepsForActionDefinitions(steps: PipelineStep[], actions: V10Action[]): PipelineStep[] {
+  const byID = new Map(actions.map((action) => [action.id, action]));
+  return steps.map((step) => {
+    const action = byID.get(step.action);
+    if (!action) {
+      return { ...step, params: { ...(step.params ?? {}) } };
+    }
+    return { ...step, params: normalizeActionParamsForSave(action, step.params ?? {}) };
+  });
+}
+
+export function normalizeActionParamsForSave(action: V10Action, params: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...params };
+  pruneHiddenActionFieldValues(action.fields ?? [], next);
+  return next;
+}
+
+function pruneHiddenActionFieldValues(fields: V10Action['fields'], params: Record<string, unknown>, parentParams: Record<string, unknown> = {}) {
+  const visibilityParams = actionFieldVisibilityParams(fields, params, parentParams);
+  for (const field of fields) {
+    if (actionFieldHidden(field, visibilityParams)) {
+      delete params[field.name];
+      continue;
+    }
+    if (field.type === 'object[]' && field.itemFields?.length) {
+      params[field.name] = normalizeObjectArrayFieldValue(params[field.name], field.itemFields, visibilityParams);
+    }
+  }
+}
+
+function normalizeObjectArrayFieldValue(value: unknown, itemFields: V10Action['fields'], parentParams: Record<string, unknown>): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((row) => {
+    if (!isRecord(row)) {
+      return row;
+    }
+    const next = { ...row };
+    pruneHiddenActionFieldValues(itemFields, next, parentParams);
+    return next;
+  });
+}
+
+function actionFieldVisibilityParams(fields: V10Action['fields'], params: Record<string, unknown>, parentParams: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...parentParams, ...params };
+  for (const field of fields) {
+    if (next[field.name] === undefined && field.default !== undefined && field.default !== null) {
+      next[field.name] = field.default;
+    }
+  }
+  return next;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

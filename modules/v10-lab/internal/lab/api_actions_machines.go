@@ -13,6 +13,7 @@ type CreateMachinePayload struct {
 	CharsEOL                              string                `json:"chars_eol"`
 	IsFileDeletionAllowed                 bool                  `json:"is_file_deletion_allowed"`
 	IsFileViewingAllowed                  bool                  `json:"is_file_viewing_allowed"`
+	IsFileComparisonAllowed               bool                  `json:"is_file_comparison_allowed"`
 	IsRootBrowsingAllowed                 bool                  `json:"is_root_browsing_allowed"`
 	TargetName                            string                `json:"target_name"`
 	IsConfirmDeletionBeforeLoadDisabled   bool                  `json:"is_confirm_deletion_before_load_disabled"`
@@ -82,6 +83,7 @@ func createMachinePayload(params map[string]any) CreateMachinePayload {
 		CharsEOL:                              stringParam(params, "chars_eol"),
 		IsFileDeletionAllowed:                 boolParam(params, "is_file_deletion_allowed"),
 		IsFileViewingAllowed:                  boolParam(params, "is_file_viewing_allowed"),
+		IsFileComparisonAllowed:               boolParam(params, "is_file_comparison_allowed"),
 		IsRootBrowsingAllowed:                 boolParam(params, "is_root_browsing_allowed"),
 		TargetName:                            stringParam(params, "target_name"),
 		IsConfirmDeletionBeforeLoadDisabled:   boolParam(params, "is_confirm_deletion_before_load_disabled"),

@@ -535,6 +535,7 @@ func RegisteredLogsDir(name string) string {
 
 func NormalizeConfigForSave(config *Config) {
 	MaterializeConfigDefaults(config)
+	normalizeConfigPipelineForSave(config)
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -547,6 +548,7 @@ func LoadConfig(path string) (Config, error) {
 		return Config{}, err
 	}
 	MaterializeConfigDefaults(&config)
+	normalizeConfigPipelineForSave(&config)
 	return config, nil
 }
 

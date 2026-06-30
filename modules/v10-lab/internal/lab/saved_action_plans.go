@@ -77,7 +77,7 @@ func SaveActionPlan(input SaveActionPlanInput) (SavedActionPlan, error) {
 		Name:        name,
 		ProductID:   productID,
 		Description: strings.TrimSpace(input.Description),
-		Actions:     clonePipelineSteps(input.Actions),
+		Actions:     normalizePipelineStepsForSave(input.Actions),
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -140,6 +140,9 @@ func loadActionPlanRegistry() (actionPlanRegistry, error) {
 	}
 	if registry.Plans == nil {
 		registry.Plans = []SavedActionPlan{}
+	}
+	for index := range registry.Plans {
+		registry.Plans[index].Actions = normalizePipelineStepsForSave(registry.Plans[index].Actions)
 	}
 	return registry, nil
 }

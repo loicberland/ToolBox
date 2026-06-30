@@ -209,8 +209,28 @@ func TestCreateMachinePayloadWithoutCommandProgram(t *testing.T) {
 	if payload.HasCommandProgram {
 		t.Fatalf("expected command program disabled: %#v", payload)
 	}
-	if payload.CommandProgramName != "ignored-by-ui-but-kept" {
-		t.Fatalf("backend builder should not drop provided hidden values: %#v", payload)
+	if payload.CommandProgramName != "" {
+		t.Fatalf("hidden command program data must not be sent: %#v", payload)
+	}
+}
+
+func TestParamsWithDefaultsDropsMultipleHiddenConditionalFieldsBeforeExecution(t *testing.T) {
+	params := paramsWithDefaults(mustFindAction(t, "create-machine"), map[string]any{
+		"entity_name":                                "Machine",
+		"has_command_program":                        false,
+		"command_program_name":                       "old",
+		"command_program_regexp":                     "old-regexp",
+		"wait_between_command_program_check_seconds": float64(45),
+		"description":                                "kept",
+	})
+
+	for _, key := range []string{"command_program_name", "command_program_regexp", "wait_between_command_program_check_seconds"} {
+		if _, exists := params[key]; exists {
+			t.Fatalf("hidden field %s should not be passed to execution: %#v", key, params)
+		}
+	}
+	if params["description"] != "kept" || params["entity_name"] != "Machine" || params["has_command_program"] != false {
+		t.Fatalf("visible fields should stay available for execution: %#v", params)
 	}
 }
 

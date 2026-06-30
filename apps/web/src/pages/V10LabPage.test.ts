@@ -1,11 +1,11 @@
-import type { V10Config, V10Product } from '../api/v10Lab';
+import type { V10Action, V10Config, V10Product } from '../api/v10Lab';
 import fr from '../i18n/fr.json';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
 Object.assign(globalThis, { window: { TOOLBOX: { services: { api: { url: '/api' } } } } });
 
-const { executableCommandGroups, maquetteJSONFileName, prettyJSONForDownload } = require('./V10LabPage') as typeof import('./V10LabPage');
+const { executableCommandGroups, maquetteJSONFileName, normalizeActionParamsForSave, normalizePipelineStepsForActionDefinitions, prettyJSONForDownload } = require('./V10LabPage') as typeof import('./V10LabPage');
 
 describe('executableCommandGroups', () => {
   const product: V10Product = {
@@ -63,6 +63,102 @@ describe('DuplicateMaquetteDialog', () => {
     const source = readFileSync(join(__dirname, 'V10LabPage.tsx'), 'utf8');
     expect(source).toMatch(/<label className="duplicate-copy-data"><input type="checkbox" checked=\{copyData\}/);
     expect(source).toMatch(/<input type="checkbox" checked=\{copyData\}[\s\S]*?<span>\{m\.copyData\}<\/span><\/label>/);
+  });
+});
+
+describe('action conditional fields normalization', () => {
+  const action: V10Action = {
+    id: 'create-machine',
+    label: 'Machine',
+    description: '',
+    kind: 'api',
+    products: ['gedix-prod-v10'],
+    fields: [
+      { name: 'entity_name', label: 'Nom', type: 'string', required: true, default: 'Machine', description: '' },
+      { name: 'has_command_program', label: 'Programme', type: 'bool', required: false, default: false, description: '' },
+      { name: 'command_program_name', label: 'Nom programme', type: 'string', required: false, default: '', description: '', hiddenWhen: { has_command_program: false } },
+      { name: 'command_program_regexp', label: 'Regex', type: 'string', required: false, default: '', description: '', hiddenWhen: { has_command_program: false } },
+      { name: 'description', label: 'Description', type: 'string', required: false, default: '', description: '' },
+      {
+        name: 'rows',
+        label: 'Rows',
+        type: 'object[]',
+        required: false,
+        default: [],
+        description: '',
+        itemFields: [
+          { name: 'enabled', label: 'Enabled', type: 'bool', required: false, default: false, description: '' },
+          { name: 'detail', label: 'Detail', type: 'string', required: false, default: '', description: '', hiddenWhen: { enabled: false } },
+        ],
+      },
+    ],
+  };
+
+  it('keeps visible conditional values and unrelated fields', () => {
+    expect(normalizeActionParamsForSave(action, {
+      entity_name: 'Machine',
+      has_command_program: true,
+      command_program_name: 'CMD',
+      command_program_regexp: 'LOAD',
+      description: 'kept',
+    })).toEqual({
+      entity_name: 'Machine',
+      has_command_program: true,
+      command_program_name: 'CMD',
+      command_program_regexp: 'LOAD',
+      description: 'kept',
+    });
+  });
+
+  it('removes every hidden value without failing on missing hidden fields', () => {
+    expect(normalizeActionParamsForSave(action, {
+      entity_name: 'Machine',
+      has_command_program: false,
+      command_program_name: 'old',
+      command_program_regexp: 'old-regexp',
+      description: 'kept',
+    })).toEqual({
+      entity_name: 'Machine',
+      has_command_program: false,
+      description: 'kept',
+    });
+  });
+
+  it('does not restore old hidden values when the checkbox is checked again later', () => {
+    const unchecked = normalizeActionParamsForSave(action, {
+      entity_name: 'Machine',
+      has_command_program: false,
+      command_program_name: 'old',
+    });
+
+    expect(normalizeActionParamsForSave(action, { ...unchecked, has_command_program: true })).toEqual({
+      entity_name: 'Machine',
+      has_command_program: true,
+    });
+  });
+
+  it('normalizes nested conditional fields in object arrays', () => {
+    expect(normalizeActionParamsForSave(action, {
+      entity_name: 'Machine',
+      rows: [
+        { enabled: true, detail: 'visible' },
+        { enabled: false, detail: 'hidden' },
+      ],
+    })).toEqual({
+      entity_name: 'Machine',
+      rows: [
+        { enabled: true, detail: 'visible' },
+        { enabled: false },
+      ],
+    });
+  });
+
+  it('normalizes imported or exported pipeline steps with matching action definitions', () => {
+    expect(normalizePipelineStepsForActionDefinitions([{
+      action: 'create-machine',
+      label: 'Machine',
+      params: { entity_name: 'Machine', has_command_program: false, command_program_name: 'old' },
+    }], [action])[0].params).toEqual({ entity_name: 'Machine', has_command_program: false });
   });
 });
 
