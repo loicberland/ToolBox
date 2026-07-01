@@ -126,7 +126,7 @@ export function PipelineBuilder({ config, actions, savedActionPlans, selectedSav
       {actions.length === 0 && <p className="muted">{m.actionPlan.noActionsForProduct}</p>}
       {apiSteps.length > 0 && (
         <div className="button-row">
-          <Button type="button" size="sm" variant="secondary" onClick={() => setAllExpanded(false)}>Tout rÃ©duire</Button>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setAllExpanded(false)}>Tout réduire</Button>
           <Button type="button" size="sm" variant="secondary" onClick={() => setAllExpanded(true)}>Tout agrandir</Button>
         </div>
       )}
@@ -146,8 +146,8 @@ export function PipelineBuilder({ config, actions, savedActionPlans, selectedSav
                 onClick={() => toggleStep(index)}
                 onKeyDown={(event) => handleStepHeaderKey(event, index)}
               >
-                <button type="button" className="v10-chevron" aria-label={expanded ? 'RÃ©duire action' : 'Agrandir action'} aria-expanded={expanded} onClick={(event) => { event.stopPropagation(); toggleStep(index); }}>
-                  {expanded ? 'â–¾' : 'â–¸'}
+                <button type="button" className="v10-chevron" aria-label={expanded ? 'Réduire action' : 'Agrandir action'} aria-expanded={expanded} onClick={(event) => { event.stopPropagation(); toggleStep(index); }}>
+                  {expanded ? '▾' : '▸'}
                 </button>
                 <div className="v10-pipeline-step-summary">
                   <strong>{step.label || action?.label || m.chooseAction}</strong>
