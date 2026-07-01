@@ -685,7 +685,13 @@ export function prettyJSONForDownload(value: string): string {
 }
 
 export function maquetteJSONFileName(value: string): string {
-  const base = value.replace(/(?:\.json)+$/i, '').replace(/[\u0000-\u001F<>:"/\\|?*]/g, '-');
+  const invalidFileNameChars = /[<>:"/\\|?*]/;
+  const base = Array.from(value.replace(/(?:\.json)+$/i, ''))
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || invalidFileNameChars.test(char) ? '-' : char;
+    })
+    .join('');
   return `${base || 'maquette'}.json`;
 }
 
