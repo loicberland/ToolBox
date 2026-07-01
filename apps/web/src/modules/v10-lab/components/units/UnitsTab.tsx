@@ -1,10 +1,9 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { ConnectorConfig, UnitKind, V10Config, V10Product } from '../../api/v10Lab';
+﻿import React, { useEffect, useState } from 'react';
+import { UnitKind, V10Config, V10Product } from '../../api/v10Lab';
 import { messages } from '../../../../i18n';
 import { Button } from '../../../../shared/components/ui/Button';
 import {
   ConnectorFormRow,
-  allUnitsForConfig,
   hasDuplicateConnector,
   makeID,
   matchesSearch,

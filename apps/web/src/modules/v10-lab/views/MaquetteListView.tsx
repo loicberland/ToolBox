@@ -2,7 +2,6 @@
 import { MaquetteSummary } from '../api/v10Lab';
 import { Button } from '../../../shared/components/ui/Button';
 import { messages } from '../../../i18n';
-import { formatDate } from '../utils/v10LabUtils';
 
 const m = messages.v10Lab;
 function MaquetteList({ items, selectedName, onToggle, onDuplicate }: { items: MaquetteSummary[]; selectedName: string; onToggle: (name: string) => Promise<void>; onDuplicate: (item: MaquetteSummary) => void }) {

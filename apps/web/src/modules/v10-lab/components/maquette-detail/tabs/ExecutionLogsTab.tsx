@@ -1,10 +1,9 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { ExecutableCommandTargetKind, ExecutionResponse, LogSummary, V10Config, V10Product } from '../../../api/v10Lab';
 import { Button } from '../../../../../shared/components/ui/Button';
 import { messages } from '../../../../../i18n';
 import { DebugTargetsEditor } from './GeneralTab';
 import {
-  customArgumentsForTarget,
   executableCommandHasUnclosedQuote,
   executableCommandGroups,
   executableCommandOptionValue,

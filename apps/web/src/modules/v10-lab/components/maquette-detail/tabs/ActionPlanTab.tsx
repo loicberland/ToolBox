@@ -10,13 +10,8 @@ import {
   isActionFieldHidden,
   isRecord,
   normalizeActionParamsForSave,
-  normalizeObjectArrayFieldValue,
-  normalizePipelineStepsForActionDefinitions,
   paramsFromActionDefaults,
   stringValue,
-  validateNumberArrayMin,
-  validateNumberMin,
-  validateUniqueObjectArrayField,
 } from '../../../utils/v10LabUtils';
 
 const m = messages.v10Lab;
@@ -364,7 +359,7 @@ export function ActionNumberArrayField({ field, value, onChange }: { field: V10A
         </div>
       ))}
       <Button type="button" size="sm" variant="secondary" onClick={() => onChange([...rows, min ?? 0])}>{m.addGroup}</Button>
-      {hasInvalidValue && <span className="error">Les IDs groupes machine doivent Ãªtre supÃ©rieurs Ã  0.</span>}
+      {hasInvalidValue && <span className="error">Les IDs groupes machine doivent être supérieurs à 0.</span>}
       {field.description && <span className="muted">{field.description}</span>}
     </div>
   );
@@ -424,7 +419,7 @@ export function ActionObjectArrayField({ field, value, config, params, onChange 
         </div>
       ))}
       <Button type="button" size="sm" variant="secondary" onClick={addRow} disabled={allUniqueValuesUsed}>{m.addStep}</Button>
-      {allUniqueValuesUsed && <span className="muted">Toutes les clÃ©s de configuration disponibles sont dÃ©jÃ  utilisÃ©es.</span>}
+      {allUniqueValuesUsed && <span className="muted">Toutes les clés de configuration disponibles sont déjà utilisées.</span>}
     </div>
   );
 }

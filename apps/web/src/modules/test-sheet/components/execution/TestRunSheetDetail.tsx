@@ -20,8 +20,6 @@ type Props = {
   onEvidenceChanged: () => Promise<void>;
 };
 
-const statuses: TestRunStep['status'][] = ['pending', 'passed', 'failed', 'blocked', 'skipped'];
-
 export function TestRunSheetDetail({ sheet, readOnly = false, onSaveSheet, onSaveStep, onEvidenceChanged }: Props) {
   const [openedStepId, setOpenedStepId] = useState<number | undefined>();
   const [stepDrafts, setStepDrafts] = useState<Record<number, RunStepInput>>({});

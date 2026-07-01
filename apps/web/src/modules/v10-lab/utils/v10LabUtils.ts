@@ -295,18 +295,18 @@ export function isPipelineRequiredValueEmpty(value: unknown): boolean {
 export function validateNumberArrayMin(value: unknown, min: number): string {
   const values = normalizeNumberArray(value);
   if (!values.valid || values.items.some((item) => item < min)) {
-    return `Les IDs groupes machine doivent Ãªtre supÃ©rieurs ou Ã©gaux Ã  ${formatNumberForMessage(min)}.`;
+    return `Les IDs groupes machine doivent être supérieurs ou égaux à ${formatNumberForMessage(min)}.`;
   }
   return '';
 }
 
 export function validateNumberMin(value: unknown, min: number, label: string, required = false): string {
   if (value === undefined || value === null || value === '') {
-    return required ? `Le champ "${label}" doit Ãªtre supÃ©rieur ou Ã©gal Ã  ${formatNumberForMessage(min)}.` : '';
+    return required ? `Le champ "${label}" doit être supérieurs ou égaux à ${formatNumberForMessage(min)}.` : '';
   }
   const number = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(number) || number < min) {
-    return `Le champ "${label}" doit Ãªtre supÃ©rieur ou Ã©gal Ã  ${formatNumberForMessage(min)}.`;
+    return `Le champ "${label}" doit être supérieurs ou égaux à ${formatNumberForMessage(min)}.`;
   }
   return '';
 }

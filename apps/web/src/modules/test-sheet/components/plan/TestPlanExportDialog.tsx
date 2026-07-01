@@ -72,7 +72,7 @@ export function TestPlanExportDialog({ planId, planName, onClose, onError }: Pro
           </label>
           <label className="export-option">
             <input className="export-option-checkbox" type="checkbox" checked={options.includeHistory} onChange={(event) => setOption('includeHistory', event.currentTarget.checked)} />
-            <span className="export-option-label">Historique d'exécution</span>
+            <span className="export-option-label">{"Historique d'exécution"}</span>
           </label>
           <label className="export-option">
             <input className="export-option-checkbox" type="checkbox" checked={options.includeEvidences} onChange={(event) => setOption('includeEvidences', event.currentTarget.checked)} />

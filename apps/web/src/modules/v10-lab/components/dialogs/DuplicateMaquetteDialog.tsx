@@ -1,8 +1,6 @@
 ﻿import React, { useEffect, useRef } from 'react';
 import { Button } from '../../../../shared/components/ui/Button';
-import { ConfirmDialog } from '../../../../shared/components/ui/ConfirmDialog';
 import { messages } from '../../../../i18n';
-import { RequiredDot } from '../form/RequiredDot';
 
 const m = messages.v10Lab;
 export function DuplicateMaquetteDialog({ open, name, parentPath, copyData, busy, error, onNameChange, onParentPathChange, onCopyDataChange, onCancel, onConfirm }: { open: boolean; name: string; parentPath: string; copyData: boolean; busy: boolean; error: string; onNameChange: (value: string) => void; onParentPathChange: (value: string) => void; onCopyDataChange: (value: boolean) => void; onCancel: () => void; onConfirm: () => void }) {

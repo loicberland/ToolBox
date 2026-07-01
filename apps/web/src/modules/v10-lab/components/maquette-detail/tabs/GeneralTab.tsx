@@ -2,19 +2,17 @@
 import { MaquetteGroup, V10Config, V10Product } from '../../../api/v10Lab';
 import { messages } from '../../../../../i18n';
 import { Button } from '../../../../../shared/components/ui/Button';
-import { RequiredDot } from '../../form/RequiredDot';
 import { GedixForm } from './GedixConfigTab';
 import {
   customArgumentsForTarget,
   executableCommandGroups,
-  executableCommandOptionValue,
   materializeProductServices,
   productFor,
 } from '../../../utils/v10LabUtils';
 
 const m = messages.v10Lab;
 
-function ExecutableCommandOptions({ groups, excludedNames = [], valueFor = executableCommandOptionValue }: { groups: ReturnType<typeof executableCommandGroups>; excludedNames?: string[]; valueFor?: (option: ReturnType<typeof executableCommandGroups>[number]['options'][number]) => string }) {
+function ExecutableCommandOptions({ groups, excludedNames = [], valueFor = (option) => option.name }: { groups: ReturnType<typeof executableCommandGroups>; excludedNames?: string[]; valueFor?: (option: ReturnType<typeof executableCommandGroups>[number]['options'][number]) => string }) {
   const excluded = new Set(excludedNames);
   return <>
     {groups.map((group) => {

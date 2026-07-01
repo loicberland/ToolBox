@@ -1,8 +1,6 @@
 ﻿import React from 'react';
 import { V10Config } from '../../../api/v10Lab';
-import { messages } from '../../../../../i18n';
 
-const m = messages.v10Lab;
 export function GedixForm({ config, onChange, compact = false }: { config: V10Config; onChange: (config: V10Config) => void; compact?: boolean }) {
   const content = (
     <>
