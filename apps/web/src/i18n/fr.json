@@ -233,7 +233,27 @@
       "module": "Module",
       "frontAlreadyRunning": "gx-front est déjà lancé.",
       "frontStarted": "gx-front n’était pas lancé, démarrage automatique.",
-      "consoleOpened": "Console de commande exécutable ouverte."
+      "consoleOpened": "Console de commande exécutable ouverte.",
+      "history": {
+        "title": "Historique des commandes",
+        "favorites": "Commandes favorites",
+        "recent": "Historique récent",
+        "empty": "Aucune commande exécutée pour cette maquette.",
+        "emptyRecent": "Aucune commande récente non favorite.",
+        "loading": "Chargement de l'historique...",
+        "loadError": "Impossible de charger l'historique des commandes.",
+        "saveError": "Impossible de mettre à jour l'historique des commandes.",
+        "reload": "Recharger",
+        "clear": "Effacer l'historique",
+        "clearConfirm": "Supprimer toutes les commandes non favorites de cette maquette ?",
+        "reuse": "Réutiliser",
+        "rerun": "Relancer",
+        "addFavorite": "Ajouter aux favoris",
+        "removeFavorite": "Retirer des favoris",
+        "delete": "Supprimer cette commande",
+        "missingTarget": "La cible d'origine n'est plus disponible.",
+        "executionCount": "{{count}} exécutions"
+      }
     },
     "execution": {
       "actionsTitle": "Actions maquette",

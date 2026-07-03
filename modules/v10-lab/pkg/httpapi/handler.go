@@ -65,6 +65,11 @@ func (h *Handler) Register(r *mux.Router) {
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/actions/{actionId}/run", h.runMaquetteAction).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/executable-command/run", h.runModuleCommand).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/module-command/run", h.runModuleCommand).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/executable-command/history", h.listExecutableCommandHistory).Methods(http.MethodGet)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/executable-command/history", h.recordExecutableCommandHistory).Methods(http.MethodPost)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/executable-command/history/non-favorites", h.clearExecutableCommandHistoryNonFavorites).Methods(http.MethodDelete)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/executable-command/history/{id}", h.deleteExecutableCommandHistoryEntry).Methods(http.MethodDelete)
+	r.HandleFunc("/api/v10-lab/maquettes/{name}/executable-command/history/{id}/favorite", h.setExecutableCommandHistoryFavorite).Methods(http.MethodPut)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/open-url", h.maquetteOpenURL).Methods(http.MethodGet)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/open-folder", h.openMaquetteFolder).Methods(http.MethodPost)
 	r.HandleFunc("/api/v10-lab/maquettes/{name}/run/current", h.currentRun).Methods(http.MethodGet)
@@ -174,6 +179,10 @@ type ModuleCommandRunRequest struct {
 	TargetName string                          `json:"targetName"`
 	Command    string                          `json:"command"`
 	UnitName   string                          `json:"unitName,omitempty"`
+}
+
+type ExecutableCommandHistoryFavoriteRequest struct {
+	Favorite bool `json:"favorite"`
 }
 
 type MaquetteGroupRequest struct {
@@ -585,14 +594,64 @@ func (h *Handler) runModuleCommand(w http.ResponseWriter, r *http.Request) {
 		respondError(w, err)
 		return
 	}
+	targetKind, targetName := moduleCommandTarget(request)
 	run, ok := h.acquireRun(name)
 	if !ok {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Une execution est deja en cours pour cette maquette."})
 		return
 	}
+	if _, err := lab.RecordExecutableCommand(name, lab.ExecutableCommandHistoryEntry{
+		TargetKind: targetKind,
+		TargetName: targetName,
+		Command:    request.Command,
+	}); err != nil {
+		h.releaseRun(name)
+		respondError(w, err)
+		return
+	}
 
 	go h.executeModuleCommandRun(run, config, request)
 	writeJSON(w, http.StatusAccepted, run.snapshot())
+}
+
+func (h *Handler) listExecutableCommandHistory(w http.ResponseWriter, r *http.Request) {
+	items, err := lab.ListExecutableCommandHistory(mux.Vars(r)["name"])
+	respond(w, items, err)
+}
+
+func (h *Handler) recordExecutableCommandHistory(w http.ResponseWriter, r *http.Request) {
+	var request ModuleCommandRunRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	targetKind, targetName := moduleCommandTarget(request)
+	items, err := lab.RecordExecutableCommand(mux.Vars(r)["name"], lab.ExecutableCommandHistoryEntry{
+		TargetKind: targetKind,
+		TargetName: targetName,
+		Command:    request.Command,
+	})
+	respond(w, items, err)
+}
+
+func (h *Handler) setExecutableCommandHistoryFavorite(w http.ResponseWriter, r *http.Request) {
+	var request ExecutableCommandHistoryFavoriteRequest
+	if !decode(w, r, &request) {
+		return
+	}
+	vars := mux.Vars(r)
+	items, err := lab.SetExecutableCommandHistoryFavorite(vars["name"], vars["id"], request.Favorite)
+	respond(w, items, err)
+}
+
+func (h *Handler) deleteExecutableCommandHistoryEntry(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	items, err := lab.DeleteExecutableCommandHistoryEntry(vars["name"], vars["id"])
+	respond(w, items, err)
+}
+
+func (h *Handler) clearExecutableCommandHistoryNonFavorites(w http.ResponseWriter, r *http.Request) {
+	items, err := lab.ClearExecutableCommandHistoryNonFavorites(mux.Vars(r)["name"])
+	respond(w, items, err)
 }
 
 func (h *Handler) maquetteOpenURL(w http.ResponseWriter, r *http.Request) {
@@ -836,6 +895,16 @@ func safeName(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
+func moduleCommandTarget(request ModuleCommandRunRequest) (lab.ExecutableCommandTargetKind, string) {
+	targetKind := request.TargetKind
+	targetName := request.TargetName
+	if targetKind == "" && targetName == "" && request.UnitName != "" {
+		targetKind = lab.ExecutableCommandTargetConnector
+		targetName = request.UnitName
+	}
+	return targetKind, targetName
+}
+
 func (h *Handler) acquireRun(name string) (*currentRun, bool) {
 	key := safeName(name)
 	h.mu.Lock()
@@ -846,6 +915,13 @@ func (h *Handler) acquireRun(name string) (*currentRun, bool) {
 	run := &currentRun{name: name, running: true, status: "running", startedAt: time.Now()}
 	h.runs[key] = run
 	return run, true
+}
+
+func (h *Handler) releaseRun(name string) {
+	key := safeName(name)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.runs, key)
 }
 
 func (h *Handler) getRun(name string) *currentRun {
@@ -887,12 +963,7 @@ func (h *Handler) executeActionRun(run *currentRun, config lab.Config, actionID 
 
 func (h *Handler) executeModuleCommandRun(run *currentRun, config lab.Config, request ModuleCommandRunRequest) {
 	startedAt := time.Now()
-	targetKind := request.TargetKind
-	targetName := request.TargetName
-	if targetKind == "" && targetName == "" && request.UnitName != "" {
-		targetKind = lab.ExecutableCommandTargetConnector
-		targetName = request.UnitName
-	}
+	targetKind, targetName := moduleCommandTarget(request)
 	err := lab.RunExecutableCommand(config, lab.ExecutableCommandRequest{
 		TargetKind: targetKind,
 		TargetName: targetName,

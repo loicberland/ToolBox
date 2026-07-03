@@ -1877,6 +1877,122 @@ textarea {
   margin: 0;
 }
 
+.v10-module-command {
+  display: grid;
+  gap: 10px;
+}
+
+.v10-command-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.v10-command-history-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.v10-command-history-header h5,
+.v10-command-history-section h6 {
+  margin: 0;
+}
+
+.v10-command-history-section {
+  display: grid;
+  gap: 8px;
+}
+
+.v10-command-history-section ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.v10-command-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px;
+  background: var(--surface);
+}
+
+.v10-command-history-item.missing-target {
+  border-color: #facc15;
+}
+
+.v10-command-history-main {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.v10-command-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.v10-command-history-meta strong {
+  color: var(--text);
+}
+
+.v10-command-history-main code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.v10-command-history-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.v10-icon-button {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.v10-icon-button.active {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.v10-icon-button.danger {
+  color: var(--danger);
+}
+
+.v10-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .v10-collapsible-section summary {
   cursor: pointer;
   font-size: 1rem;
@@ -2222,6 +2338,8 @@ select.field-invalid {
   .v10-log-layout,
   .v10-file-row,
   .v10-startup-argument-row,
+  .v10-command-history-header,
+  .v10-command-history-item,
   .v10-saved-plan-header,
   .v10-saved-plan-load,
   .v10-saved-plan-save,
@@ -2232,6 +2350,11 @@ select.field-invalid {
   .run-step-progress-summary,
   .status-action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .v10-command-history-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .v10-form-grid > .span-2 {

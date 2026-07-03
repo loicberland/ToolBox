@@ -429,6 +429,9 @@ func SaveRegisteredConfigReplacing(oldName string, config Config) (RegisteredMaq
 			_ = renamePathHandlingCaseOnly(newDir, oldDir)
 			return RegisteredMaquette{}, err
 		}
+		if err := RenameCommandHistoryMaquette(oldName, config.Name); err != nil {
+			return RegisteredMaquette{}, err
+		}
 		return item, nil
 	}
 	return saveRegisteredConfigIntoDir(config, newDir)

@@ -5,6 +5,16 @@ export const DEFAULT_V10_PRODUCT_ID = 'gedix-prod-v10';
 export type UnitKind = 'connector' | 'agent' | 'adaptor' | '';
 export type ExecutableCommandTargetKind = 'root' | 'service' | 'connector' | 'agent' | 'adaptor';
 
+export type ExecutableCommandHistoryEntry = {
+  id: string;
+  targetKind: ExecutableCommandTargetKind;
+  targetName: string;
+  command: string;
+  lastExecutedAt: string;
+  executionCount: number;
+  favorite: boolean;
+};
+
 export type V10UnitDefinition = {
   kind: UnitKind;
   singularLabel: string;
@@ -279,6 +289,11 @@ export const v10LabApi = {
   runMaquette: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run`, { method: 'POST' }),
   runAction: (name: string, actionId: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/actions/${encodeURIComponent(actionId)}/run`, { method: 'POST' }),
   runExecutableCommand: (name: string, targetKind: ExecutableCommandTargetKind, targetName: string, command: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/executable-command/run`, jsonRequest('POST', { targetKind, targetName, command })),
+  listExecutableCommandHistory: (name: string) => request<ExecutableCommandHistoryEntry[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/executable-command/history`),
+  recordExecutableCommandHistory: (name: string, targetKind: ExecutableCommandTargetKind, targetName: string, command: string) => request<ExecutableCommandHistoryEntry[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/executable-command/history`, jsonRequest('POST', { targetKind, targetName, command })),
+  setExecutableCommandHistoryFavorite: (name: string, id: string, favorite: boolean) => request<ExecutableCommandHistoryEntry[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/executable-command/history/${encodeURIComponent(id)}/favorite`, jsonRequest('PUT', { favorite })),
+  deleteExecutableCommandHistoryEntry: (name: string, id: string) => request<ExecutableCommandHistoryEntry[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/executable-command/history/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  clearExecutableCommandHistoryNonFavorites: (name: string) => request<ExecutableCommandHistoryEntry[]>(`/v10-lab/maquettes/${encodeURIComponent(name)}/executable-command/history/non-favorites`, { method: 'DELETE' }),
   getMaquetteOpenUrl: (name: string) => request<{ url: string }>(`/v10-lab/maquettes/${encodeURIComponent(name)}/open-url`),
   openMaquetteFolder: (name: string) => request<{ status: string }>(`/v10-lab/maquettes/${encodeURIComponent(name)}/open-folder`, { method: 'POST' }),
   currentRun: (name: string) => request<ExecutionResponse>(`/v10-lab/maquettes/${encodeURIComponent(name)}/run/current`),

@@ -1,81 +1,15 @@
-﻿import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ExecutableCommandTargetKind, ExecutionResponse, LogSummary, V10Config, V10Product } from '../../../api/v10Lab';
 import { Button } from '../../../../../shared/components/ui/Button';
 import { messages } from '../../../../../i18n';
 import { DebugTargetsEditor } from './GeneralTab';
 import {
-  executableCommandHasUnclosedQuote,
-  executableCommandGroups,
-  executableCommandOptionValue,
   formatDate,
   type RunState,
 } from '../../../utils/v10LabUtils';
+import { ModuleCommandPanel } from '../executable-command/ModuleCommandPanel';
+
 const m = messages.v10Lab;
-export type ExecutableCommandOption = {
-  kind: ExecutableCommandTargetKind;
-  name: string;
-  label: string;
-};
-
-export type ExecutableCommandGroup = {
-  label: string;
-  options: ExecutableCommandOption[];
-};
-
-export function ModuleCommandPanel({ config, product, disabled, onRun, showTitle = true }: { config: V10Config; product: V10Product; disabled: boolean; onRun: (targetKind: ExecutableCommandTargetKind, targetName: string, command: string) => void; showTitle?: boolean }) {
-  const groups = executableCommandGroups(config, product);
-  const options = groups.flatMap((group) => group.options);
-  const [selectedValue, setSelectedValue] = useState(options[0] ? executableCommandOptionValue(options[0]) : '');
-  const [command, setCommand] = useState('');
-  const invalid = executableCommandHasUnclosedQuote(command);
-  const selectedOption = options.find((option) => executableCommandOptionValue(option) === selectedValue);
-
-  useEffect(() => {
-    if (!selectedValue || !options.some((option) => executableCommandOptionValue(option) === selectedValue)) {
-      setSelectedValue(options[0] ? executableCommandOptionValue(options[0]) : '');
-    }
-  }, [options.map(executableCommandOptionValue).join('|'), selectedValue]);
-
-  return (
-    <div className="v10-module-command">
-      {showTitle && <h4>{m.moduleCommand.title}</h4>}
-      <p className="muted">{m.moduleCommand.help}</p>
-      <div className="form-grid v10-form-grid">
-        <label>{m.moduleCommand.target}
-          <select value={selectedValue} onChange={(event) => setSelectedValue(event.currentTarget.value)}>
-            <ExecutableCommandOptions groups={groups} valueFor={executableCommandOptionValue} />
-          </select>
-        </label>
-        <label>{m.moduleCommand.command}
-          <input value={command} placeholder={m.moduleCommand.commandPlaceholder} onChange={(event) => setCommand(event.currentTarget.value)} />
-        </label>
-      </div>
-      {invalid && <p className="error">{m.moduleCommand.unclosedQuote}</p>}
-      <div className="button-row">
-        <Button type="button" variant="secondary" disabled={disabled || !selectedOption || !command.trim() || invalid} onClick={() => selectedOption && onRun(selectedOption.kind, selectedOption.name, command)}>
-          {m.moduleCommand.run}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function ExecutableCommandOptions({ groups, excludedNames = [], valueFor = (option: ExecutableCommandOption) => option.name }: { groups: ExecutableCommandGroup[]; excludedNames?: string[]; valueFor?: (option: ExecutableCommandOption) => string }) {
-  const excluded = new Set(excludedNames);
-  return <>
-    {groups.map((group) => {
-      const options = group.options.filter((option) => !excluded.has(option.name));
-      if (!options.length) {
-        return null;
-      }
-      return (
-        <optgroup key={group.label} label={group.label}>
-          {options.map((option) => <option key={valueFor(option)} value={valueFor(option)}>{option.label}</option>)}
-        </optgroup>
-      );
-    })}
-  </>;
-}
 
 export function ExecutionPanel({ config, product, busy, runState, execution, logs, selectedLog, onConfigChange, onCreate, onUpdate, onConfigure, onStart, onOpenMaquette, onRunPipeline, onRunExecutableCommand, onKill, onRefreshLogs, onReadLog }: {
   config: V10Config;
@@ -92,7 +26,7 @@ export function ExecutionPanel({ config, product, busy, runState, execution, log
   onStart: () => void;
   onOpenMaquette: () => void;
   onRunPipeline: () => void;
-  onRunExecutableCommand: (targetKind: ExecutableCommandTargetKind, targetName: string, command: string) => void;
+  onRunExecutableCommand: (targetKind: ExecutableCommandTargetKind, targetName: string, command: string) => Promise<void> | void;
   onKill: () => void;
   onRefreshLogs: () => void;
   onReadLog: (logFile: string) => void;
@@ -152,5 +86,3 @@ export function ExecutionPanel({ config, product, busy, runState, execution, log
 }
 
 export const ExecutionLogsTab = ExecutionPanel;
-
-

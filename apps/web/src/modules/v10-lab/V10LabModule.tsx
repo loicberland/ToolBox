@@ -1141,7 +1141,7 @@ export function V10LabModule({ onBeforeLeaveChange }: { onBeforeLeaveChange?: (h
               onStart={() => void runSystemAction('start-maquette')}
               onOpenMaquette={() => void openCurrentMaquetteURL()}
               onRunPipeline={() => void runCurrent()}
-              onRunExecutableCommand={(targetKind, targetName, command) => void runExecutableCommand(targetKind, targetName, command)}
+              onRunExecutableCommand={runExecutableCommand}
               onKill={() => setConfirmKill(true)}
               onRefreshLogs={() => void refreshLogs()}
               onReadLog={(logFile) => void readLog(logFile)}
