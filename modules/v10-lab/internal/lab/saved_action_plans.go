@@ -77,7 +77,7 @@ func SaveActionPlan(input SaveActionPlanInput) (SavedActionPlan, error) {
 		Name:        name,
 		ProductID:   productID,
 		Description: strings.TrimSpace(input.Description),
-		Actions:     normalizePipelineStepsForSave(input.Actions),
+		Actions:     normalizePipelineStepsForProductSave(input.Actions, productID),
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -142,7 +142,7 @@ func loadActionPlanRegistry() (actionPlanRegistry, error) {
 		registry.Plans = []SavedActionPlan{}
 	}
 	for index := range registry.Plans {
-		registry.Plans[index].Actions = normalizePipelineStepsForSave(registry.Plans[index].Actions)
+		registry.Plans[index].Actions = normalizePipelineStepsForProductSave(registry.Plans[index].Actions, registry.Plans[index].ProductID)
 	}
 	return registry, nil
 }

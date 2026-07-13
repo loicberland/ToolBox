@@ -260,6 +260,7 @@ var productRegistry = []ProductDefinition{
 			{Name: "m2m", Label: "m2m", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "entreprise", Label: "entreprise", HasDatabase: true, SupportsExtraKeys: true},
 			{Name: "etl", Label: "etl", HasDatabase: true, SupportsExtraKeys: true},
+			{Name: "config", Label: "config", HasDatabase: true, SupportsExtraKeys: true},
 		},
 		UnitKind:                     UnitKindAgent,
 		UnitSingularLabel:            "agent",

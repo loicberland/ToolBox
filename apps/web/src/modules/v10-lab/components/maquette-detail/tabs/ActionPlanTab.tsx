@@ -1,11 +1,14 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PipelineStep, V10Action, V10Config, V10SavedActionPlan, v10LabApi } from '../../../api/v10Lab';
 import { Button } from '../../../../../shared/components/ui/Button';
 import { messages } from '../../../../../i18n';
 import { RequiredDot } from '../../form/RequiredDot';
 import {
   actionFieldHidden,
+  actionFieldDescription,
+  actionFieldLabel,
   actionFieldOptions,
+  actionFieldRequired,
   defaultActionPlanName,
   isActionFieldHidden,
   isRecord,
@@ -16,6 +19,7 @@ import {
 
 const m = messages.v10Lab;
 const systemPipelineActions = new Set(['install-env', 'configure-gedix-cfg', 'start-maquette', 'start-services', 'kill-gx-processes', 'update-env']);
+type ComboboxOption = { label: string; value: string };
 export function PipelineBuilder({ config, actions, savedActionPlans, selectedSavedActionPlanID, showSaveActionPlan, actionPlanName, onSelectedSavedActionPlanChange, onShowSaveActionPlanChange, onActionPlanNameChange, onSaveActionPlan, onAddSavedActionPlan, onExportActionPlan, onOpenImportActionPlan, onImportActionPlan, onDeleteSavedActionPlan, importInputRef, onChange }: {
   config: V10Config;
   actions: V10Action[];
@@ -309,15 +313,24 @@ export function ApiTokenEditor({ maquetteName, disabled }: { maquetteName: strin
 }
 
 export function ActionFieldInput({ field, value, config, params, disabledOptionValues, onChange }: { field: V10Action['fields'][number]; value: unknown; config: V10Config; params: Record<string, unknown>; disabledOptionValues?: Set<string>; onChange: (value: unknown) => void }) {
-  const label = <FieldLabel field={field} />;
-  const options = actionFieldOptions(field, config);
-  if (options.length > 0) {
+  const label = <FieldLabel field={field} required={actionFieldRequired(field, params)} params={params} />;
+  const description = actionFieldDescription(field, params);
+  const options = actionFieldOptions(field, config, params);
+  if (options.length > 0 || field.optionsSource) {
+    const allowCustomValue = field.type === 'string' || field.type === 'text' || field.type === 'number';
     return (
       <label>{label}
-        <select value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)}>
-          <option value=""></option>
-          {options.map((option) => <option key={option.value} value={option.value} disabled={disabledOptionValues?.has(option.value)}>{option.label}</option>)}
-        </select>
+        <SearchableSelect
+          value={field.type === 'number' && typeof value === 'number' ? String(value) : stringValue(value)}
+          options={options}
+          disabledOptionValues={disabledOptionValues}
+          disabled={options.length === 0 && !allowCustomValue}
+          allowCustomValue={allowCustomValue}
+          valueType={field.type === 'number' ? 'number' : 'string'}
+          emptyLabel={options.length === 0 ? 'Aucune option disponible' : ''}
+          onChange={onChange}
+        />
+        {description && <span className="muted">{description}</span>}
       </label>
     );
   }
@@ -334,12 +347,159 @@ export function ActionFieldInput({ field, value, config, params, disabledOptionV
     return <ActionObjectArrayField field={field} value={value} config={config} params={params} onChange={onChange} />;
   }
   if (field.type === 'text') {
-    return <label>{label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{field.description && <span className="muted">{field.description}</span>}</label>;
+    return <label>{label}<textarea value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{description && <span className="muted">{description}</span>}</label>;
+  }
+  if (field.type === 'color') {
+    const color = typeof value === 'string' && value.trim() ? value : '#000000';
+    return <ActionColorField label={label} value={color} description={description} onChange={onChange} />;
   }
   if (field.type === 'number') {
-    return <label>{label}<input type="number" min={field.min} value={typeof value === 'number' ? value : ''} onChange={(event) => onChange(event.currentTarget.value === '' ? '' : Number(event.currentTarget.value))} /></label>;
+    return <label>{label}<input type="number" min={field.min} value={typeof value === 'number' ? value : ''} onChange={(event) => onChange(event.currentTarget.value === '' ? '' : Number(event.currentTarget.value))} />{description && <span className="muted">{description}</span>}</label>;
   }
-  return <label>{label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} /></label>;
+  return <label>{label}<input value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)} />{description && <span className="muted">{description}</span>}</label>;
+}
+
+export function SearchableSelect({ value, options, disabledOptionValues, disabled = false, allowCustomValue = false, valueType = 'string', emptyLabel = '', onChange }: { value: string; options: ComboboxOption[]; disabledOptionValues?: Set<string>; disabled?: boolean; allowCustomValue?: boolean; valueType?: 'string' | 'number'; emptyLabel?: string; onChange: (value: unknown) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [inputValue, setInputValue] = useState(displayValueForOption(value, options));
+  const [filterValue, setFilterValue] = useState('');
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const optionsKey = options.map((option) => `${option.value}\u0000${option.label}`).join('\u0001');
+  const enabledOptions = options.filter((option) => !disabledOptionValues?.has(option.value));
+  const query = filterValue.trim().toLowerCase();
+  const filteredOptions = enabledOptions.filter((option) => option.label.toLowerCase().includes(query) || option.value.toLowerCase().includes(query));
+  const visibleOptions = query === '' ? enabledOptions : filteredOptions;
+  const openAndSelectInput = () => {
+    setFilterValue('');
+    setOpen(true);
+    window.requestAnimationFrame(() => inputRef.current?.select());
+  };
+
+  useEffect(() => {
+    setInputValue(displayValueForOption(value, options));
+    setFilterValue('');
+  }, [value, optionsKey]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [filterValue, optionsKey]);
+
+  const commitCustomValue = (nextInput: string) => {
+    if (!allowCustomValue) {
+      return;
+    }
+    if (nextInput === displayValueForOption(value, options)) {
+      return;
+    }
+    if (valueType === 'number') {
+      const trimmed = nextInput.trim();
+      if (trimmed === '') {
+        onChange('');
+        return;
+      }
+      const numberValue = Number(trimmed);
+      if (Number.isFinite(numberValue)) {
+        onChange(numberValue);
+      }
+      return;
+    }
+    onChange(nextInput);
+  };
+  const selectOption = (option: ComboboxOption) => {
+    setInputValue(option.label);
+    setFilterValue('');
+    setOpen(false);
+    if (valueType === 'number') {
+      const numberValue = Number(option.value);
+      onChange(Number.isFinite(numberValue) ? numberValue : '');
+      return;
+    }
+    onChange(option.value);
+  };
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((current) => Math.min(current + 1, Math.max(visibleOptions.length - 1, 0)));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+    if (event.key === 'Enter' && open && visibleOptions[activeIndex]) {
+      event.preventDefault();
+      selectOption(visibleOptions[activeIndex]);
+      return;
+    }
+    if (event.key === 'Enter') {
+      commitCustomValue(inputValue);
+      setOpen(false);
+      return;
+    }
+    if (event.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="v10-combobox">
+      <input
+        ref={inputRef}
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        disabled={disabled}
+        value={inputValue}
+        placeholder={emptyLabel}
+        onFocus={() => {
+          setFilterValue('');
+          setOpen(true);
+        }}
+        onClick={openAndSelectInput}
+        onChange={(event) => {
+          const nextInput = event.currentTarget.value;
+          setInputValue(nextInput);
+          setFilterValue(nextInput);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          commitCustomValue(inputValue);
+          window.setTimeout(() => setOpen(false), 120);
+        }}
+        onKeyDown={handleKeyDown}
+      />
+      {open && !disabled && (
+        <div className="v10-combobox-options" role="listbox">
+          {visibleOptions.length === 0 && <div className="v10-combobox-empty">{emptyLabel || 'Aucune option'}</div>}
+          {visibleOptions.map((option, index) => (
+            <button
+              type="button"
+              key={option.value}
+              className={`v10-combobox-option${index === activeIndex ? ' active' : ''}`}
+              role="option"
+              aria-selected={option.value === value}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                selectOption(option);
+              }}
+            >
+              <span>{option.label}</span>
+              <small>{option.value}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function displayValueForOption(value: string, options: ComboboxOption[]): string {
+  const selected = options.find((option) => option.value === value);
+  return selected?.label ?? value;
 }
 
 export function ActionNumberArrayField({ field, value, onChange }: { field: V10Action['fields'][number]; value: unknown; onChange: (value: unknown) => void }) {
@@ -370,7 +530,7 @@ export function ActionObjectArrayField({ field, value, config, params, onChange 
   const itemFields = field.itemFields ?? [];
   const uniqueFieldName = field.uniqueItemField;
   const uniqueField = uniqueFieldName ? itemFields.find((itemField) => itemField.name === uniqueFieldName) : undefined;
-  const uniqueOptions = uniqueField ? actionFieldOptions(uniqueField, config) : [];
+  const uniqueOptions = uniqueField ? actionFieldOptions(uniqueField, config, params) : [];
   const usedUniqueValues = new Set(rows.map((row) => stringValue(row[uniqueFieldName ?? ''])).filter(Boolean));
   const allUniqueValuesUsed = Boolean(uniqueFieldName && uniqueOptions.length > 0 && uniqueOptions.every((option) => usedUniqueValues.has(option.value)));
   const updateRow = (index: number, key: string, nextValue: unknown) => {
@@ -424,11 +584,24 @@ export function ActionObjectArrayField({ field, value, config, params, onChange 
   );
 }
 
-export function FieldLabel({ field }: { field: V10Action['fields'][number] }) {
+export function ActionColorField({ label, value, description, onChange }: { label: React.ReactNode; value: string; description: string; onChange: (value: unknown) => void }) {
+  const normalized = /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+  return (
+    <label>{label}
+      <div className="v10-color-field">
+        <input type="color" value={normalized} onChange={(event) => onChange(event.currentTarget.value.toUpperCase())} />
+        <input value={value} placeholder="#D0021B" onChange={(event) => onChange(event.currentTarget.value)} />
+      </div>
+      {description && <span className="muted">{description}</span>}
+    </label>
+  );
+}
+
+export function FieldLabel({ field, required = field.required, params = {} }: { field: V10Action['fields'][number]; required?: boolean; params?: Record<string, unknown> }) {
   return (
     <span className="v10-field-label">
-      {field.label}
-      {field.required && <RequiredDot />}
+      {actionFieldLabel(field, params)}
+      {required && <RequiredDot />}
     </span>
   );
 }

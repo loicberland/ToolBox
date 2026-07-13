@@ -36,7 +36,7 @@ func RunPipeline(ctx context.Context, config Config, writer io.Writer) error {
 			return ctx.Err()
 		default:
 		}
-		action, _ := FindAction(step.Action)
+		action, _ := FindActionForProduct(step.Action, config.Product)
 		label := step.Label
 		if strings.TrimSpace(label) == "" {
 			label = action.Label
@@ -55,7 +55,7 @@ func RunPipeline(ctx context.Context, config Config, writer io.Writer) error {
 
 func RunAction(ctx context.Context, config Config, actionID string, writer io.Writer) error {
 	ApplyDefaults(&config)
-	action, ok := FindAction(actionID)
+	action, ok := FindActionForProduct(actionID, config.Product)
 	if !ok {
 		return fmt.Errorf("action inconnue %q", actionID)
 	}

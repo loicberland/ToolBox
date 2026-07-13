@@ -1579,7 +1579,7 @@ func pipelineActions(actions []lab.Action) []lab.Action {
 func apiPipelineSteps(steps []lab.PipelineStep, product string) []lab.PipelineStep {
 	items := []lab.PipelineStep{}
 	for _, step := range steps {
-		action, ok := lab.FindAction(step.Action)
+		action, ok := lab.FindActionForProduct(step.Action, product)
 		if !ok || action.Kind != lab.KindAPI || !action.SupportsProduct(product) {
 			continue
 		}

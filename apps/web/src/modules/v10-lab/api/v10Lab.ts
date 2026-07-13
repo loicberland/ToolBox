@@ -55,10 +55,17 @@ export type V10ActionField = {
   required: boolean;
   default: unknown;
   description: string;
+  labelWhen?: Array<{ when: Record<string, unknown>; text: string }>;
+  descriptionWhen?: Array<{ when: Record<string, unknown>; text: string }>;
   options?: Array<{ label: string; value: string }>;
   optionsSource?: string;
   hiddenWhen?: Record<string, unknown>;
   hiddenWhenAny?: Array<Record<string, unknown>>;
+  hiddenUnless?: Record<string, unknown>;
+  hiddenUnlessAny?: Array<Record<string, unknown>>;
+  hiddenUnlessNonEmpty?: string;
+  requiredWhen?: Record<string, unknown>;
+  requiredWhenAny?: Array<Record<string, unknown>>;
   itemFields?: V10ActionField[];
   uniqueItemField?: string;
   min?: number;

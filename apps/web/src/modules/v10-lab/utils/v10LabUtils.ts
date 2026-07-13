@@ -44,7 +44,7 @@ export type ExecutableCommandGroup = {
   label: string;
   options: ExecutableCommandOption[];
 };
-export function actionFieldOptions(field: V10Action['fields'][number], config: V10Config): Array<{ label: string; value: string }> {
+export function actionFieldOptions(field: V10Action['fields'][number], config: V10Config, params: Record<string, unknown> = {}): Array<{ label: string; value: string }> {
   if (field.options?.length) {
     return field.options;
   }
@@ -53,6 +53,14 @@ export function actionFieldOptions(field: V10Action['fields'][number], config: V
       .sort((left, right) => left.localeCompare(right))
       .map((name) => ({ label: name, value: name }));
   }
+  if (field.optionsSource === 'agents') {
+    return Object.keys(config.gedixConfig.agents ?? {})
+      .sort((left, right) => left.localeCompare(right))
+      .map((name) => ({ label: name, value: name }));
+  }
+  if (field.optionsSource?.startsWith('field:')) {
+    return optionsFromActionFieldSource(field.optionsSource, params);
+  }
   return [];
 }
 
@@ -60,7 +68,19 @@ export function actionFieldHidden(field: V10Action['fields'][number], params: Re
   if (Object.entries(field.hiddenWhen ?? {}).some(([key, expected]) => actionValuesEqual(params[key], expected))) {
     return true;
   }
-  return (field.hiddenWhenAny ?? []).some((group) => actionHiddenGroupMatches(group, params));
+  if ((field.hiddenWhenAny ?? []).some((group) => actionHiddenGroupMatches(group, params))) {
+    return true;
+  }
+  if (field.hiddenUnless && Object.keys(field.hiddenUnless).length > 0 && !actionHiddenGroupMatches(field.hiddenUnless, params)) {
+    return true;
+  }
+  if ((field.hiddenUnlessAny ?? []).length > 0 && !(field.hiddenUnlessAny ?? []).some((group) => actionHiddenGroupMatches(group, params))) {
+    return true;
+  }
+  if (field.hiddenUnlessNonEmpty && isPipelineRequiredValueEmpty(params[field.hiddenUnlessNonEmpty])) {
+    return true;
+  }
+  return false;
 }
 
 export function isActionFieldHidden(field: V10Action['fields'][number], params: Record<string, unknown>): boolean {
@@ -87,15 +107,93 @@ export function actionValuesEqual(left: unknown, right: unknown): boolean {
   return String(left) === String(right);
 }
 
+export function actionFieldRequired(field: V10Action['fields'][number], params: Record<string, unknown>): boolean {
+  if (field.required) {
+    return true;
+  }
+  if (field.requiredWhen && actionHiddenGroupMatches(field.requiredWhen, params)) {
+    return true;
+  }
+  return (field.requiredWhenAny ?? []).some((group) => actionHiddenGroupMatches(group, params));
+}
+
+export function actionFieldLabel(field: V10Action['fields'][number], params: Record<string, unknown>): string {
+  return actionConditionalText(field.labelWhen, params) || field.label;
+}
+
+export function actionFieldDescription(field: V10Action['fields'][number], params: Record<string, unknown>): string {
+  return actionConditionalText(field.descriptionWhen, params) || field.description;
+}
+
+function actionConditionalText(items: Array<{ when: Record<string, unknown>; text: string }> | undefined, params: Record<string, unknown>): string {
+  for (const item of items ?? []) {
+    if (actionHiddenGroupMatches(item.when, params)) {
+      return item.text;
+    }
+  }
+  return '';
+}
+
+export function optionsFromActionFieldSource(source: string, params: Record<string, unknown>): Array<{ label: string; value: string }> {
+  const path = source.slice('field:'.length).split('.').map((item) => item.trim()).filter(Boolean);
+  if (path.length < 2) {
+    return [];
+  }
+  const [arrayField, valueField] = path;
+  const labelField = path[2] ?? valueField;
+  const rows = Array.isArray(params[arrayField]) ? params[arrayField].filter(isRecord) : [];
+  const seen = new Set<string>();
+  const options: Array<{ label: string; value: string }> = [];
+  for (const row of rows) {
+    const value = actionOptionValue(row[valueField]);
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    const label = actionOptionValue(row[labelField]) || value;
+    options.push({ label, value });
+  }
+  return options;
+}
+
+function actionOptionValue(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export function normalizePipelineStepsForActionDefinitions(steps: PipelineStep[], actions: V10Action[]): PipelineStep[] {
   const byID = new Map(actions.map((action) => [action.id, action]));
   return steps.map((step) => {
-    const action = byID.get(step.action);
+    const actionID = canonicalActionID(step.action);
+    const action = byID.get(actionID);
     if (!action) {
-      return { ...step, params: { ...(step.params ?? {}) } };
+      return { ...step, action: actionID, params: { ...(step.params ?? {}) } };
     }
-    return { ...step, params: normalizeActionParamsForSave(action, step.params ?? {}) };
+    return { ...step, action: actionID, params: normalizeActionParamsForSave(action, step.params ?? {}) };
   });
+}
+
+export function canonicalActionID(actionID: string): string {
+  switch (actionID) {
+    case 'create-watch-statusvalue-category':
+      return 'create-statusvalue-category';
+    case 'create-watch-statusvalue':
+      return 'create-statusvalue';
+    case 'create-watch-acquisition-variable':
+      return 'create-acquisition-variable';
+    case 'create-watch-calculated-variable':
+      return 'create-calculated-variable';
+    case 'create-watch-script':
+      return 'create-script';
+    case 'create-watch-target':
+      return 'create-target';
+    case 'create-watch-agent':
+      return 'create-agent';
+    default:
+      return actionID;
+  }
 }
 
 export function normalizeActionParamsForSave(action: V10Action, params: Record<string, unknown>): Record<string, unknown> {
@@ -111,7 +209,13 @@ export function pruneHiddenActionFieldValues(fields: V10Action['fields'], params
       delete params[field.name];
       continue;
     }
+    if (params[field.name] === undefined && field.default !== undefined && field.default !== null) {
+      params[field.name] = cloneActionFieldDefault(field.default);
+    }
     if (field.type === 'object[]' && field.itemFields?.length) {
+      if (!(field.name in params)) {
+        continue;
+      }
       params[field.name] = normalizeObjectArrayFieldValue(params[field.name], field.itemFields, visibilityParams);
     }
   }
@@ -129,6 +233,13 @@ export function normalizeObjectArrayFieldValue(value: unknown, itemFields: V10Ac
     pruneHiddenActionFieldValues(itemFields, next, parentParams);
     return next;
   });
+}
+
+export function cloneActionFieldDefault(value: unknown): unknown {
+  if (Array.isArray(value) || isRecord(value)) {
+    return JSON.parse(JSON.stringify(value)) as unknown;
+  }
+  return value;
 }
 
 export function actionFieldVisibilityParams(fields: V10Action['fields'], params: Record<string, unknown>, parentParams: Record<string, unknown>): Record<string, unknown> {
@@ -267,12 +378,12 @@ export function validatePipelineRequiredFields(config: V10Config, actions: V10Ac
           return validation;
         }
       }
-      if (!field.required) {
+      if (!actionFieldRequired(field, params)) {
         continue;
       }
       if (isPipelineRequiredValueEmpty(value)) {
         const fieldLabel = field.label?.trim() || field.name;
-        return `Ã‰tape ${index + 1} - ${step.action} : le champ ${fieldLabel} est obligatoire et ne peut pas Ãªtre vide.`;
+        return `Etape ${index + 1} - ${step.action} : le champ ${fieldLabel} est obligatoire et ne peut pas Etre vide.`;
       }
     }
   }

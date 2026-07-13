@@ -23,21 +23,33 @@ const (
 )
 
 type ActionField struct {
-	Name            string           `json:"name"`
-	Label           string           `json:"label"`
-	Type            string           `json:"type"`
-	Required        bool             `json:"required"`
-	Default         any              `json:"default"`
-	Description     string           `json:"description"`
-	Options         []ActionOption   `json:"options,omitempty"`
-	OptionsSource   string           `json:"optionsSource,omitempty"`
-	HiddenWhen      map[string]any   `json:"hiddenWhen,omitempty"`
-	HiddenWhenAny   []map[string]any `json:"hiddenWhenAny,omitempty"`
-	ItemFields      []ActionField    `json:"itemFields,omitempty"`
-	UniqueItemField string           `json:"uniqueItemField,omitempty"`
-	Min             float64          `json:"min,omitempty"`
-	ItemMin         float64          `json:"itemMin,omitempty"`
-	Multiple        bool             `json:"multiple,omitempty"`
+	Name                 string            `json:"name"`
+	Label                string            `json:"label"`
+	Type                 string            `json:"type"`
+	Required             bool              `json:"required"`
+	Default              any               `json:"default"`
+	Description          string            `json:"description"`
+	LabelWhen            []ConditionalText `json:"labelWhen,omitempty"`
+	DescriptionWhen      []ConditionalText `json:"descriptionWhen,omitempty"`
+	Options              []ActionOption    `json:"options,omitempty"`
+	OptionsSource        string            `json:"optionsSource,omitempty"`
+	HiddenWhen           map[string]any    `json:"hiddenWhen,omitempty"`
+	HiddenWhenAny        []map[string]any  `json:"hiddenWhenAny,omitempty"`
+	HiddenUnless         map[string]any    `json:"hiddenUnless,omitempty"`
+	HiddenUnlessAny      []map[string]any  `json:"hiddenUnlessAny,omitempty"`
+	HiddenUnlessNonEmpty string            `json:"hiddenUnlessNonEmpty,omitempty"`
+	RequiredWhen         map[string]any    `json:"requiredWhen,omitempty"`
+	RequiredWhenAny      []map[string]any  `json:"requiredWhenAny,omitempty"`
+	ItemFields           []ActionField     `json:"itemFields,omitempty"`
+	UniqueItemField      string            `json:"uniqueItemField,omitempty"`
+	Min                  float64           `json:"min,omitempty"`
+	ItemMin              float64           `json:"itemMin,omitempty"`
+	Multiple             bool              `json:"multiple,omitempty"`
+}
+
+type ConditionalText struct {
+	When map[string]any `json:"when"`
+	Text string         `json:"text"`
 }
 
 type ActionOption struct {

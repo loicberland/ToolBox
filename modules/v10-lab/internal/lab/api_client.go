@@ -119,7 +119,7 @@ func executeGedixAPIRequest(client *http.Client, writer io.Writer, baseURL strin
 	if name != "" {
 		fmt.Fprintf(writer, "[API] %s\n", name)
 	}
-	fmt.Fprintf(writer, "[API] %s %s\n", method, apiRequest.LogPath())
+	fmt.Fprintf(writer, "[API] %s %s\n", method, gedixAPIRequestLogPath(targetURL, apiRequest))
 	request, err := http.NewRequest(method, targetURL, body)
 	if err != nil {
 		return err
@@ -165,6 +165,18 @@ func (r GedixAPIRequest) LogPath() string {
 	parsed, err := url.Parse(value)
 	if err == nil && parsed.IsAbs() {
 		return parsed.Redacted()
+	}
+	return value
+}
+
+func gedixAPIRequestLogPath(targetURL string, apiRequest GedixAPIRequest) string {
+	parsed, err := url.Parse(targetURL)
+	if err != nil || parsed.Path == "" {
+		return apiRequest.LogPath()
+	}
+	value := parsed.EscapedPath()
+	if parsed.RawQuery != "" {
+		value += "?" + parsed.RawQuery
 	}
 	return value
 }

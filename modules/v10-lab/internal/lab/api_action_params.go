@@ -9,6 +9,9 @@ import (
 )
 
 func intParam(params map[string]any, key string) int {
+	if value, ok := anyToInt(params[key]); ok {
+		return value
+	}
 	value, ok := numberParam(params, key).(int64)
 	if ok {
 		return int(value)

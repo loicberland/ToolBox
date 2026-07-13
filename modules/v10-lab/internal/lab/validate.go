@@ -66,7 +66,7 @@ func ValidateConfig(config Config) error {
 		}
 	}
 	for index, step := range config.Pipeline {
-		action, ok := FindAction(step.Action)
+		action, ok := FindActionForProduct(step.Action, config.Product)
 		if !ok {
 			errors = append(errors, fmt.Sprintf("pipeline[%d].action: action inconnue %q", index, step.Action))
 			continue
@@ -80,7 +80,7 @@ func ValidateConfig(config Config) error {
 				continue
 			}
 			value, exists := params[field.Name]
-			if field.Required && (!exists || fieldValueIsEmpty(value)) {
+			if actionFieldRequired(field, params) && (!exists || fieldValueIsEmpty(value)) {
 				label := strings.TrimSpace(field.Label)
 				if label == "" {
 					label = field.Name
@@ -179,6 +179,8 @@ func fieldValueIsEmpty(value any) bool {
 		return len(typed) == 0
 	case []string:
 		return len(typed) == 0
+	case []map[string]any:
+		return len(typed) == 0
 	default:
 		return false
 	}
@@ -191,6 +193,35 @@ func actionFieldHidden(field ActionField, params map[string]any) bool {
 		}
 	}
 	for _, group := range field.HiddenWhenAny {
+		if actionFieldHiddenGroupMatches(group, params) {
+			return true
+		}
+	}
+	if len(field.HiddenUnless) > 0 && !actionFieldHiddenGroupMatches(field.HiddenUnless, params) {
+		return true
+	}
+	if len(field.HiddenUnlessAny) > 0 {
+		for _, group := range field.HiddenUnlessAny {
+			if actionFieldHiddenGroupMatches(group, params) {
+				return false
+			}
+		}
+		return true
+	}
+	if strings.TrimSpace(field.HiddenUnlessNonEmpty) != "" && fieldValueIsEmpty(params[field.HiddenUnlessNonEmpty]) {
+		return true
+	}
+	return false
+}
+
+func actionFieldRequired(field ActionField, params map[string]any) bool {
+	if field.Required {
+		return true
+	}
+	if len(field.RequiredWhen) > 0 && actionFieldHiddenGroupMatches(field.RequiredWhen, params) {
+		return true
+	}
+	for _, group := range field.RequiredWhenAny {
 		if actionFieldHiddenGroupMatches(group, params) {
 			return true
 		}
@@ -256,7 +287,7 @@ func fieldValueMatchesType(value any, expected string) bool {
 	switch expected {
 	case "", "any":
 		return true
-	case "string":
+	case "string", "color":
 		_, ok := value.(string)
 		return ok
 	case "text":
